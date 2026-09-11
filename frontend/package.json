@@ -1,0 +1,38 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "sample": "node scripts/makeSample.mjs",
+    "smoke": "tsc -p tsconfig.smoke.json && node -e \"require('fs').writeFileSync('.tmp-smoke/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-smoke/scripts/smokeTest.js",
+    "smoke:annotation": "tsc -p tsconfig.smoke.json && node -e \"require('fs').writeFileSync('.tmp-smoke/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-smoke/scripts/annotationSmoke.js",
+    "check": "npm run build && npm run lint && npm run smoke && npm run smoke:annotation && npm run smoke:store",
+    "smoke:store": "tsc -p tsconfig.smoke.json && node -e \"require('fs').writeFileSync('.tmp-smoke/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-smoke/scripts/storeSmoke.js"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.11.6",
+    "elkjs": "^0.12.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.4",
+    "globals": "^17.11.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8.2.2"
+  }
+}

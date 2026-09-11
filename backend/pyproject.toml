@@ -1,0 +1,17 @@
+[project]
+name = "aif-annotation-backend"
+version = "0.1.0"
+description = "Langflow 중계 서버: 판결문 분석 실행, AIF 응답 검증, 근거 매칭, 프로젝트 저장"
+requires-python = ">=3.11"
+dependencies = [
+  "starlette>=0.40",
+  "uvicorn>=0.30",
+  "httpx>=0.27",
+  "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

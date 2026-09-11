@@ -1,0 +1,24 @@
+# 의존성·생성물
+node_modules/
+dist/
+dist-ssr/
+.tmp-smoke/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 비밀값·로컬 데이터
+.env
+backend/.env
+backend/data/*.sqlite3*
+*.local
+
+# 원본 Langflow 참조본: 실제 판결문 예시가 포함되어 있어 저장소에 넣지 않는다.
+langflow/original_langflow_260904h.json
+
+# 편집기
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
