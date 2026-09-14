@@ -107,6 +107,14 @@ function SchemeView({ application, original, premises, conclusions, onEdit, onSa
           {application.catalogVersion !== null ? <span className="badge badge-note">카탈로그 v{application.catalogVersion}</span> : null}
         </div>
         {definition?.description ? <p className="node-detail-muted">{definition.description}</p> : null}
+        {definition?.sourceNote ? (
+          <details className="node-detail-original">
+            <summary>
+              출처{definition.verification === 'needs-book-check' ? ' · 원서 대조 필요' : ''}
+            </summary>
+            <div className="node-detail-muted">{definition.sourceNote}</div>
+          </details>
+        ) : null}
         {application.schemeKey !== UNCLASSIFIED && application.schemeKey !== CUSTOM && !definition ? (
           <div className="annotation-warning">scheme 카탈로그에 없는 key: {application.schemeKey}</div>
         ) : null}
@@ -379,7 +387,7 @@ function SchemeEditor({
             <optgroup key={group} label={group}>
               {items.map((item) => (
                 <option key={item.schemeKey} value={item.schemeKey}>
-                  {item.nameKo}
+                  {item.nameKo} ({item.name})
                 </option>
               ))}
             </optgroup>

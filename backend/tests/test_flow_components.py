@@ -173,7 +173,7 @@ class StagesTest(unittest.TestCase):
                 self.assertEqual(node["summarySourceHash"], summarizer_module.text_hash(node["text"]))
             if node["type"] == "RA":
                 app = node["schemeApplication"]
-                self.assertEqual((app["status"], app["origin"], app["catalogVersion"]), ("suggested", "ai", 2))
+                self.assertEqual((app["status"], app["origin"], app["catalogVersion"]), ("suggested", "ai", 3))
         keys = graph["meta"]["schemes"]["keys"]
         self.assertEqual(keys.get("unclassified"), 1)
 

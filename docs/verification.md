@@ -135,3 +135,18 @@ Main Claim·Issue Detector 프롬프트 조정 대상입니다. 짧은 샘플도
 - 긴 실제 판결문에서의 소요 시간(2000초 제한)·컨텍스트 한계.
 - 브라우저에서 [Langflow 에 적용…] 대화상자를 끝까지 누르는 조작(같은 API 흐름은 위에서 live 로 확인).
 - AIF/OVA 내보내기 파일 다운로드 후 재가져오기의 브라우저 조작(같은 로직은 smoke 테스트로 확인).
+
+## Walton scheme 10개로 교체 (scheme 카탈로그 v3)
+
+사용자가 지정한 10개(Witness Testimony, Evidence to a Hypothesis, Sign, Inconsistent Commitment, Alternatives, Effect to Cause,
+Best Explanation, Ignorance, Verbal Classification, an Established Rule)만 남기고 형식·비판적 질문을 채웠습니다.
+
+| scheme | 대조한 출처 | 상태 |
+| --- | --- | --- |
+| Witness Testimony, Evidence to a Hypothesis, Sign, Alternatives, Ignorance, Verbal Classification, Established Rule | hitz-zentroa/critical_questions_generation `walton_plus.jsonl`(Walton 2008 기반 형식·CQ 템플릿), carneades-4 `walton.yml`, webis-de argmining25 정의 파일(Alternatives 형식) | source-checked |
+| Inconsistent Commitment, Effect to Cause, Best Explanation | 공개 자료에서 원문을 찾지 못함. Walton·Reed·Macagno(2008) 기준으로 구현자가 정리(Effect to Cause 는 원인→결과 형식을 뒤집고 다른 원인 CQ 추가) | needs-book-check (원서 대조 필요) |
+
+- backend 95개, frontend `npm run check` 통과.
+- live 실행(두 번째 판결문, 약 8분): 성공. RA 9개 중 무지(증거 부재) 3 · 결과에서 원인으로 1 · 미분류 5, scheme 결과 검증 오류 0, flow 검증 통과.
+  scheme 목록이 줄어 미분류가 늘었고, 모델이 억지로 scheme 을 붙이지 않았습니다. 이 응답을 `backend/fixtures/langflow_run_response.live_v11.json` 으로 교체했습니다.
+- 이전 카탈로그(v2)로 저장된 프로젝트·실행 결과의 scheme key(예: credibility_assessment)는 새 카탈로그에 없어 RA 상세에 "카탈로그에 없는 key"로 표시됩니다.

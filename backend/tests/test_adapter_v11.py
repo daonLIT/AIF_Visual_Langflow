@@ -128,12 +128,12 @@ class GraphTest(unittest.TestCase):
         graph = load_graph()
         graph["AIF"]["schemefulfillments"] = [{"nodeID": graph["AIF"]["nodes"][2]["nodeID"], "schemeID": 72}, {"nodeID": "ghost", "schemeID": 1}]
         mapped = copy.deepcopy(SCHEMES)
-        mapped.by_key["abduction"]["aifdbSchemeId"] = 5
+        mapped.by_key["best_explanation"]["aifdbSchemeId"] = 5
         proposal = build(graph, namespace="20260914010206", schemes=mapped)
         entries = proposal.graph["AIF"]["schemefulfillments"]
         self.assertIn({"nodeID": graph["AIF"]["nodes"][2]["nodeID"].split("_")[0] + "_20260914010206", "schemeID": 72}, entries)
-        abduction = next(n for n in proposal.graph["AIF"]["nodes"] if n["type"] == "RA" and n["schemeApplication"]["schemeKey"] == "abduction")
-        self.assertIn({"nodeID": abduction["nodeID"], "schemeID": 5}, entries)
+        best = next(n for n in proposal.graph["AIF"]["nodes"] if n["type"] == "RA" and n["schemeApplication"]["schemeKey"] == "best_explanation")
+        self.assertIn({"nodeID": best["nodeID"], "schemeID": 5}, entries)
         self.assertTrue(any("ghost" in w for w in proposal.warnings))
 
     def test_evidence_not_found_is_reported(self):

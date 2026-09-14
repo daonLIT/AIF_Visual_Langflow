@@ -99,6 +99,10 @@ export interface SchemeDefinition {
   criticalQuestions: Array<{ id: string; text: string }>;
   /** 검증된 외부(AIFdb) scheme ID. 없으면 schemefulfillments 를 만들지 않는다. */
   aifdbSchemeId: number | null;
+  /** 형식·비판적 질문의 출처 */
+  sourceNote?: string;
+  /** source-checked: 공개 자료와 대조함, needs-book-check: 원서 대조 필요 */
+  verification?: string;
 }
 
 export interface SchemeCatalog {
@@ -108,6 +112,7 @@ export interface SchemeCatalog {
   sources?: string[];
   note?: string;
   reservedKeys?: Record<string, string>;
+  verificationLabels?: Record<string, string>;
   schemes: SchemeDefinition[];
 }
 

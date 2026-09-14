@@ -190,7 +190,11 @@ AIF.schemefulfillments 는 scheme 카탈로그에 검증된 외부 schemeID(aifd
   Langflow 가 `{"text"}` 를 변수로 해석하므로 실제 실행 시 실패할 가능성이 큽니다(파이프라인 검증이 오류로 표시).
 - v11 의 쟁점 선택·가지 추출·요약·scheme 컴포넌트는 Langflow 의 Ollama 컴포넌트가 아니라 컴포넌트 안에서 Ollama `/api/chat` 을 직접 호출합니다.
   모델·온도·컨텍스트·timeout 은 각 컴포넌트의 필드로 편집합니다.
-- Walton scheme 카탈로그는 구현자가 만든 **검토 전 초안**입니다(`status: draft`). 연구 기준 목록·번역으로 검토해야 합니다.
+- Walton scheme 카탈로그(v3)는 사용자가 지정한 10개입니다: Witness Testimony, Evidence to a Hypothesis, Sign, Inconsistent Commitment,
+  Alternatives, Effect to Cause, Best Explanation, Ignorance, Verbal Classification, an Established Rule.
+  형식·비판적 질문은 공개 자료(Walton, Reed & Macagno 2008 기반 CQ 템플릿, Carneades walton.yml)와 대조했고 번역은 구현자가 했습니다.
+  Inconsistent Commitment · Effect to Cause · Best Explanation 은 공개 자료에서 원문을 찾지 못해 `verification: needs-book-check`(원서 대조 필요)로 표시되어 있습니다.
+  scheme 마다 `sourceNote` 에 출처가 있고 RA 상세 패널의 [출처]에서 볼 수 있습니다.
 - JSON 이 정상 출력되는 것과 쟁점 선택·scheme 분류가 정확한 것은 별개입니다. 분류 품질은 사람이 검토해야 합니다.
 - 파이프라인 탭의 코드 재구성·코드 검사와 AI 요약 생성은 live 모드에서만 됩니다(mock 은 로컬 SQLite 사본 편집, 요약은 501).
 - CA(반박) 노드는 자동 생성되지 않습니다. 수동 편집으로 추가하세요.

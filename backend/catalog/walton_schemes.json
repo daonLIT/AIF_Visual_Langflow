@@ -1,10 +1,12 @@
 {
-  "schemeCatalogVersion": 2,
+  "schemeCatalogVersion": 3,
   "status": "draft",
-  "reviewNote": "구현자가 만든 초안 카탈로그다. 연구에서 쓰는 Walton scheme 목록·번역·기준 버전으로 검토하기 전에는 최종 기준이 아니다.",
+  "reviewNote": "사용자가 지정한 Walton scheme 10개. 형식·비판적 질문은 아래 출처에서 옮기거나 정리했으며 번역은 구현자가 했다. verification 이 needs-book-check 인 scheme 은 공개 자료에서 원문을 찾지 못해 원서(Walton, Reed & Macagno 2008) 대조가 필요하다.",
   "sources": [
     "Walton, D., Reed, C., & Macagno, F. (2008). Argumentation Schemes. Cambridge University Press.",
-    "Rahwan, I., Zablith, F., & Reed, C. (2007). Laying the foundations for a World Wide Argument Web. (AIF 에서 scheme 을 표현하는 방식)"
+    "https://github.com/hitz-zentroa/critical_questions_generation (scripts/utils/walton_plus.jsonl)",
+    "https://github.com/carneades/carneades-4 (examples/AGs/YAML/walton.yml)",
+    "https://github.com/webis-de/argmining25-argument-classification (argu_schemes_definitions/ethix_def)"
   ],
   "note": "scheme 은 RA(추론)가 전제에서 결론을 끌어내는 방식이다. 쟁점 카탈로그와 일대일로 고정하지 않는다. 적절한 scheme 이 없으면 'unclassified', 목록 밖의 직접 작성 scheme 은 'custom' 을 쓴다.",
   "reservedKeys": {
@@ -12,443 +14,369 @@
     "custom": "직접 작성(비표준)"
   },
   "aifdbMappingNote": "aifdbSchemeId 는 AIFdb 등 외부 scheme ID 와의 검증된 대응이 있을 때만 채운다. 값이 없으면 AIF schemefulfillments 를 만들지 않는다.",
+  "verificationLabels": {
+    "source-checked": "공개 자료의 형식·비판적 질문과 대조함",
+    "needs-book-check": "원서 기준으로 구현자가 정리함 — 원서 대조 필요"
+  },
   "schemes": [
     {
       "schemeKey": "witness_testimony",
       "name": "Argument from Witness Testimony",
       "nameKo": "증인 진술에 의한 논증",
-      "group": "출처 기반",
-      "description": "사건을 경험한 사람의 진술을 근거로 그 내용이 사실이라고 추론한다.",
+      "group": "진술·증언",
+      "description": "사건을 알 수 있는 위치에 있던 증인이 진실하게 A 라고 진술했으므로 A 를 그럴듯한 사실로 받아들인다.",
       "premiseRoles": [
         {
           "roleId": "position",
-          "label": "경험 위치",
-          "template": "W 는 A 에 관해 알 수 있는 위치에 있었다."
+          "label": "알 수 있는 위치",
+          "template": "증인 W 는 A 가 참인지 알 수 있는 위치에 있었다."
         },
         {
           "roleId": "truthTelling",
           "label": "진실성",
-          "template": "W 는 (알고 있는 한) 진실을 말하고 있다."
+          "template": "증인 W 는 (자신이 아는 대로) 진실을 말하고 있다."
         },
         {
           "roleId": "statement",
           "label": "진술",
-          "template": "W 는 A 라고 진술했다."
+          "template": "증인 W 는 A 가 참(거짓)이라고 진술했다."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "A 이다."
+        "template": "A 는 참(거짓)으로 받아들일 만하다."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "진술이 그 자체로 일관되는가?"
+          "text": "증인의 진술은 그 자체로 일관되는가?"
         },
         {
           "id": "CQ2",
-          "text": "진술이 이미 인정된 사실(객관 증거)과 부합하는가?"
+          "text": "증인의 진술은 (증언 외의 증거로) 이미 알려진 사건 사실과 부합하는가?"
         },
         {
           "id": "CQ3",
-          "text": "진술이 다른 증인의 진술과 부합하는가?"
+          "text": "증인의 진술은 다른 증인들이 (독립적으로) 한 진술과 부합하는가?"
         },
         {
           "id": "CQ4",
-          "text": "증인에게 편향이나 허위진술 동기가 있는가?"
+          "text": "증인의 진술에 어떤 편향이 있다고 볼 사정이 있는가?"
         },
         {
           "id": "CQ5",
-          "text": "진술이 얼마나 구체적이고 그럴듯한가?"
-        },
-        {
-          "id": "CQ6",
-          "text": "증인은 실제로 그 사실을 알 수 있는 위치에 있었는가?"
+          "text": "증인이 진술한 A 는 얼마나 그럴듯한가?"
         }
       ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "expert_opinion",
-      "name": "Argument from Expert Opinion",
-      "nameKo": "전문가 의견에 의한 논증",
-      "group": "출처 기반",
-      "description": "감정인·의사 등 해당 분야 전문가의 의견을 근거로 결론을 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "major",
-          "label": "전문성",
-          "template": "E 는 분야 S 의 전문가다."
-        },
-        {
-          "roleId": "minor",
-          "label": "의견",
-          "template": "E 는 A 라고 판단(감정)했다."
-        },
-        {
-          "roleId": "domain",
-          "label": "분야 해당",
-          "template": "A 는 분야 S 에 속하는 문제다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "A 이다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "E 는 신뢰할 만한 전문가인가? (전문성)"
-        },
-        {
-          "id": "CQ2",
-          "text": "E 의 전문 분야가 A 와 관련이 있는가? (분야)"
-        },
-        {
-          "id": "CQ3",
-          "text": "E 가 실제로 A 를 함축하는 의견을 냈는가? (의견)"
-        },
-        {
-          "id": "CQ4",
-          "text": "E 는 개인적으로 신뢰할 수 있는가? (신뢰성)"
-        },
-        {
-          "id": "CQ5",
-          "text": "A 는 다른 전문가의 의견과 일치하는가? (일관성)"
-        },
-        {
-          "id": "CQ6",
-          "text": "E 의 의견은 감정 방법·자료 등 근거에 기초하는가? (뒷받침)"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "position_to_know",
-      "name": "Argument from Position to Know",
-      "nameKo": "알 수 있는 위치에 의한 논증",
-      "group": "출처 기반",
-      "description": "사정을 알 수 있는 위치에 있던 사람(기관·기록)의 주장을 근거로 결론을 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "position",
-          "label": "위치",
-          "template": "a 는 A 를 포함하는 사안 S 를 알 수 있는 위치에 있다."
-        },
-        {
-          "roleId": "assertion",
-          "label": "주장",
-          "template": "a 는 A 가 참이라고 주장한다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "A 이다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "a 는 A 의 참·거짓을 알 수 있는 위치에 있는가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "a 는 정직하고 신뢰할 수 있는 출처인가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "a 는 실제로 A 가 참이라고 주장했는가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "perception",
-      "name": "Argument from Perception",
-      "nameKo": "지각·기록에 의한 논증",
-      "group": "출처 기반",
-      "description": "CCTV·사진·영상 등 지각되거나 기록된 내용을 근거로 사실을 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "perception",
-          "label": "지각",
-          "template": "자료(영상·사진 등)에 P 가 나타난다."
-        },
-        {
-          "roleId": "circumstance",
-          "label": "조건",
-          "template": "그 자료가 P 를 정확히 보여줄 수 있는 조건에서 만들어졌다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "P 이다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "촬영 시각·범위·화질 등 조건이 P 를 판단하기에 충분한가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "사각지대나 편집·조작 가능성 등 자료를 의심할 이유가 있는가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "자료에 나타난 것을 P 로 해석하는 것이 타당한가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "sign",
-      "name": "Argument from Sign",
-      "nameKo": "징표에 의한 논증",
-      "group": "증거 추론",
-      "description": "일반적으로 어떤 사실을 가리키는 징표(흔적·반응·검출 결과)가 발견되었으므로 그 사실이 있다고 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "specific",
-          "label": "징표 발견",
-          "template": "이 사건에서 B(징표)가 발견되었다."
-        },
-        {
-          "roleId": "general",
-          "label": "일반적 연관",
-          "template": "B 는 일반적으로 A 가 있었음을 나타낸다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "A 가 있었다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "B 와 A 사이의 연관은 얼마나 강한가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "B 가 나타난 것을 더 잘 설명하는 다른 사건(전이·오염 등)이 있는가?"
-        }
-      ],
+      "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 41번과 carneades-4 walton.yml (Gordon·Walton) 의 예외 조건이 일치. 원 목록의 진술(statement) 전제는 Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 형식에 따라 포함.",
+      "verification": "source-checked",
       "aifdbSchemeId": null
     },
     {
       "schemeKey": "evidence_to_hypothesis",
       "name": "Argument from Evidence to a Hypothesis",
       "nameKo": "증거에서 가설로의 논증",
-      "group": "증거 추론",
-      "description": "가설이 참이라면 관찰될 결과가 실제로 관찰되었으므로 가설이 뒷받침된다고 추론한다.",
+      "group": "증거·인과 추론",
+      "description": "가설 A 가 참이면 관찰되어야 할 사실 B 가 실제로 관찰되었으므로 A 가 참이라고 추론한다(검증에 의한 논증).",
       "premiseRoles": [
         {
           "roleId": "conditional",
-          "label": "조건",
-          "template": "A(가설)가 참이라면 B 가 관찰될 것이다."
+          "label": "가설-관찰 관계",
+          "template": "가설 A 가 참이면, 사건을 보고하는 명제 B 가 참으로 관찰될 것이다."
         },
         {
           "roleId": "observation",
           "label": "관찰",
-          "template": "B 가 관찰되었다."
+          "template": "이 사안에서 B 가 참으로 관찰되었다."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "A 가 참일 개연성이 있다."
+        "template": "A 는 참이다."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "A 가 참일 때 B 가 관찰된다는 조건은 얼마나 확실한가?"
+          "text": "A 가 참이면 B 가 참이라는 관계가 실제로 성립하는가?"
         },
         {
           "id": "CQ2",
-          "text": "A 가 아니어도 B 가 관찰될 수 있는 다른 이유가 있는가?"
+          "text": "B 가 참(거짓)으로 관찰되었는가?"
+        },
+        {
+          "id": "CQ3",
+          "text": "A 가 참이어서가 아니라 다른 이유로 B 가 참일 수 있지 않은가?"
         }
       ],
+      "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 8번.",
+      "verification": "source-checked",
       "aifdbSchemeId": null
     },
     {
-      "schemeKey": "abduction",
-      "name": "Abductive Argument (Inference to the Best Explanation)",
-      "nameKo": "최선의 설명 추론",
-      "group": "증거 추론",
-      "description": "인정된 여러 사실을 가장 잘 설명하는 가설을 결론으로 채택한다.",
+      "schemeKey": "sign",
+      "name": "Argument from Sign",
+      "nameKo": "징표에 의한 논증",
+      "group": "증거·인과 추론",
+      "description": "이 상황에서 발견된 A 는 일반적으로 B 의 징표이므로 이 상황에서 B 가 참일 수 있다고 추론한다.",
+      "premiseRoles": [
+        {
+          "roleId": "specific",
+          "label": "구체적 발견",
+          "template": "이 상황에서 A(발견 사실)가 참이다."
+        },
+        {
+          "roleId": "general",
+          "label": "일반적 징표 관계",
+          "template": "A 는 일반적으로 B 가 참인 상황의 징표이다."
+        }
+      ],
+      "conclusionRole": {
+        "roleId": "conclusion",
+        "label": "결론",
+        "template": "이 상황에서 B 가 참일 수 있다."
+      },
+      "criticalQuestions": [
+        {
+          "id": "CQ1",
+          "text": "징표 A 와 B 사이의 관계(상관의 강도)가 입증되었는가?"
+        },
+        {
+          "id": "CQ2",
+          "text": "A 를 B 보다 더 믿을 만하게 설명하는 다른 사건이 있는가?"
+        }
+      ],
+      "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 1번.",
+      "verification": "source-checked",
+      "aifdbSchemeId": null
+    },
+    {
+      "schemeKey": "inconsistent_commitment",
+      "name": "Argument from Inconsistent Commitment",
+      "nameKo": "모순된 공약(진술 번복)에 의한 논증",
+      "group": "진술·증언",
+      "description": "a 가 A 에 대한 입장을 밝혔지만 이 사안의 다른 증거는 a 가 실제로는 A 를 고수하지 않음을 보여 주므로 a 의 입장(진술)이 모순된다고 추론한다.",
+      "premiseRoles": [
+        {
+          "roleId": "initialCommitment",
+          "label": "처음의 입장",
+          "template": "a 는 A 를 주장했거나 A 를 받아들인다고 표시했다(일반적으로 또는 과거의 말로)."
+        },
+        {
+          "roleId": "opposedCommitment",
+          "label": "반대되는 증거",
+          "template": "이 사안의 다른 증거는 a 가 실제로는 A 를 받아들이지 않음을 보여 준다."
+        }
+      ],
+      "conclusionRole": {
+        "roleId": "conclusion",
+        "label": "결론",
+        "template": "a 의 입장(공약)은 서로 모순된다."
+      },
+      "criticalQuestions": [
+        {
+          "id": "CQ1",
+          "text": "a 가 A 를 받아들인다는 증거는 무엇인가? 말인가, 행동인가?"
+        },
+        {
+          "id": "CQ2",
+          "text": "a 가 A 를 받아들이지 않는다는 추가 증거는 무엇인가? 말인가, 행동인가?"
+        },
+        {
+          "id": "CQ3",
+          "text": "전제의 증거가 입장 사이의 충돌을 어떻게 보여 주는가?"
+        }
+      ],
+      "sourceNote": "Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 에 기초해 구현자가 정리한 형식·CQ. 이번에 확인한 공개 자료에는 이 scheme 의 원문이 없어 원서 대조가 필요함.",
+      "verification": "needs-book-check",
+      "aifdbSchemeId": null
+    },
+    {
+      "schemeKey": "alternatives",
+      "name": "Argument from Alternatives",
+      "nameKo": "대안에 의한 논증",
+      "group": "증거·인과 추론",
+      "description": "X 또는 Y 중 하나가 성립할 수 있는데 X 는 그럴듯하게 성립하지 않으므로 Y 가 그럴듯하게 성립한다고 추론한다(대안 배제).",
+      "premiseRoles": [
+        {
+          "roleId": "alternatives",
+          "label": "대안",
+          "template": "X 또는 Y 중 하나가 성립할 수 있다."
+        },
+        {
+          "roleId": "exclusion",
+          "label": "대안 배제",
+          "template": "X 는 그럴듯하게 성립하지 않는다."
+        }
+      ],
+      "conclusionRole": {
+        "roleId": "conclusion",
+        "label": "결론",
+        "template": "Y 가 그럴듯하게 성립한다."
+      },
+      "criticalQuestions": [
+        {
+          "id": "CQ1",
+          "text": "X 가 성립하더라도 Y 가 일어날 수 있지 않은가?"
+        },
+        {
+          "id": "CQ2",
+          "text": "X 가 성립하지 않는다는 것이 그럴듯한가? 그것을 뒷받침하는 증거는 무엇인가?"
+        }
+      ],
+      "sourceNote": "형식: Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 13번(Walton·Reed·Macagno 형식을 옮긴 webis-de argmining25 정의 파일과 일치). CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 42번.",
+      "verification": "source-checked",
+      "aifdbSchemeId": null
+    },
+    {
+      "schemeKey": "effect_to_cause",
+      "name": "Argument from Effect to Cause",
+      "nameKo": "결과에서 원인으로의 논증",
+      "group": "증거·인과 추론",
+      "description": "일반적으로 A 가 일어나면 B 가 일어나는데 이 사안에서 B 가 실제로 일어났으므로 A 가 일어났다고 추정한다.",
+      "premiseRoles": [
+        {
+          "roleId": "causalGeneralization",
+          "label": "인과 일반화",
+          "template": "일반적으로 A 가 일어나면 B 가 일어난다(일어날 수 있다)."
+        },
+        {
+          "roleId": "effect",
+          "label": "결과 발생",
+          "template": "이 사안에서 B 가 실제로 일어났다."
+        }
+      ],
+      "conclusionRole": {
+        "roleId": "conclusion",
+        "label": "결론",
+        "template": "이 사안에서 A 가 일어났다고 추정된다."
+      },
+      "criticalQuestions": [
+        {
+          "id": "CQ1",
+          "text": "A 가 일어나면 B 가 일어난다는 인과 일반화는 얼마나 강한가?"
+        },
+        {
+          "id": "CQ2",
+          "text": "B 가 실제로 일어났다는 증거가 충분한가?"
+        },
+        {
+          "id": "CQ3",
+          "text": "A 가 아닌 다른 원인으로 B 가 일어났을 수 있지 않은가?"
+        }
+      ],
+      "sourceNote": "Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 5장 3절에서 결과→원인 논증을 다룬다. 공개 자료로 확인한 원인→결과 형식(hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 11번)을 뒤집어 구현자가 구성했으며 CQ3 은 다른 원인 가능성을 묻도록 추가함. 원서 대조가 필요함.",
+      "verification": "needs-book-check",
+      "aifdbSchemeId": null
+    },
+    {
+      "schemeKey": "best_explanation",
+      "name": "Argument from Best Explanation",
+      "nameKo": "최선의 설명에 의한 논증",
+      "group": "증거·인과 추론",
+      "description": "인정된 사실 F 를 E 가 만족스럽게 설명하고 지금까지 나온 다른 설명은 E 만큼 만족스럽지 않으므로 E 를 그럴듯한 가설로 받아들인다(귀추).",
       "premiseRoles": [
         {
           "roleId": "findings",
           "label": "인정 사실",
-          "template": "F(인정된 사실들)가 있다."
+          "template": "F 는 발견되었거나 주어진 사실(들)이다."
         },
         {
           "roleId": "explanation",
           "label": "설명",
-          "template": "E 는 F 를 설명한다."
+          "template": "E 는 F 에 대한 만족스러운 설명이다."
         },
         {
-          "roleId": "best",
-          "label": "최선성",
-          "template": "지금까지 검토된 설명 중 E 가 F 를 가장 잘 설명한다."
+          "roleId": "noBetterAlternative",
+          "label": "더 나은 대안 없음",
+          "template": "지금까지 제시된 다른 설명 E' 중 E 만큼 만족스러운 것이 없다."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "E 는 개연성이 있다."
+        "template": "E 는 가설로서 그럴듯하다."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "E 는 그 자체로 F 를 얼마나 만족스럽게 설명하는가?"
+          "text": "대안과 별개로 E 는 F 에 대한 설명으로서 얼마나 만족스러운가?"
         },
         {
           "id": "CQ2",
-          "text": "E 가 다른 대안 설명(피고인 주장 등)보다 얼마나 나은가?"
+          "text": "E 는 다른 대안 설명보다 얼마나 더 나은가?"
         },
         {
           "id": "CQ3",
-          "text": "대안 설명을 충분히 검토했는가, 결론을 내리기에 이른가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "cause_to_effect",
-      "name": "Argument from Cause to Effect",
-      "nameKo": "원인에서 결과로의 논증",
-      "group": "인과",
-      "description": "어떤 행위·사건이 일반적으로 특정 결과를 낳으므로 이 사건에서도 그 결과가 발생했다고 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "general",
-          "label": "인과 일반화",
-          "template": "일반적으로 A 가 일어나면 B 가 일어난다."
-        },
-        {
-          "roleId": "occurrence",
-          "label": "원인 발생",
-          "template": "이 사건에서 A 가 일어났다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "B 가 일어났다(일어날 것이다)."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "인과 일반화는 얼마나 강한가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "그 일반화를 뒷받침하는 증거가 충분한가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "결과 발생을 방해하거나 다른 원인(기왕증 등)이 개입했는가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "correlation_to_cause",
-      "name": "Argument from Correlation to Cause",
-      "nameKo": "상관관계에서 원인으로의 논증",
-      "group": "인과",
-      "description": "두 사건이 시간·장소상 함께 나타나므로 한쪽이 다른 쪽의 원인이라고 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "correlation",
-          "label": "상관관계",
-          "template": "A 와 B 사이에 (시간적·물리적) 연관이 있다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "A 가 B 를 일으켰다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "A 와 B 사이에 실제로 연관이 있는가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "연관이 우연 이상인가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "A 와 B 를 모두 일으킨 제3의 원인이 있는가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "established_rule",
-      "name": "Argument from Established Rule",
-      "nameKo": "확립된 규칙(법리) 적용 논증",
-      "group": "법 적용",
-      "description": "법령·판례 법리 등 확립된 규칙을 인정 사실에 적용해 결론을 끌어낸다.",
-      "premiseRoles": [
-        {
-          "roleId": "rule",
-          "label": "규칙",
-          "template": "규칙 R: 요건 C 가 충족되면 법적 효과 L 이 인정된다."
-        },
-        {
-          "roleId": "facts",
-          "label": "사실",
-          "template": "이 사건에서 요건 C 가 충족된다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "법적 효과 L 이 인정된다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "규칙 R 은 유효하게 확립된 규칙인가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "규칙 R 이 이 사건 유형에 적용되는가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "예외나 정당화 사유가 있는가?"
+          "text": "조사(심리)가 얼마나 진행되었는가? 충분히 철저했는가?"
         },
         {
           "id": "CQ4",
-          "text": "충돌하는 다른 규칙이 있는가?"
+          "text": "결론을 내리기 전에 조사(심리)를 더 진행하는 것이 낫지 않은가?"
         }
       ],
+      "sourceNote": "Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 에 인용된 Walton(2001)의 귀추 scheme(비판적 질문 4개: 만족도·대안 비교·조사 진행 정도·계속 여부)에 기초해 구현자가 정리. carneades-4 walton.yml (Gordon·Walton) abduction(더 정합적인 설명이 있으면 예외)과 방향이 일치. 원서 대조가 필요함.",
+      "verification": "needs-book-check",
+      "aifdbSchemeId": null
+    },
+    {
+      "schemeKey": "ignorance",
+      "name": "Argument from Ignorance",
+      "nameKo": "무지(증거 부재)에 의한 논증",
+      "group": "증거·인과 추론",
+      "description": "A 가 참이라면 알려져 있을 것인데 A 가 참이라고 알려져 있지 않으므로 A 는 참이 아니라고 추론한다(형사 판결에서는 증명 부족과 입증책임 문제로 자주 나타남).",
+      "premiseRoles": [
+        {
+          "roleId": "wouldBeKnown",
+          "label": "알려질 조건",
+          "template": "A 가 참이라면 A 가 참이라는 것이 알려져 있을 것이다."
+        },
+        {
+          "roleId": "notKnown",
+          "label": "알려지지 않음",
+          "template": "A 가 참이라고 알려져 있지 않다."
+        }
+      ],
+      "conclusionRole": {
+        "roleId": "conclusion",
+        "label": "결론",
+        "template": "A 는 참이 아니다."
+      },
+      "criticalQuestions": [
+        {
+          "id": "CQ1",
+          "text": "증거 조사가 얼마나 진행되었는가?"
+        },
+        {
+          "id": "CQ2",
+          "text": "논의 전체에서 입증책임은 어느 쪽에 있는가? 즉 궁극적으로 증명할 사항은 무엇이고 누가 증명해야 하는가?"
+        },
+        {
+          "id": "CQ3",
+          "text": "그 당사자가 입증책임을 다하려면 어느 정도로 강한 증명이 필요한가?"
+        }
+      ],
+      "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 35번. carneades-4 walton.yml (Gordon·Walton) ignorance(조사되지 않았으면 예외)와 일치.",
+      "verification": "source-checked",
       "aifdbSchemeId": null
     },
     {
       "schemeKey": "verbal_classification",
       "name": "Argument from Verbal Classification",
-      "nameKo": "개념 분류(구성요건 포섭) 논증",
-      "group": "법 적용",
-      "description": "사안이 어떤 개념(예: 상해, 폭행, 항거불능)의 정의 요건을 갖추었으므로 그 개념에 해당한다고 분류한다.",
+      "nameKo": "언어적 분류(포섭)에 의한 논증",
+      "group": "규칙·분류",
+      "description": "a 는 속성 F 를 가지고 F 를 가진 것은 G 로 분류될 수 있으므로 a 는 G 에 해당한다고 추론한다(사실을 법적 개념·구성요건에 포섭).",
       "premiseRoles": [
         {
           "roleId": "individual",
-          "label": "속성",
+          "label": "개별 사실",
           "template": "a 는 속성 F 를 가진다."
         },
         {
           "roleId": "classification",
           "label": "분류 기준",
-          "template": "속성 F 를 가진 것은 G 로 분류된다."
+          "template": "일반적으로 F 를 가진 것은 G 로 분류될 수 있다."
         }
       ],
       "conclusionRole": {
@@ -459,247 +387,60 @@
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "a 는 확실히 속성 F 를 가지는가, 아니면 의심의 여지가 있는가?"
+          "text": "a 가 F 를 가진다는 것이 확실한가, 아니면 의심의 여지가 있는가?"
         },
         {
           "id": "CQ2",
-          "text": "분류 기준(정의)이 이 사안에 적용될 만큼 명확하고 타당한가?"
+          "text": "F 인 상황과 G 인 상황 사이의 관계가 입증되었는가? 분류 기준이 임의적이거나 편향된 정의에 기대고 있지 않은가?"
+        },
+        {
+          "id": "CQ3",
+          "text": "a 의 구체적 사정에서는 G 가 성립하지 않을 가능성이 있는가?"
         }
       ],
+      "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 3번. CQ2 의 정의 의심 부분은 같은 파일 32번(정의에서 언어적 분류로)의 CQ2 를 합침.",
+      "verification": "source-checked",
       "aifdbSchemeId": null
     },
     {
-      "schemeKey": "analogy",
-      "name": "Argument from Analogy",
-      "nameKo": "유추(유사 사례) 논증",
-      "group": "법 적용",
-      "description": "유사한 사례에서 인정된 결론을 이 사건에도 적용한다.",
+      "schemeKey": "established_rule",
+      "name": "Argument from an Established Rule",
+      "nameKo": "확립된 규칙에 의한 논증",
+      "group": "규칙·분류",
+      "description": "A 를 하는 것이 x 에게 확립된 규칙이면 (예외가 아닌 한) x 는 A 를 해야 하는데 A 가 a 에게 확립된 규칙이므로 a 는 A 를 해야 한다고 추론한다(법규·판례 법리의 적용).",
       "premiseRoles": [
         {
-          "roleId": "similarity",
-          "label": "유사성",
-          "template": "사례 C1 은 이 사건 C2 와 관련된 점에서 유사하다."
+          "roleId": "rule",
+          "label": "확립된 규칙",
+          "template": "모든 x 에 대해, A 를 하는 것이 x 에게 확립된 규칙이면 (예외적인 경우가 아닌 한) x 는 A 를 해야 한다."
         },
         {
-          "roleId": "base",
-          "label": "기준 사례",
-          "template": "C1 에서는 A 가 인정되었다."
+          "roleId": "applicability",
+          "label": "규칙 적용 대상",
+          "template": "A 를 하는 것이 a 에게 확립된 규칙이다."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "C2 에서도 A 가 인정된다."
+        "template": "a 는 A 를 해야 한다(규칙에 따른 법적 효과가 인정된다)."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "C1 과 C2 사이에 결론을 좌우하는 차이가 있는가?"
+          "text": "규칙이 실제로 A 를 정하고 있는가?"
         },
         {
           "id": "CQ2",
-          "text": "C1 에서 A 가 인정된 것이 맞는가?"
+          "text": "그 규칙이 이 사안에 적용되는가?"
         },
         {
           "id": "CQ3",
-          "text": "C2 와 더 유사하면서 다른 결론을 낸 사례가 있는가?"
+          "text": "이 규칙이 올바른 규칙인가, 아니면 다른 규칙이 적용되어야 하는가? 둘 이상의 규칙이 관련되어 어느 쪽이 더 적절한지 의문이 있는가?"
         }
       ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "lack_of_evidence",
-      "name": "Argument from Ignorance (Lack of Evidence)",
-      "nameKo": "증거 부재에 의한 논증",
-      "group": "증거 추론",
-      "description": "어떤 사실이 있었다면 발견되었을 증거가 발견되지 않았으므로 그 사실이 없었다고 추론한다(불검출의 의미 판단).",
-      "premiseRoles": [
-        {
-          "roleId": "conditional",
-          "label": "조건",
-          "template": "A 가 참이었다면 증거 E 가 발견되었을 것이다."
-        },
-        {
-          "roleId": "absence",
-          "label": "부재",
-          "template": "충분한 조사에도 E 가 발견되지 않았다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "A 는 참이 아니다(개연성이 낮다)."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "조사(검사·수색)는 E 를 발견할 만큼 충분했는가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "A 가 참이어도 E 가 발견되지 않을 수 있는 사정(시간 경과·방법 한계)이 있는가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "불검출을 곧바로 행위 부재로 볼 수 있는가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "inconsistent_commitment",
-      "name": "Argument from Inconsistent Commitment",
-      "nameKo": "모순된 진술(번복)에 의한 논증",
-      "group": "신빙성",
-      "description": "같은 사람이 서로 맞지 않는 진술·행동을 했으므로 그 주장의 신빙성이 떨어진다고 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "initial",
-          "label": "처음 진술",
-          "template": "a 는 A 라고 진술(행동)했다."
-        },
-        {
-          "roleId": "contrary",
-          "label": "반대 진술",
-          "template": "a 의 다른 진술·행동은 A 와 양립하지 않는다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "a 의 A 에 관한 주장은 신빙성이 낮다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "두 진술·행동이 실제로 서로 모순되는가, 주변부 차이에 불과한가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "진술 변경에 합리적인 이유가 있는가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "모순이 핵심 부분의 신빙성에 영향을 주는가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "bias",
-      "name": "Argument from Bias",
-      "nameKo": "편향(허위진술 동기)에 의한 논증",
-      "group": "신빙성",
-      "description": "진술자에게 특정 결론을 원할 이해관계·동기가 있으므로 그 진술을 신뢰하기 어렵다고 추론한다.",
-      "premiseRoles": [
-        {
-          "roleId": "bias",
-          "label": "편향",
-          "template": "a 에게는 A 쪽으로 기울 이해관계나 동기가 있다."
-        },
-        {
-          "roleId": "effect",
-          "label": "영향",
-          "template": "그러한 동기가 있는 진술은 공정하게 사안을 반영하지 않을 수 있다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "a 의 A 에 관한 진술은 신빙성이 낮다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "동기가 실제로 존재한다는 근거가 있는가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "동기가 있더라도 진술이 객관 증거로 뒷받침되는가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "동기를 이유로 진술 전체를 배척하는 것이 타당한가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "credibility_assessment",
-      "name": "Argument from Credibility Indicators",
-      "nameKo": "신빙성 판단 요소 논증",
-      "group": "신빙성",
-      "description": "진술의 일관성·구체성·객관 증거와의 부합 등 신빙성 판단 요소를 종합해 진술을 믿을 수 있다고(없다고) 판단한다.",
-      "premiseRoles": [
-        {
-          "roleId": "indicators",
-          "label": "판단 요소",
-          "template": "진술 S 는 일관성·구체성·부합성 등 요소 I 를 갖추었다(갖추지 못했다)."
-        },
-        {
-          "roleId": "standard",
-          "label": "판단 기준",
-          "template": "요소 I 를 갖춘 진술은 신빙성이 인정된다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "진술 S 는 신빙성이 있다(없다)."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "각 판단 요소가 실제 증거로 확인되는가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "신빙성을 떨어뜨리는 반대 요소가 검토되었는가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "요소들을 종합한 평가가 균형 있는가?"
-        }
-      ],
-      "aifdbSchemeId": null
-    },
-    {
-      "schemeKey": "convergent_facts",
-      "name": "Argument from Converging Circumstantial Evidence",
-      "nameKo": "정황 종합 논증",
-      "group": "증거 추론",
-      "description": "각각으로는 부족한 여러 간접사실이 같은 결론을 가리키므로 종합하여 결론을 인정한다.",
-      "premiseRoles": [
-        {
-          "roleId": "facts",
-          "label": "간접사실들",
-          "template": "간접사실 F1, F2, ... 가 인정된다."
-        },
-        {
-          "roleId": "convergence",
-          "label": "수렴",
-          "template": "이 사실들은 함께 A 를 가리키며 서로 모순되지 않는다."
-        }
-      ],
-      "conclusionRole": {
-        "roleId": "conclusion",
-        "label": "결론",
-        "template": "A 가 인정된다."
-      },
-      "criticalQuestions": [
-        {
-          "id": "CQ1",
-          "text": "각 간접사실은 증거로 충분히 인정되는가?"
-        },
-        {
-          "id": "CQ2",
-          "text": "간접사실들이 A 이외의 결론과도 양립하는가?"
-        },
-        {
-          "id": "CQ3",
-          "text": "종합했을 때 합리적 의심을 배제할 정도에 이르는가?"
-        }
-      ],
+      "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 19번. carneades-4 walton.yml (Gordon·Walton) established_rule(규칙의 유효성은 가정)과 일치.",
+      "verification": "source-checked",
       "aifdbSchemeId": null
     }
   ]

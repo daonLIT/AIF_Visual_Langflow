@@ -92,7 +92,7 @@ check('왕복 후 노드 값 동일', content(again.nodes) === content(imported.
 const mapped = clone(schemes);
 mapped.schemes.find((s) => s.schemeKey === 'witness_testimony')!.aifdbSchemeId = 72;
 const withExternal = clone(graph);
-const extRa = withExternal.AIF.nodes.find((n: { type: string; schemeApplication?: { schemeKey: string } }) => n.type === 'RA' && n.schemeApplication?.schemeKey === 'abduction');
+const extRa = withExternal.AIF.nodes.find((n: { type: string; schemeApplication?: { schemeKey: string } }) => n.type === 'RA' && n.schemeApplication?.schemeKey === 'best_explanation');
 withExternal.AIF.schemefulfillments = [{ nodeID: extRa.nodeID, schemeID: 999 }];
 const extCase = importAifOva(withExternal, undefined, { schemeCatalog: mapped }).case;
 const extExport = exportAifOva(extCase, { schemeCatalog: mapped });
@@ -207,11 +207,11 @@ const currentApp = (snapshot.annotations.find((a) => a.id === raId) as NodeAnnot
 outcome = setDraftValue(snapshot, raId, { schemeApplication: confirmScheme(currentApp, 't') });
 snapshot = outcome.snapshot;
 check('검토 확정도 내용 변경 아님', (snapshot.annotations.find((a) => a.id === raId) as NodeAnnotation).status === 'accepted');
-const humanApp: SchemeApplication = humanSchemeEdit(currentApp, { ...currentApp, schemeKey: 'expert_opinion', rationale: '감정 의견' }, 't2');
+const humanApp: SchemeApplication = humanSchemeEdit(currentApp, { ...currentApp, schemeKey: 'sign', rationale: '징표로 판단' }, 't2');
 outcome = setDraftValue(snapshot, raId, { schemeApplication: humanApp });
 snapshot = outcome.snapshot;
 const modifiedRa = snapshot.annotations.find((a) => a.id === raId) as NodeAnnotation;
-check('scheme 사람 수정 → modified + 그래프 반영', modifiedRa.status === 'modified' && snapshot.caseData.nodes.find((n) => n.id === raNode.id)!.schemeApplication!.schemeKey === 'expert_opinion');
+check('scheme 사람 수정 → modified + 그래프 반영', modifiedRa.status === 'modified' && snapshot.caseData.nodes.find((n) => n.id === raNode.id)!.schemeApplication!.schemeKey === 'sign');
 check('사람 수정은 origin human·confirmed·이력에 이전 key', humanApp.origin === 'human' && humanApp.status === 'confirmed' && humanApp.history!.at(-1)!.previousKey === 'witness_testimony');
 check('AI 원안은 originalValue 에 보존', modifiedRa.originalValue.schemeApplication!.schemeKey === 'witness_testimony');
 outcome = setDraftValue(snapshot, raId, { schemeApplication: null });

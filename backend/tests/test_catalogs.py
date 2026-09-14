@@ -134,6 +134,22 @@ class CatalogServiceTest(unittest.TestCase):
         self.assertFalse(self.issues.is_active("ISS-999"))
         self.assertEqual(len(self.issues.sha256), 64)
 
+    def test_scheme_catalog_is_the_user_selected_ten(self):
+        names = [s["name"] for s in self.schemes.data["schemes"]]
+        self.assertEqual(
+            sorted(names),
+            sorted([
+                "Argument from Witness Testimony", "Argument from Evidence to a Hypothesis", "Argument from Sign",
+                "Argument from Inconsistent Commitment", "Argument from Alternatives", "Argument from Effect to Cause",
+                "Argument from Best Explanation", "Argument from Ignorance", "Argument from Verbal Classification",
+                "Argument from an Established Rule",
+            ]),
+        )
+        self.assertEqual(self.schemes.version, 3)
+        for scheme in self.schemes.data["schemes"]:
+            self.assertIn(scheme["verification"], self.schemes.data["verificationLabels"], scheme["schemeKey"])
+            self.assertTrue(scheme["sourceNote"] and scheme["criticalQuestions"], scheme["schemeKey"])
+
     def test_scheme_catalog_shape(self):
         self.assertEqual(self.schemes.data["status"], "draft")
         self.assertIn("witness_testimony", self.schemes.by_key)
