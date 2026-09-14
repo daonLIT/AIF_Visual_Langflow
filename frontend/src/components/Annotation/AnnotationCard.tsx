@@ -3,6 +3,8 @@ import type { Annotation, EdgeAnnotation, EvidenceSpan, NodeAnnotation } from '.
 import { MATCH_LABEL, ORIGIN_LABEL, STATUS_LABEL } from '../../types/annotation';
 import type { ArgumentNodeType, ValidationResult } from '../../types/argument';
 import type { EdgeDependency } from '../../store/reviewLogic';
+import { findIssue, useCatalogStore } from '../../store/catalogStore';
+import { schemeShortName } from '../../types/scheme';
 
 const TYPE_LABEL: Record<ArgumentNodeType, string> = { I: 'I', RA: 'RA', CA: 'CA', ISSUE: '쟁점' };
 
@@ -39,6 +41,7 @@ function EvidenceList({
   onRemove: (index: number) => void;
 }) {
   if (annotation.kind === 'edge') return null;
+  if (annotation.currentValue.type === 'RA' || annotation.currentValue.type === 'CA') return null;
   if (annotation.evidence.length === 0) {
     return (
       <div className="evidence-empty">
@@ -94,6 +97,8 @@ export function AnnotationCard(props: CardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const ref = useRef<HTMLLIElement>(null);
+  const schemeCatalog = useCatalogStore((state) => state.schemes);
+  const issueCatalog = useCatalogStore((state) => state.issues);
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
@@ -110,8 +115,11 @@ export function AnnotationCard(props: CardProps) {
     setEditing(true);
   };
 
+  const schemeLabel = node?.currentValue.type === 'RA' ? schemeShortName(node.currentValue.schemeApplication, schemeCatalog) : null;
   const title = node
-    ? node.currentValue.text || `(${TYPE_LABEL[node.currentValue.type]})`
+    ? node.currentValue.type === 'RA'
+      ? `RA · ${schemeLabel ?? 'scheme 없음'}${node.currentValue.schemeApplication?.status === 'needs_review' ? ' (재검토 필요)' : ''}`
+      : node.currentValue.text || `(${TYPE_LABEL[node.currentValue.type]})`
     : (() => {
         const source = props.nodeText(edge!.currentValue.source);
         const target = props.nodeText(edge!.currentValue.target);
@@ -134,9 +142,23 @@ export function AnnotationCard(props: CardProps) {
         <span className="annotation-title">{title}</span>
       </button>
 
+      {node?.currentValue.summary ? <div className="annotation-summary">요약: {node.currentValue.summary}</div> : null}
+      {node?.currentValue.type === 'ISSUE' && node.currentValue.issueRef ? (
+        <div className="annotation-summary">
+          분류: {findIssue(issueCatalog, node.currentValue.issueRef.issueId)?.label ?? node.currentValue.issueRef.issueId}
+        </div>
+      ) : null}
+      {node?.currentValue.type === 'RA' && node.currentValue.schemeApplication?.rationale ? (
+        <div className="annotation-summary">적용 이유: {truncate(node.currentValue.schemeApplication.rationale, 140)}</div>
+      ) : null}
+      {node?.currentValue.type === 'ISSUE' && node.currentValue.issueRef?.selectionReason ? (
+        <div className="annotation-summary">선택 이유: {truncate(node.currentValue.issueRef.selectionReason, 140)}</div>
+      ) : null}
+      {annotation.evidence.some((span) => span.reviewReason) ? <div className="annotation-warning">본문 수정 후 근거 재검토 필요</div> : null}
+
       {annotation.note ? <div className="annotation-note">{annotation.note}</div> : null}
 
-      {node && status === 'modified' && node.originalValue.text !== node.currentValue.text ? (
+      {node && status === 'modified' && node.currentValue.type !== 'RA' && node.originalValue.text !== node.currentValue.text ? (
         <div className="annotation-original">원안: {truncate(node.originalValue.text, 160)}</div>
       ) : null}
 
@@ -238,7 +260,7 @@ export function AnnotationCard(props: CardProps) {
               >
                 {dependency && !dependency.ready ? '노드와 함께 수락' : '수락'}
               </button>
-              {node ? (
+              {node && node.currentValue.type !== 'RA' ? (
                 <button type="button" onClick={startEdit}>
                   수정 후 수락
                 </button>
@@ -249,7 +271,7 @@ export function AnnotationCard(props: CardProps) {
             </>
           ) : (
             <>
-              {inGraph && node ? (
+              {inGraph && node && node.currentValue.type !== 'RA' ? (
                 <button type="button" onClick={startEdit}>
                   텍스트 수정
                 </button>

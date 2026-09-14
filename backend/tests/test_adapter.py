@@ -4,14 +4,16 @@ from pathlib import Path
 
 from app.config import Settings
 from app.services.aif_adapter import InvalidResultError, build_proposal, parse_json_text, validate_graph
-from app.services.langflow_client import LangflowError, build_run_payload, extract_output_text
+from app.services.langflow_client import LangflowError, RunInput, build_run_payload, extract_output_text
 
 FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "langflow_run_response.sample.json"
+# v9 flow(근거 인용·요약·스킴 없음) 응답: 이전 형식도 계속 받아들이는지 확인한다.
+FIXTURE_V9 = Path(__file__).resolve().parent.parent / "fixtures" / "langflow_run_response.v9.sample.json"
 SAMPLE = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "sample" / "sample-case.json"
 
 
-def load_graph() -> dict:
-    envelope = json.loads(FIXTURE.read_text(encoding="utf-8"))
+def load_graph(fixture: Path = FIXTURE_V9) -> dict:
+    envelope = json.loads(fixture.read_text(encoding="utf-8"))
     text, _ = extract_output_text(envelope, "ChatOutput-nL1VD")
     return parse_json_text(text)
 
@@ -143,10 +145,12 @@ class EnvelopeTest(unittest.TestCase):
 
     def test_payload_uses_tweaks_for_custom_input(self):
         settings = Settings(langflow_mode="live", langflow_flow_id="f", langflow_api_key="secret")
-        payload = build_run_payload(settings, "원문 텍스트\n둘째 줄", "CASE1")
+        catalog = [{"issueId": "ISS-001", "categoryName": "군", "label": "항목", "criteria": "기준"}]
+        payload = build_run_payload(settings, RunInput("원문 텍스트\n둘째 줄", "CASE1", catalog))
         tweak = json.loads(payload["tweaks"]["CustomComponent-k5fj9"]["value"])
         self.assertEqual(tweak["judgment"], "원문 텍스트\n둘째 줄")
         self.assertEqual(tweak["case_id"], "CASE1")
+        self.assertEqual(tweak["issue_catalog"], catalog)
         self.assertEqual(payload["output_component"], "ChatOutput-nL1VD")
         self.assertNotIn("secret", json.dumps(payload))
 

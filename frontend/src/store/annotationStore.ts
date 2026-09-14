@@ -18,11 +18,16 @@ import type {
   ProjectFile,
   ReviewEvent,
 } from '../types/annotation';
-import { PROJECT_SCHEMA_VERSION } from '../types/annotation';
+import { PROJECT_SCHEMA_VERSION, migrateProjectFile } from '../types/annotation';
+import type { NodeFieldsPatch } from '../types/argument';
 import { DocumentMatcher, rematchEvidence } from '../utils/evidence';
 import { useGraphStore, nowIso } from './graphStore';
+import { useCatalogStore } from './catalogStore';
+import { applyGeneratedSummaries, expectationFor } from './graphRules';
 import {
   acceptAnnotation,
+  clearEvidenceReview,
+  recomputeAcceptedStatus,
   importProposals,
   linkEvidence,
   makeEvent,
@@ -32,6 +37,7 @@ import {
   resolveEvidenceCandidate,
   setDraftPosition,
   setDraftText,
+  setDraftValue,
   unlinkEvidence,
   type AcceptOptions,
   type BulkAcceptPreview,
@@ -74,6 +80,10 @@ function toRunRecord(server: ServerRunRecord, previous?: AnalysisRunRecord): Ana
     summary: server.result?.summary ?? previous?.summary ?? null,
     warnings: server.result?.warnings ?? previous?.warnings ?? [],
     constraints: server.constraints,
+    catalogs: server.catalogs ?? previous?.catalogs ?? null,
+    pipeline: server.pipeline ?? previous?.pipeline ?? null,
+    outcome: server.result?.outcome ?? previous?.outcome ?? null,
+    purpose: server.purpose ?? previous?.purpose,
     stale: previous?.stale ?? false,
     imported: previous?.imported ?? false,
   };
@@ -101,6 +111,8 @@ interface AnnotationState {
   polling: string | null;
   /** 원문 패널이 스크롤할 근거 범위 (토큰으로 반복 요청 구분) */
   evidenceFocus: { start: number; end: number; token: number } | null;
+  /** 요약 생성 요청 중인 노드 */
+  summarizing: string[];
 }
 
 interface AnnotationActions {
@@ -110,10 +122,13 @@ interface AnnotationActions {
   attachDocumentMeta: (text: string) => Promise<void>;
 
   // 분석
+  /** 판결문 분석. 52개 세부 쟁점 중 최대 3개는 flow 가 자동 선택한다. */
   startAnalysis: () => Promise<void>;
   cancelAnalysis: (runId: string) => Promise<void>;
   refreshRun: (runId: string) => Promise<void>;
   importStaleRun: (runId: string) => void;
+  /** 다른 곳(파이프라인 탭 테스트 실행)에서 끝난 실행을 검토 데이터로 불러온다. 원문이 다르면 반영하지 않고 이유를 돌려준다. */
+  importExternalRun: (server: ServerRunRecord) => string | null;
   setActiveRun: (runId: string | null) => void;
 
   // 검토
@@ -121,10 +136,16 @@ interface AnnotationActions {
   reject: (id: string) => void;
   reset: (id: string) => void;
   editDraftText: (id: string, text: string) => void;
+  /** 노드 제안의 본문·요약·스킴·쟁점 참조 수정 */
+  editDraft: (id: string, patch: NodeFieldsPatch) => void;
   moveDraft: (id: string, x: number, y: number) => void;
   addEvidence: (id: string, span: EvidenceSpan) => void;
   removeEvidence: (id: string, index: number) => void;
   chooseEvidenceCandidate: (id: string, index: number, candidate: { start: number; end: number }) => void;
+  /** 본문 수정으로 붙은 근거 재검토 표시를 확인 완료로 지운다 */
+  confirmEvidenceReview: (id: string) => void;
+  /** 노드 요약을 AI 로 생성 (live). 요청 뒤 본문·요약이 바뀐 노드에는 반영하지 않는다. */
+  generateSummaries: (nodeIds: string[]) => Promise<void>;
   bulkPreview: () => BulkAcceptPreview | null;
   bulkAccept: (preview: BulkAcceptPreview) => void;
 
@@ -165,6 +186,7 @@ const initialState: AnnotationState = {
   notice: null,
   polling: null,
   evidenceFocus: null,
+  summarizing: [],
 };
 
 function snapshotOf(): ReviewSnapshot | null {
@@ -218,6 +240,17 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
     const state = get();
     const previous = state.runs.find((run) => run.runId === server.runId);
     if (previous?.imported) return;
+    if (server.result?.outcome === 'no_issues') {
+      // 근거 있는 세부 쟁점이 없으면 가짜 그래프를 만들지 않고 사유만 알린다.
+      if (previous?.status === 'succeeded') return;
+      const reason = server.result.summary.issueSelection?.reason;
+      upsertRun({ ...toRunRecord(server, previous), stale: false, imported: false });
+      set({
+        activeRunId: server.runId,
+        notice: `52개 세부 쟁점 중 판결문에 근거가 있는 항목을 찾지 못해 그래프를 만들지 않았습니다.${reason ? ` 사유: ${reason}` : ''}`,
+      });
+      return;
+    }
     const proposals = server.result?.annotations ?? [];
     const record = toRunRecord(server, previous);
     const currentHash = state.document?.hash ?? '';
@@ -392,7 +425,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         set({ notice: '이미 진행 중인 분석이 있습니다.' });
         return;
       }
-      const idempotencyKey = `${document.id}:${document.version}:${document.hash}:${state.runs.length}`;
+      const idempotencyKey = `${document.id}:${document.version}:${document.hash.slice(0, 16)}:${state.runs.length}`;
       try {
         const server = await api.createRun({
           text: graph.caseData.text,
@@ -445,6 +478,19 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       importRun(record, proposals);
     },
 
+    importExternalRun(server) {
+      if (server.status !== 'succeeded' || !server.result) return '성공한 실행만 불러올 수 있습니다.';
+      if (server.result.outcome === 'no_issues') return '근거 있는 세부 쟁점이 선택되지 않아 불러올 제안이 없습니다.';
+      const state = get();
+      if (!useGraphStore.getState().caseData || !state.document) return '먼저 그래프 탭에서 판결문을 입력하세요.';
+      if (state.runs.some((run) => run.runId === server.runId && run.imported)) return '이미 불러온 실행입니다.';
+      if (server.documentHash !== state.document.hash) {
+        return '테스트 실행에 쓴 원문이 현재 프로젝트의 원문과 달라 불러오지 않았습니다.';
+      }
+      importRun({ ...toRunRecord(server), documentVersion: state.document.version }, server.result.annotations);
+      return null;
+    },
+
     setActiveRun(runId) {
       set({ activeRunId: runId, selectedAnnotationId: null });
     },
@@ -460,6 +506,9 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
     },
     editDraftText(id, text) {
       withSnapshot((snapshot) => setDraftText(snapshot, id, text));
+    },
+    editDraft(id, patch) {
+      withSnapshot((snapshot) => setDraftValue(snapshot, id, patch));
     },
     moveDraft(id, x, y) {
       const snapshot = snapshotOf();
@@ -478,6 +527,59 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
     },
     chooseEvidenceCandidate(id, index, candidate) {
       withSnapshot((snapshot) => resolveEvidenceCandidate(snapshot, id, index, candidate), false);
+    },
+    confirmEvidenceReview(id) {
+      withSnapshot((snapshot) => clearEvidenceReview(snapshot, id), false);
+    },
+    async generateSummaries(nodeIds) {
+      const graph = useGraphStore.getState();
+      if (!graph.caseData) return;
+      const items: Array<{ nodeId: string; type: 'I' | 'ISSUE'; text: string }> = [];
+      const expectations = [];
+      for (const nodeId of nodeIds) {
+        const node = graph.caseData.nodes.find((item) => item.id === nodeId);
+        const proposal = graph.annotations.find((item) => item.kind === 'node' && item.nodeId === nodeId);
+        const content = node ?? (proposal?.kind === 'node' ? proposal.currentValue : undefined);
+        const type = node?.type ?? (proposal?.kind === 'node' ? proposal.currentValue.type : undefined);
+        if (!content || (type !== 'I' && type !== 'ISSUE') || !content.text.trim()) continue;
+        items.push({ nodeId, type, text: content.text });
+        expectations.push(expectationFor(nodeId, content));
+      }
+      if (items.length === 0) return;
+      set((state) => ({ summarizing: [...new Set([...state.summarizing, ...items.map((item) => item.nodeId)])] }));
+      try {
+        const response = await api.summaries(items);
+        const current = useGraphStore.getState();
+        if (!current.caseData) return;
+        const result = applyGeneratedSummaries(current.caseData, current.annotations, response.summaries, expectations);
+        if (result.applied.length > 0) {
+          current.commit(result.caseData, { annotations: result.annotations.map(recomputeAcceptedStatus), structural: false });
+        }
+        const skipped = result.skipped.map((item) => `${item.nodeId}: ${item.reason}`);
+        set((state) => ({
+          dirty: state.dirty || result.applied.length > 0,
+          reviewEvents:
+            result.applied.length > 0
+              ? [...state.reviewEvents, makeEvent('summary-generated', { detail: `${result.applied.length}개 노드 AI 요약` })]
+              : state.reviewEvents,
+          notice:
+            skipped.length > 0 || response.missing.length > 0
+              ? [
+                  result.applied.length > 0 ? `요약 ${result.applied.length}개를 반영했습니다.` : '',
+                  skipped.length > 0 ? `반영하지 않음 — ${skipped.join(' / ')}` : '',
+                  response.missing.length > 0 ? `모델이 요약하지 못한 노드 ${response.missing.length}개` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+              : `요약 ${result.applied.length}개를 반영했습니다.`,
+        }));
+      } catch (error) {
+        const message = error instanceof ApiError ? `${error.message} (${error.code})` : (error as Error).message;
+        useGraphStore.getState().setErrorMessage(`요약 생성 실패: ${message}`);
+      } finally {
+        const done = new Set(items.map((item) => item.nodeId));
+        set((state) => ({ summarizing: state.summarizing.filter((id) => !done.has(id)) }));
+      }
     },
     bulkPreview() {
       const snapshot = snapshotOf();
@@ -528,6 +630,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       const graph = useGraphStore.getState();
       const state = get();
       if (!graph.caseData || !state.document) return null;
+      const catalogs = useCatalogStore.getState();
       return {
         schemaVersion: PROJECT_SCHEMA_VERSION,
         projectId: state.projectId,
@@ -541,10 +644,17 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
           caseId: state.document.caseId ?? null,
         },
         // 확정 그래프만. pending/rejected 제안은 annotations 에만 남는다.
-        acceptedGraph: exportAifOva(graph.caseData),
+        acceptedGraph: exportAifOva(graph.caseData, { schemeCatalog: catalogs.schemes }),
         analysisRuns: state.runs,
         annotations: graph.annotations,
         reviewEvents: state.reviewEvents,
+        analysisSettings: null,
+        // 저장 시점의 카탈로그 버전. 실행별 버전은 analysisRuns[].catalogs / pipeline 에 있다.
+        catalogs: {
+          issueCatalogVersion: catalogs.issues?.catalogVersion ?? null,
+          issueCatalogSourceSha256: catalogs.issues?.source.sha256 ?? null,
+          schemeCatalogVersion: catalogs.schemes?.schemeCatalogVersion ?? null,
+        },
         savedAt: null,
       };
     },
@@ -574,13 +684,18 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       }
     },
 
-    async loadProjectFile(project, fileName) {
-      if (project.schemaVersion !== PROJECT_SCHEMA_VERSION) {
-        useGraphStore.getState().setErrorMessage(`지원하지 않는 프로젝트 schemaVersion: ${String(project.schemaVersion)}`);
+    async loadProjectFile(source, fileName) {
+      let project: ProjectFile;
+      try {
+        project = migrateProjectFile(source);
+      } catch (error) {
+        useGraphStore.getState().setErrorMessage((error as Error).message);
         return;
       }
       stopPolling();
-      const imported = importAifOva({ ...project.acceptedGraph, text: project.document.text }, fileName);
+      const imported = importAifOva({ ...project.acceptedGraph, text: project.document.text }, fileName, {
+        schemeCatalog: useCatalogStore.getState().schemes,
+      });
       const graph = useGraphStore.getState();
       graph.loadSnapshot({ caseData: imported.case, annotations: project.annotations }, fileName ?? project.title ?? null);
       if (imported.warnings.length > 0) useGraphStore.setState({ importWarnings: imported.warnings });
@@ -599,7 +714,8 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         runs: project.analysisRuns,
         reviewEvents: project.reviewEvents,
         activeRunId: project.analysisRuns.find((run) => run.imported)?.runId ?? null,
-        dirty: false,
+        // v1 파일을 v2 로 올렸거나 이전 형식 필드를 옮겼으면 저장이 필요하다.
+        dirty: source.schemaVersion !== PROJECT_SCHEMA_VERSION || imported.warnings.some((warning) => warning.includes('이전')),
         lastSavedAt: project.savedAt ?? null,
       });
       if (hash && hash !== project.document.hash) {

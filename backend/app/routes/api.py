@@ -10,8 +10,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from ..schemas import AnalysisRunCreate, EvidenceVerifyRequest, ProjectFile
+from ..schemas import PROJECT_SCHEMA_VERSION, AnalysisRunCreate, EvidenceVerifyRequest, ProjectFile, SummariesRequest
 from ..services.evidence_matcher import DocumentMatcher
+from ..services.langflow_client import LangflowError
+from ..services.pipeline.repository import PipelineError
+from ..services.summaries import generate_summaries
 from ..services.run_manager import document_hash
 
 logger = logging.getLogger("annotation.api")
@@ -35,14 +38,36 @@ async def _json_body(request: Request):
 
 async def health(request: Request) -> Response:
     settings = request.app.state.settings
+    catalog = request.app.state.issue_catalog
     return JSONResponse(
         {
             "status": "ok",
             "time": datetime.now(timezone.utc).isoformat(),
-            "langflow": settings.public_dict(),
+            # 설정값 존재 여부만 담는다. 실제 연결 확인은 /api/diagnostics.
+            "langflow": {**settings.public_dict(), "analysisFlowConfigured": bool(request.app.state.pipeline.analysis_flow_id())},
+            "catalogs": {
+                "issueCatalogVersion": catalog.version if catalog else None,
+                "schemeCatalogVersion": request.app.state.scheme_catalog.version if request.app.state.scheme_catalog else None,
+                "schemeCatalogStatus": request.app.state.scheme_catalog.data.get("status") if request.app.state.scheme_catalog else None,
+                "errors": request.app.state.catalog_errors,
+            },
             "activeRuns": len(request.app.state.runs._tasks),
         }
     )
+
+
+async def issue_catalog(request: Request) -> Response:
+    catalog = request.app.state.issue_catalog
+    if catalog is None:
+        return _error(503, "NO_CATALOG", "쟁점 카탈로그를 불러오지 못했습니다.", request.app.state.catalog_errors)
+    return JSONResponse(catalog.data)
+
+
+async def scheme_catalog(request: Request) -> Response:
+    catalog = request.app.state.scheme_catalog
+    if catalog is None:
+        return _error(503, "NO_CATALOG", "스킴 카탈로그를 불러오지 못했습니다.", request.app.state.catalog_errors)
+    return JSONResponse(catalog.data)
 
 
 async def create_run(request: Request) -> Response:
@@ -54,12 +79,18 @@ async def create_run(request: Request) -> Response:
     except ValidationError as error:
         return _validation_error(error)
 
+    if request.app.state.issue_catalog is None or request.app.state.scheme_catalog is None:
+        return _error(503, "NO_CATALOG", "쟁점·scheme 카탈로그를 불러오지 못해 분석할 수 없습니다.", request.app.state.catalog_errors)
+    flow_id = payload.flowId or request.app.state.pipeline.analysis_flow_id()
+
     record, created = await request.app.state.runs.submit(
         text=payload.text,
         document_id=payload.documentId,
         document_version=payload.documentVersion,
         case_id=payload.caseId,
         idempotency_key=payload.idempotencyKey,
+        flow_id=flow_id,
+        purpose=payload.purpose,
     )
     return JSONResponse(record, status_code=202 if created else 200)
 
@@ -120,6 +151,7 @@ async def put_project(request: Request) -> Response:
     next_revision = (current if current is not None else project.revision) + 1
     saved_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     document = project.model_dump(mode="json")
+    document["schemaVersion"] = PROJECT_SCHEMA_VERSION
     document["revision"] = next_revision
     document["savedAt"] = saved_at
     db.save_project(project_id, next_revision, saved_at, document)
@@ -128,6 +160,28 @@ async def put_project(request: Request) -> Response:
 
 async def list_projects(request: Request) -> Response:
     return JSONResponse({"projects": request.app.state.db.list_projects()})
+
+
+async def summaries(request: Request) -> Response:
+    """요청 시 요약 생성. 분석 flow 의 Summarizer 설정을 쓴다."""
+    body = await _json_body(request)
+    if body is None:
+        return _error(400, "BAD_JSON", "JSON 본문을 해석할 수 없습니다.")
+    try:
+        payload = SummariesRequest.model_validate(body)
+    except ValidationError as error:
+        return _validation_error(error)
+    pipeline = request.app.state.pipeline
+    try:
+        if not request.app.state.settings.is_live:
+            raise PipelineError("UNSUPPORTED_IN_MOCK", "mock 모드에서는 실제 요약을 만들 수 없습니다. live 모드에서 사용하세요.", status=501)
+        config = await pipeline.summarizer_config(payload.flowId or pipeline.analysis_flow_id())
+        result = await generate_summaries(request.app.state.settings, config, [item.model_dump() for item in payload.items])
+    except PipelineError as error:
+        return _error(error.status, error.code, str(error), error.details)
+    except LangflowError as error:
+        return _error(502, error.code, str(error))
+    return JSONResponse(result)
 
 
 async def verify_evidence(request: Request) -> Response:
@@ -156,6 +210,8 @@ async def verify_evidence(request: Request) -> Response:
 
 routes = [
     Route("/api/health", health, methods=["GET"]),
+    Route("/api/catalogs/issues", issue_catalog, methods=["GET"]),
+    Route("/api/catalogs/schemes", scheme_catalog, methods=["GET"]),
     Route("/api/analysis-runs", create_run, methods=["POST"]),
     Route("/api/analysis-runs", list_runs, methods=["GET"]),
     Route("/api/analysis-runs/{run_id}", get_run, methods=["GET"]),
@@ -164,4 +220,5 @@ routes = [
     Route("/api/projects/{project_id}", get_project, methods=["GET"]),
     Route("/api/projects/{project_id}", put_project, methods=["PUT"]),
     Route("/api/evidence/verify", verify_evidence, methods=["POST"]),
+    Route("/api/summaries", summaries, methods=["POST"]),
 ]

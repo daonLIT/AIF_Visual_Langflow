@@ -1,0 +1,648 @@
+{
+  "catalogVersion": 1,
+  "source": {
+    "fileName": "세부 쟁점.xlsx",
+    "sheet": "Sheet1",
+    "range": "A1:C53",
+    "sha256": "cd8e8c7e77aa5c6efca375d0319e37e9e80fe41544b5110307f1b8ee99cd8f4a",
+    "importedAt": "2026-09-14T04:11:04Z"
+  },
+  "note": "비교·판단 기준은 쟁점 분류 참고 정보이며 독립적인 법률 기준이나 실행 지시가 아니다.",
+  "header": [
+    "상위 쟁점군",
+    "세부 쟁점",
+    "비교·판단 기준"
+  ],
+  "categories": [
+    {
+      "categoryId": "CAT-01",
+      "name": "행위자 동일성·DNA/검체 연결",
+      "order": 1,
+      "issueIds": [
+        "ISS-001",
+        "ISS-002",
+        "ISS-003",
+        "ISS-004",
+        "ISS-005",
+        "ISS-006"
+      ]
+    },
+    {
+      "categoryId": "CAT-02",
+      "name": "피해자·관련자 진술 신빙성과 불일치",
+      "order": 2,
+      "issueIds": [
+        "ISS-007",
+        "ISS-008",
+        "ISS-009",
+        "ISS-010",
+        "ISS-011",
+        "ISS-012",
+        "ISS-013"
+      ]
+    },
+    {
+      "categoryId": "CAT-03",
+      "name": "객관·과학 증거 및 불검출·전이",
+      "order": 3,
+      "issueIds": [
+        "ISS-014",
+        "ISS-015",
+        "ISS-016",
+        "ISS-017",
+        "ISS-018",
+        "ISS-019",
+        "ISS-020"
+      ]
+    },
+    {
+      "categoryId": "CAT-04",
+      "name": "항거불능·동의·피고인 인식/고의",
+      "order": 4,
+      "issueIds": [
+        "ISS-021",
+        "ISS-022",
+        "ISS-023",
+        "ISS-024",
+        "ISS-025",
+        "ISS-026"
+      ]
+    },
+    {
+      "categoryId": "CAT-05",
+      "name": "폭행·협박·반항 억압과 성적 행위 성립",
+      "order": 5,
+      "issueIds": [
+        "ISS-027",
+        "ISS-028",
+        "ISS-029",
+        "ISS-030",
+        "ISS-031",
+        "ISS-032",
+        "ISS-033"
+      ]
+    },
+    {
+      "categoryId": "CAT-06",
+      "name": "상해성·인과관계",
+      "order": 6,
+      "issueIds": [
+        "ISS-034",
+        "ISS-035",
+        "ISS-036",
+        "ISS-037",
+        "ISS-038",
+        "ISS-039"
+      ]
+    },
+    {
+      "categoryId": "CAT-07",
+      "name": "미수·기수·삽입/착수",
+      "order": 7,
+      "issueIds": [
+        "ISS-040",
+        "ISS-041",
+        "ISS-042",
+        "ISS-043",
+        "ISS-044",
+        "ISS-045"
+      ]
+    },
+    {
+      "categoryId": "CAT-08",
+      "name": "공모·방조·다른 범죄 구성요건",
+      "order": 8,
+      "issueIds": [
+        "ISS-046",
+        "ISS-047",
+        "ISS-048",
+        "ISS-049",
+        "ISS-050",
+        "ISS-051",
+        "ISS-052"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "issueId": "ISS-001",
+      "categoryId": "CAT-01",
+      "categoryName": "행위자 동일성·DNA/검체 연결",
+      "label": "DNA·유전자형 일치",
+      "criteria": "검출 결과가 피고인과 연결되는지 확인",
+      "order": 1,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 2
+    },
+    {
+      "issueId": "ISS-002",
+      "categoryId": "CAT-01",
+      "categoryName": "행위자 동일성·DNA/검체 연결",
+      "label": "검체 채취·보존",
+      "criteria": "채취 위치·과정·보존 및 오염 가능성 확인",
+      "order": 2,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 3
+    },
+    {
+      "issueId": "ISS-003",
+      "categoryId": "CAT-01",
+      "categoryName": "행위자 동일성·DNA/검체 연결",
+      "label": "검체와 범행 시점 연결",
+      "criteria": "검체가 해당 범행 시점에 남겨졌는지 확인",
+      "order": 3,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 4
+    },
+    {
+      "issueId": "ISS-004",
+      "categoryId": "CAT-01",
+      "categoryName": "행위자 동일성·DNA/검체 연결",
+      "label": "체액·혈흔 등 검출",
+      "criteria": "정액·체액·혈흔 등 검출 의미 확인",
+      "order": 4,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 5
+    },
+    {
+      "issueId": "ISS-005",
+      "categoryId": "CAT-01",
+      "categoryName": "행위자 동일성·DNA/검체 연결",
+      "label": "혼합·전이 가능성",
+      "criteria": "혼합 검체·2차 전이 등 대안 경로 검토",
+      "order": 5,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 6
+    },
+    {
+      "issueId": "ISS-006",
+      "categoryId": "CAT-01",
+      "categoryName": "행위자 동일성·DNA/검체 연결",
+      "label": "다른 식별 증거와의 결합",
+      "criteria": "진술·영상·통신자료 등과 함께 동일성 판단",
+      "order": 6,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 7
+    },
+    {
+      "issueId": "ISS-007",
+      "categoryId": "CAT-02",
+      "categoryName": "피해자·관련자 진술 신빙성과 불일치",
+      "label": "핵심 진술의 일관성",
+      "criteria": "범행 핵심 부분이 조사·법정에서 유지되는지 확인",
+      "order": 7,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 8
+    },
+    {
+      "issueId": "ISS-008",
+      "categoryId": "CAT-02",
+      "categoryName": "피해자·관련자 진술 신빙성과 불일치",
+      "label": "주변부 불일치",
+      "criteria": "시간·순서 등 주변 차이가 핵심 신빙성에 미친 영향",
+      "order": 8,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 9
+    },
+    {
+      "issueId": "ISS-009",
+      "categoryId": "CAT-02",
+      "categoryName": "피해자·관련자 진술 신빙성과 불일치",
+      "label": "진술 번복",
+      "criteria": "변경 내용과 번복 이유의 합리성 확인",
+      "order": 9,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 10
+    },
+    {
+      "issueId": "ISS-010",
+      "categoryId": "CAT-02",
+      "categoryName": "피해자·관련자 진술 신빙성과 불일치",
+      "label": "진술의 구체성",
+      "criteria": "경험하지 않고 말하기 어려운 세부 내용 여부",
+      "order": 10,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 11
+    },
+    {
+      "issueId": "ISS-011",
+      "categoryId": "CAT-02",
+      "categoryName": "피해자·관련자 진술 신빙성과 불일치",
+      "label": "허위진술 동기",
+      "criteria": "무고·과장 동기의 존재와 근거 확인",
+      "order": 11,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 12
+    },
+    {
+      "issueId": "ISS-012",
+      "categoryId": "CAT-02",
+      "categoryName": "피해자·관련자 진술 신빙성과 불일치",
+      "label": "최초 진술과 조사 과정",
+      "criteria": "최초 진술 시점·질문 방식·진술 형성 경위 검토",
+      "order": 12,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 13
+    },
+    {
+      "issueId": "ISS-013",
+      "categoryId": "CAT-02",
+      "categoryName": "피해자·관련자 진술 신빙성과 불일치",
+      "label": "객관·다른 진술과의 부합",
+      "criteria": "영상·통신·의료자료 및 관련자 진술과 대조",
+      "order": 13,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 14
+    },
+    {
+      "issueId": "ISS-014",
+      "categoryId": "CAT-03",
+      "categoryName": "객관·과학 증거 및 불검출·전이",
+      "label": "CCTV·영상",
+      "criteria": "촬영 시각·범위·행동 내용과 사각지대 확인",
+      "order": 14,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 15
+    },
+    {
+      "issueId": "ISS-015",
+      "categoryId": "CAT-03",
+      "categoryName": "객관·과학 증거 및 불검출·전이",
+      "label": "통화·문자·위치자료",
+      "criteria": "연락 내용·시점·위치와 사건 경위 연결",
+      "order": 15,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 16
+    },
+    {
+      "issueId": "ISS-016",
+      "categoryId": "CAT-03",
+      "categoryName": "객관·과학 증거 및 불검출·전이",
+      "label": "의료·진단자료",
+      "criteria": "진단 내용이 범행 및 상해를 직접 뒷받침하는 범위",
+      "order": 16,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 17
+    },
+    {
+      "issueId": "ISS-017",
+      "categoryId": "CAT-03",
+      "categoryName": "객관·과학 증거 및 불검출·전이",
+      "label": "감정 결과",
+      "criteria": "감정 대상·방법·결과의 증명 범위 확인",
+      "order": 17,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 18
+    },
+    {
+      "issueId": "ISS-018",
+      "categoryId": "CAT-03",
+      "categoryName": "객관·과학 증거 및 불검출·전이",
+      "label": "검출·불검출의 의미",
+      "criteria": "불검출을 곧바로 행위 부재로 볼 수 있는지 검토",
+      "order": 18,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 19
+    },
+    {
+      "issueId": "ISS-019",
+      "categoryId": "CAT-03",
+      "categoryName": "객관·과학 증거 및 불검출·전이",
+      "label": "시간적·물리적 연결",
+      "criteria": "자료가 공소사실의 시간·장소와 연결되는지 확인",
+      "order": 19,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 20
+    },
+    {
+      "issueId": "ISS-020",
+      "categoryId": "CAT-03",
+      "categoryName": "객관·과학 증거 및 불검출·전이",
+      "label": "전이·오염·대안 원인",
+      "criteria": "다른 생성·이동 경로가 합리적으로 배제되는지 확인",
+      "order": 20,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 21
+    },
+    {
+      "issueId": "ISS-021",
+      "categoryId": "CAT-04",
+      "categoryName": "항거불능·동의·피고인 인식/고의",
+      "label": "심신상실·항거불능 상태",
+      "criteria": "피해자의 신체·정신 상태와 대응 가능성 확인",
+      "order": 21,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 22
+    },
+    {
+      "issueId": "ISS-022",
+      "categoryId": "CAT-04",
+      "categoryName": "항거불능·동의·피고인 인식/고의",
+      "label": "동의·거절 의사표시",
+      "criteria": "명시·묵시적 의사표시의 내용과 맥락 검토",
+      "order": 22,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 23
+    },
+    {
+      "issueId": "ISS-023",
+      "categoryId": "CAT-04",
+      "categoryName": "항거불능·동의·피고인 인식/고의",
+      "label": "음주·의식 상태",
+      "criteria": "음주량 외 언행·이동·기억·반응 상태 종합",
+      "order": 23,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 24
+    },
+    {
+      "issueId": "ISS-024",
+      "categoryId": "CAT-04",
+      "categoryName": "항거불능·동의·피고인 인식/고의",
+      "label": "사건 전후 행동",
+      "criteria": "사전 교류와 사건 직후 행동의 의미 검토",
+      "order": 24,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 25
+    },
+    {
+      "issueId": "ISS-025",
+      "categoryId": "CAT-04",
+      "categoryName": "항거불능·동의·피고인 인식/고의",
+      "label": "피고인의 관찰 가능성",
+      "criteria": "피해자 상태를 피고인이 알아볼 수 있었는지 확인",
+      "order": 25,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 26
+    },
+    {
+      "issueId": "ISS-026",
+      "categoryId": "CAT-04",
+      "categoryName": "항거불능·동의·피고인 인식/고의",
+      "label": "상태 이용의 인식·고의",
+      "criteria": "상태 존재와 이를 이용하려는 인식을 별도 판단",
+      "order": 26,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 27
+    },
+    {
+      "issueId": "ISS-027",
+      "categoryId": "CAT-05",
+      "categoryName": "폭행·협박·반항 억압과 성적 행위 성립",
+      "label": "폭행·협박의 존재",
+      "criteria": "유형력·해악 고지가 실제 있었는지 확인",
+      "order": 27,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 28
+    },
+    {
+      "issueId": "ISS-028",
+      "categoryId": "CAT-05",
+      "categoryName": "폭행·협박·반항 억압과 성적 행위 성립",
+      "label": "폭행·협박의 정도",
+      "criteria": "강도·지속시간·수단·상황을 종합 평가",
+      "order": 28,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 29
+    },
+    {
+      "issueId": "ISS-029",
+      "categoryId": "CAT-05",
+      "categoryName": "폭행·협박·반항 억압과 성적 행위 성립",
+      "label": "폭행·협박의 시점",
+      "criteria": "성적 행위 전후 어느 단계에서 행사되었는지 확인",
+      "order": 29,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 30
+    },
+    {
+      "issueId": "ISS-030",
+      "categoryId": "CAT-05",
+      "categoryName": "폭행·협박·반항 억압과 성적 행위 성립",
+      "label": "반항 억압 가능성",
+      "criteria": "장소·관계·체격·고립 등 대응 조건 검토",
+      "order": 30,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 31
+    },
+    {
+      "issueId": "ISS-031",
+      "categoryId": "CAT-05",
+      "categoryName": "폭행·협박·반항 억압과 성적 행위 성립",
+      "label": "피해자의 대응 가능성",
+      "criteria": "저항·이탈·신고 가능성과 제한 요인 확인",
+      "order": 31,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 32
+    },
+    {
+      "issueId": "ISS-032",
+      "categoryId": "CAT-05",
+      "categoryName": "폭행·협박·반항 억압과 성적 행위 성립",
+      "label": "강간·강제추행 성립",
+      "criteria": "인정된 사실이 각 구성요건에 해당하는지 판단",
+      "order": 32,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 33
+    },
+    {
+      "issueId": "ISS-033",
+      "categoryId": "CAT-05",
+      "categoryName": "폭행·협박·반항 억압과 성적 행위 성립",
+      "label": "성적 행위의 구체적 범위",
+      "criteria": "접촉 부위·방법·지속·행위 진행 정도 확인",
+      "order": 33,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 34
+    },
+    {
+      "issueId": "ISS-034",
+      "categoryId": "CAT-06",
+      "categoryName": "상해성·인과관계",
+      "label": "상해 해당성",
+      "criteria": "생리적 기능 훼손 또는 치료 필요성 확인",
+      "order": 34,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 35
+    },
+    {
+      "issueId": "ISS-035",
+      "categoryId": "CAT-06",
+      "categoryName": "상해성·인과관계",
+      "label": "상처의 정도",
+      "criteria": "부위·크기·기간·증상의 객관적 정도 평가",
+      "order": 35,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 36
+    },
+    {
+      "issueId": "ISS-036",
+      "categoryId": "CAT-06",
+      "categoryName": "상해성·인과관계",
+      "label": "진단·치료 내용",
+      "criteria": "진단서·치료 기록과 실제 증상 대조",
+      "order": 36,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 37
+    },
+    {
+      "issueId": "ISS-037",
+      "categoryId": "CAT-06",
+      "categoryName": "상해성·인과관계",
+      "label": "발생 시점",
+      "criteria": "상처·증상이 범행 직후 발생했는지 확인",
+      "order": 37,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 38
+    },
+    {
+      "issueId": "ISS-038",
+      "categoryId": "CAT-06",
+      "categoryName": "상해성·인과관계",
+      "label": "범행과의 인과관계",
+      "criteria": "인정된 행위가 상해 원인인지 판단",
+      "order": 38,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 39
+    },
+    {
+      "issueId": "ISS-039",
+      "categoryId": "CAT-06",
+      "categoryName": "상해성·인과관계",
+      "label": "기왕증·대안 원인",
+      "criteria": "기존 질환이나 다른 발생 원인 검토",
+      "order": 39,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 40
+    },
+    {
+      "issueId": "ISS-040",
+      "categoryId": "CAT-07",
+      "categoryName": "미수·기수·삽입/착수",
+      "label": "실행의 착수",
+      "criteria": "구성요건 실현의 직접적 위험이 시작되었는지 확인",
+      "order": 40,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 41
+    },
+    {
+      "issueId": "ISS-041",
+      "categoryId": "CAT-07",
+      "categoryName": "미수·기수·삽입/착수",
+      "label": "행위 진행 단계",
+      "criteria": "준비·접촉·시도·완료 단계를 구분",
+      "order": 41,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 42
+    },
+    {
+      "issueId": "ISS-042",
+      "categoryId": "CAT-07",
+      "categoryName": "미수·기수·삽입/착수",
+      "label": "삽입 여부",
+      "criteria": "진술·감정·의료자료로 삽입 사실 확인",
+      "order": 42,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 43
+    },
+    {
+      "issueId": "ISS-043",
+      "categoryId": "CAT-07",
+      "categoryName": "미수·기수·삽입/착수",
+      "label": "기수 성립",
+      "criteria": "요구되는 행위가 완성되었는지 판단",
+      "order": 43,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 44
+    },
+    {
+      "issueId": "ISS-044",
+      "categoryId": "CAT-07",
+      "categoryName": "미수·기수·삽입/착수",
+      "label": "중단 원인",
+      "criteria": "자의 중지인지 외부 방해·미달인지 구분",
+      "order": 44,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 45
+    },
+    {
+      "issueId": "ISS-045",
+      "categoryId": "CAT-07",
+      "categoryName": "미수·기수·삽입/착수",
+      "label": "행위 단계 증거",
+      "criteria": "진술과 객관 자료가 진행 단계를 어떻게 뒷받침하는지 확인",
+      "order": 45,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 46
+    },
+    {
+      "issueId": "ISS-046",
+      "categoryId": "CAT-08",
+      "categoryName": "공모·방조·다른 범죄 구성요건",
+      "label": "사전 공모",
+      "criteria": "범행 전 연락·합의·계획의 존재 확인",
+      "order": 46,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 47
+    },
+    {
+      "issueId": "ISS-047",
+      "categoryId": "CAT-08",
+      "categoryName": "공모·방조·다른 범죄 구성요건",
+      "label": "역할 분담",
+      "criteria": "감시·유인·제압 등 분담 내용 확인",
+      "order": 47,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 48
+    },
+    {
+      "issueId": "ISS-048",
+      "categoryId": "CAT-08",
+      "categoryName": "공모·방조·다른 범죄 구성요건",
+      "label": "공동정범",
+      "criteria": "공동가공 의사와 기능적 행위 지배 판단",
+      "order": 48,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 49
+    },
+    {
+      "issueId": "ISS-049",
+      "categoryId": "CAT-08",
+      "categoryName": "공모·방조·다른 범죄 구성요건",
+      "label": "방조·교사",
+      "criteria": "범행 결의 유발 또는 실행 용이화 여부 확인",
+      "order": 49,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 50
+    },
+    {
+      "issueId": "ISS-050",
+      "categoryId": "CAT-08",
+      "categoryName": "공모·방조·다른 범죄 구성요건",
+      "label": "현장 존재와 실제 기여",
+      "criteria": "단순 동석과 범행 기여를 구분",
+      "order": 50,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 51
+    },
+    {
+      "issueId": "ISS-051",
+      "categoryId": "CAT-08",
+      "categoryName": "공모·방조·다른 범죄 구성요건",
+      "label": "범의 인식",
+      "criteria": "정범의 범행 내용과 자신의 기여를 인식했는지 확인",
+      "order": 51,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 52
+    },
+    {
+      "issueId": "ISS-052",
+      "categoryId": "CAT-08",
+      "categoryName": "공모·방조·다른 범죄 구성요건",
+      "label": "별도 범죄 구성요건",
+      "criteria": "감금·주거침입·강도·폭행 등 독립 요건 판단",
+      "order": 52,
+      "sourceSheet": "Sheet1",
+      "sourceRow": 53
+    }
+  ]
+}

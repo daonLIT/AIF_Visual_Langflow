@@ -7,15 +7,19 @@
  * - 거절: 확정 그래프에 있던 항목은 제거. 노드를 거절하면 그 노드에 붙은 제안 엣지도 거절(연쇄).
  * - 미검토 복귀: 확정 그래프에서 제거하고 pending 으로. 붙어 있던 확정 엣지 제안은 pending 으로 돌아간다.
  */
-import type { ArgumentCase, ArgumentEdge, ArgumentNode, ValidationResult } from '../types/argument';
+import type { ArgumentCase, ArgumentEdge, ArgumentNode, NodeFieldsPatch, ValidationResult } from '../types/argument';
+import { applyNodePatch, copyNodeContent } from '../types/argument';
 import type {
   Annotation,
   EdgeAnnotation,
   EvidenceSpan,
   NodeAnnotation,
+  NodeValue,
   ReviewEvent,
   ReviewEventType,
 } from '../types/annotation';
+import { sameValue, schemeContent } from '../types/scheme';
+import { afterTextEdit, issueAcceptProblem } from './graphRules';
 import { generateEdgeId } from '../utils/generateEdgeId';
 import { validateCase } from '../validation/graphValidator';
 
@@ -63,6 +67,30 @@ export function isInAcceptedGraph(annotation: Annotation): boolean {
 
 function replace(annotations: Annotation[], next: Annotation): Annotation[] {
   return annotations.map((annotation) => (annotation.id === next.id ? next : annotation));
+}
+
+const CONTENT_KEYS = ['text', 'summary', 'issueRef', 'issueRefs'] as const;
+
+/**
+ * AI 원안과 내용(본문·요약·scheme·쟁점 참조)이 다른지. 좌표·요약 상태·scheme 검토 상태/이력은 내용이 아니다.
+ */
+export function isContentModified(original: NodeValue, current: NodeValue): boolean {
+  return (
+    CONTENT_KEYS.some((key) => !sameValue(original[key], current[key])) ||
+    !sameValue(schemeContent(original.schemeApplication), schemeContent(current.schemeApplication))
+  );
+}
+
+/** 확정 상태 annotation 의 accepted/modified 를 현재 값에 맞춘다. */
+export function recomputeAcceptedStatus(annotation: Annotation): Annotation {
+  if (annotation.kind !== 'node' || !isInAcceptedGraph(annotation) || annotation.origin === 'human') return annotation;
+  const status = isContentModified(annotation.originalValue, annotation.currentValue) ? 'modified' : 'accepted';
+  return status === annotation.status ? annotation : { ...annotation, status };
+}
+
+/** 확정 그래프 노드에 annotation 값(본문·요약 메타·scheme·쟁점 참조)을 그대로 반영한다. */
+export function nodeWithValue(node: ArgumentNode, value: NodeValue): ArgumentNode {
+  return copyNodeContent(node, value);
 }
 
 /** 엣지 제안의 양 끝 노드가 확정 그래프에 있는지, 없으면 어떤 제안을 먼저 수락해야 하는지 */
@@ -113,15 +141,18 @@ export function connectableEdges(snapshot: ReviewSnapshot, nodeId: string): Edge
 function addNodeToGraph(snapshot: ReviewSnapshot, annotation: NodeAnnotation): ReviewSnapshot {
   if (snapshot.caseData.nodes.some((node) => node.id === annotation.nodeId)) return snapshot;
   const value = annotation.currentValue;
-  const node: ArgumentNode = {
-    id: annotation.nodeId,
-    type: value.type,
-    text: value.text,
-    x: value.x ?? 0,
-    y: value.y ?? 0,
-    visible: true,
-    raw: { nodeID: annotation.nodeId, text: value.text, type: value.type },
-  };
+  const node: ArgumentNode = nodeWithValue(
+    {
+      id: annotation.nodeId,
+      type: value.type,
+      text: value.text,
+      x: value.x ?? 0,
+      y: value.y ?? 0,
+      visible: true,
+      raw: { nodeID: annotation.nodeId, text: value.text, type: value.type },
+    },
+    value,
+  );
   return { ...snapshot, caseData: { ...snapshot.caseData, nodes: [...snapshot.caseData.nodes, node] } };
 }
 
@@ -182,6 +213,8 @@ export interface AcceptOptions {
   withConnectableEdges?: boolean;
   /** 수정 후 수락: 이 텍스트로 currentValue 를 바꾼 뒤 수락 */
   text?: string;
+  /** 수정 후 수락: 요약·스킴·쟁점 참조까지 바꾼 뒤 수락 */
+  patch?: NodeFieldsPatch;
 }
 
 export function acceptAnnotation(snapshot: ReviewSnapshot, id: string, options: AcceptOptions = {}): ReviewOutcome {
@@ -194,31 +227,41 @@ export function acceptAnnotation(snapshot: ReviewSnapshot, id: string, options: 
 function acceptNode(snapshot: ReviewSnapshot, annotation: NodeAnnotation, options: AcceptOptions): ReviewOutcome {
   const events: ReviewEvent[] = [];
   const warnings: string[] = [];
-  const text = options.text !== undefined ? options.text.trim() : annotation.currentValue.text;
-  if (!text && (annotation.currentValue.type === 'I' || annotation.currentValue.type === 'ISSUE')) {
+  const patch: NodeFieldsPatch = { ...(options.patch ?? {}) };
+  if (options.text !== undefined) patch.text = options.text;
+  if (patch.text !== undefined) patch.text = patch.text.trim();
+  const value = applyNodePatch(annotation.currentValue, patch);
+  if (!value.text && (value.type === 'I' || value.type === 'ISSUE')) {
     return { snapshot, events, warnings, error: '빈 텍스트로는 수락할 수 없습니다.' };
   }
-  const modified = annotation.origin !== 'human' && text !== annotation.originalValue.text;
+  const issueProblem = issueAcceptProblem(snapshot.caseData, annotation.nodeId, value);
+  if (issueProblem) return { snapshot, events, warnings, error: issueProblem };
+  const textChanged = value.text !== annotation.currentValue.text;
+  const modified = annotation.origin !== 'human' && isContentModified(annotation.originalValue, value);
   const next: NodeAnnotation = {
     ...annotation,
     status: modified ? 'modified' : 'accepted',
-    currentValue: { ...annotation.currentValue, text },
+    currentValue: value,
     updatedAt: at(),
   };
   let result: ReviewSnapshot = { ...snapshot, annotations: replace(snapshot.annotations, next) };
-  // 이미 확정에 있으면 텍스트만 갱신
+  // 이미 확정에 있으면 내용만 갱신
   if (result.caseData.nodes.some((node) => node.id === next.nodeId)) {
     result = {
       ...result,
       caseData: {
         ...result.caseData,
-        nodes: result.caseData.nodes.map((node) => (node.id === next.nodeId ? { ...node, text } : node)),
+        nodes: result.caseData.nodes.map((node) => (node.id === next.nodeId ? nodeWithValue(node, value) : node)),
       },
     };
   } else {
     result = addNodeToGraph(result, next);
   }
   events.push(makeEvent(modified ? 'accept-modified' : 'accept', { annotationId: next.id, runId: next.runId }));
+  if (textChanged) {
+    const effects = afterTextEdit(result.caseData, result.annotations, next.nodeId);
+    result = { ...result, caseData: effects.caseData, annotations: effects.annotations.map(recomputeAcceptedStatus) };
+  }
 
   if (options.withConnectableEdges) {
     for (const edge of connectableEdges(result, next.nodeId)) {
@@ -353,16 +396,27 @@ export function resetAnnotation(snapshot: ReviewSnapshot, id: string): ReviewOut
   return { snapshot: result, events, warnings: [] };
 }
 
-/** 초안(pending) 노드의 텍스트 수정. 확정 상태면 확정 그래프도 갱신하고 modified 로 표시. */
-export function setDraftText(snapshot: ReviewSnapshot, id: string, text: string): ReviewOutcome {
+/**
+ * 노드 제안의 내용(본문·요약·스킴·쟁점 참조) 수정. 미검토 제안은 상태를 유지하고,
+ * 확정 상태면 확정 그래프도 갱신하며 원안과 다르면 modified 로 표시한다.
+ */
+export function setDraftValue(snapshot: ReviewSnapshot, id: string, patch: NodeFieldsPatch): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
   if (!annotation || annotation.kind !== 'node') return { snapshot, events: [], warnings: [], error: '노드 제안이 아닙니다.' };
+  const value = applyNodePatch(annotation.currentValue, patch);
+  if (!value.text.trim() && (value.type === 'I' || value.type === 'ISSUE')) {
+    return { snapshot, events: [], warnings: [], error: '본문은 비울 수 없습니다.' };
+  }
   const inGraph = isInAcceptedGraph(annotation);
-  const modified = annotation.origin !== 'human' && text !== annotation.originalValue.text;
+  if (inGraph && patch.issueRef) {
+    const issueProblem = issueAcceptProblem(snapshot.caseData, annotation.nodeId, value);
+    if (issueProblem) return { snapshot, events: [], warnings: [], error: issueProblem };
+  }
+  const modified = annotation.origin !== 'human' && isContentModified(annotation.originalValue, value);
   const next: NodeAnnotation = {
     ...annotation,
     status: inGraph ? (modified ? 'modified' : 'accepted') : annotation.status,
-    currentValue: { ...annotation.currentValue, text },
+    currentValue: value,
     updatedAt: at(),
   };
   let result: ReviewSnapshot = { ...snapshot, annotations: replace(snapshot.annotations, next) };
@@ -371,11 +425,23 @@ export function setDraftText(snapshot: ReviewSnapshot, id: string, text: string)
       ...result,
       caseData: {
         ...result.caseData,
-        nodes: result.caseData.nodes.map((node) => (node.id === next.nodeId ? { ...node, text } : node)),
+        nodes: result.caseData.nodes.map((node) => (node.id === next.nodeId ? nodeWithValue(node, value) : node)),
       },
     };
   }
-  return { snapshot: result, events: [makeEvent('edit-draft', { annotationId: id, runId: annotation.runId })], warnings: [] };
+  if (patch.text !== undefined && patch.text !== annotation.currentValue.text) {
+    const effects = afterTextEdit(result.caseData, result.annotations, annotation.nodeId);
+    result = { ...result, caseData: effects.caseData, annotations: effects.annotations.map(recomputeAcceptedStatus) };
+  }
+  const detail = Object.keys(patch)
+    .filter((key) => patch[key as keyof NodeFieldsPatch] !== undefined)
+    .join(',');
+  return { snapshot: result, events: [makeEvent('edit-draft', { annotationId: id, runId: annotation.runId, detail })], warnings: [] };
+}
+
+/** 초안 노드의 텍스트 수정 (setDraftValue 의 텍스트 전용 형태) */
+export function setDraftText(snapshot: ReviewSnapshot, id: string, text: string): ReviewOutcome {
+  return setDraftValue(snapshot, id, { text });
 }
 
 export function setDraftPosition(snapshot: ReviewSnapshot, id: string, x: number, y: number): ReviewSnapshot {
@@ -418,7 +484,7 @@ export function resolveEvidenceCandidate(
   const annotation = findAnnotation(snapshot.annotations, id);
   if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
   const evidence = annotation.evidence.map((span, i) =>
-    i === index ? { ...span, start: candidate.start, end: candidate.end, match: 'manual' as const, candidates: [] } : span,
+    i === index ? { ...span, start: candidate.start, end: candidate.end, match: 'manual' as const, candidates: [], reviewReason: null } : span,
   );
   const next = { ...annotation, evidence, updatedAt: at() } as Annotation;
   return {
@@ -436,6 +502,18 @@ export interface BulkAcceptPreview {
   /** 전체 수락 후 예상되는 구조 검증 결과 */
   validation: { errorCount: number; warningCount: number; results: ValidationResult[] };
   snapshot: ReviewSnapshot;
+}
+
+/** 본문 수정으로 붙은 근거 재검토 표시를 확인 완료로 지운다. */
+export function clearEvidenceReview(snapshot: ReviewSnapshot, id: string): ReviewOutcome {
+  const annotation = findAnnotation(snapshot.annotations, id);
+  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  const next = { ...annotation, evidence: annotation.evidence.map((span) => ({ ...span, reviewReason: null })), updatedAt: at() } as Annotation;
+  return {
+    snapshot: { ...snapshot, annotations: replace(snapshot.annotations, next) },
+    events: [makeEvent('evidence-link', { annotationId: id, runId: annotation.runId, detail: '근거 재검토 확인' })],
+    warnings: [],
+  };
 }
 
 export function hasVerifiedEvidence(annotation: Annotation): boolean {

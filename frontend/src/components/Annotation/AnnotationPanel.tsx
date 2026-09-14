@@ -6,6 +6,7 @@ import type { Annotation, EvidenceSpan } from '../../types/annotation';
 import type { ArgumentNodeType } from '../../types/argument';
 import { AnnotationCard } from './AnnotationCard';
 import { BulkAcceptDialog } from './BulkAcceptDialog';
+import { IssueSelectionReport } from './IssueSelectionReport';
 
 const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'all', label: '전체' },
@@ -123,6 +124,7 @@ export function AnnotationPanel() {
   );
 
   const activeRun = runs.find((run) => run.runId === activeRunId) ?? null;
+  const reportRun = activeRun ?? runs.find((run) => run.status === 'succeeded' && (run.imported || run.outcome === 'no_issues')) ?? null;
   const latestFailed = runs.find((run) => run.status === 'failed' || run.status === 'interrupted');
   const staleRuns = runs.filter((run) => run.stale && !run.imported);
 
@@ -231,11 +233,11 @@ export function AnnotationPanel() {
           >
             미검토 전체 수락…
           </button>
-          {activeRun?.constraints?.issueCount ? (
-            <span className="annotation-hint">flow 제약: 쟁점 {activeRun.constraints.issueCount}개 고정</span>
-          ) : null}
+          <span className="annotation-hint">세부 쟁점은 확정 그래프에서 중복 없이 최대 3개</span>
         </div>
       </div>
+
+      {reportRun ? <IssueSelectionReport run={reportRun} onFocusNode={requestFocus} /> : null}
 
       {visible.length === 0 ? (
         <div className="judgment-empty">

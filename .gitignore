@@ -22,3 +22,6 @@ langflow/original_langflow_260904h.json
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# live 응답 캡처 (판결문 원문 포함)
+backend/data/captures/

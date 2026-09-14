@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { useGraphStore } from '../../../store/graphStore';
-import { useAnnotationStore } from '../../../store/annotationStore';
 import type { ArgumentNodeType } from '../../../types/argument';
 import type { AnnotationOrigin, AnnotationStatus } from '../../../types/annotation';
 import { STATUS_LABEL } from '../../../types/annotation';
+import type { SchemeStatus } from '../../../types/scheme';
 
 export interface ArgumentNodeData extends Record<string, unknown> {
   text: string;
   nodeType: ArgumentNodeType;
+  /** I / ISSUE 요약. 그래프에는 요약을 보여주고 본문은 상세 패널에서 본다. */
+  summary?: string;
+  /** 요약을 만든 뒤 본문이 바뀜 */
+  summaryStale?: boolean;
+  /** RA scheme 짧은 이름 (scheme 정보가 없으면 null) */
+  schemeLabel?: string | null;
+  schemeStatus?: SchemeStatus | null;
+  /** ISSUE 카탈로그 세부 쟁점 이름 */
+  issueLabel?: string | null;
   /** 초안 레이어(미검토/거절 제안) 노드 */
   draft?: boolean;
   status?: AnnotationStatus;
@@ -18,66 +25,44 @@ export interface ArgumentNodeData extends Record<string, unknown> {
 }
 
 interface NodeShellProps {
-  id: string;
   className: string;
   text: string;
-  editable: boolean;
+  summary?: string;
+  summaryStale?: boolean;
   selected?: boolean;
   /** ISSUE 노드처럼 머리말을 표시할 때 사용 */
   badge?: string;
+  /** 머리말 옆 보조 표시 (카탈로그 쟁점 이름 등) */
+  subBadge?: string | null;
   placeholder?: string;
   /** 초안/검토 상태 표시용 */
   draft?: boolean;
   status?: AnnotationStatus;
   origin?: AnnotationOrigin;
-  annotationId?: string;
   hasEvidence?: boolean;
 }
+
+const FALLBACK_LENGTH = 48;
 
 /**
  * 모든 논증 노드의 공통 껍데기.
  * 흐름은 아래(전제) -> 위(결론) 이므로 source 핸들은 위, target 핸들은 아래에 둔다.
+ * 노드에는 요약만 보이고, 클릭하면 상세 패널에서 본문을 확인하고 [수정] 버튼으로 편집한다.
  */
 export function NodeShell({
-  id,
   className,
   text,
-  editable,
+  summary,
+  summaryStale,
   selected,
   badge,
+  subBadge,
   placeholder,
   draft,
   status,
   origin,
-  annotationId,
   hasEvidence,
 }: NodeShellProps) {
-  const updateNodeText = useGraphStore((state) => state.updateNodeText);
-  const editDraftText = useAnnotationStore((state) => state.editDraftText);
-  const [editing, setEditing] = useState(false);
-  const [draftText, setDraftText] = useState(text);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // 편집기가 열린 직후 포커스 + 전체 선택
-  useEffect(() => {
-    if (!editing) return;
-    textareaRef.current?.focus();
-    textareaRef.current?.select();
-  }, [editing]);
-
-  const startEditing = () => {
-    setDraftText(text);
-    setEditing(true);
-  };
-
-  const finish = (save: boolean) => {
-    if (save && draftText !== text) {
-      if (draft && annotationId) editDraftText(annotationId, draftText);
-      else updateNodeText(id, draftText);
-    }
-    setEditing(false);
-  };
-
   // 상태 배지: 색뿐 아니라 텍스트로도 구분한다.
   const statusBadge =
     draft && status
@@ -88,15 +73,26 @@ export function NodeShell({
           ? 'AI 수락'
           : null;
 
+  const trimmedSummary = summary?.trim();
+  const display = trimmedSummary
+    ? trimmedSummary
+    : text.length > FALLBACK_LENGTH
+      ? `${text.slice(0, FALLBACK_LENGTH)}…`
+      : text;
+
   return (
     <div
       className={`arg-node ${className} ${selected ? 'is-selected' : ''} ${draft ? `is-draft is-draft-${status ?? 'pending'}` : ''}`}
-      onDoubleClick={editable ? startEditing : undefined}
-      title={editable ? '더블클릭하여 텍스트 편집' : undefined}
+      title={text ? `${text}\n\n(클릭 또는 Enter: 본문 보기 · 수정은 상세 패널의 [수정])` : undefined}
     >
       <Handle type="source" position={Position.Top} className="arg-handle arg-handle-source" />
 
-      {badge ? <div className="arg-node-badge">{badge}</div> : null}
+      {badge || subBadge ? (
+        <div className="arg-node-badge">
+          {badge}
+          {subBadge ? <span className="arg-node-subbadge">{subBadge}</span> : null}
+        </div>
+      ) : null}
       {statusBadge ? (
         <div className={`arg-node-status is-${status ?? 'pending'}`}>
           {statusBadge}
@@ -104,31 +100,14 @@ export function NodeShell({
         </div>
       ) : null}
 
-      {editing ? (
-        <textarea
-          ref={textareaRef}
-          className="arg-node-editor nodrag nowheel"
-          value={draftText}
-          onChange={(event) => setDraftText(event.target.value)}
-          onBlur={() => finish(true)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.stopPropagation();
-              finish(false);
-            }
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-              event.preventDefault();
-              finish(true);
-            }
-            // 편집 중 Delete/Backspace 가 노드 삭제로 전파되지 않도록 막는다.
-            event.stopPropagation();
-          }}
-        />
-      ) : (
-        <div className="arg-node-text">
-          {text || <span className="arg-node-placeholder">{placeholder ?? '(빈 텍스트)'}</span>}
+      <div className={`arg-node-text ${trimmedSummary ? 'is-summary' : 'is-fallback'}`}>
+        {display || <span className="arg-node-placeholder">{placeholder ?? '(빈 텍스트)'}</span>}
+      </div>
+      {trimmedSummary && summaryStale ? (
+        <div className="arg-node-stale" title="요약을 만든 뒤 본문이 바뀌었습니다">
+          요약 갱신 필요
         </div>
-      )}
+      ) : null}
 
       <Handle type="target" position={Position.Bottom} className="arg-handle arg-handle-target" />
     </div>

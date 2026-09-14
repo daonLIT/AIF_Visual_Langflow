@@ -28,6 +28,8 @@
     "src/utils/**/*",
     "src/types/**/*",
     "src/store/**/*",
-    "src/api/**/*"
+    "src/api/**/*",
+    "scripts/v2Smoke.ts",
+    "src/pipeline/**/*"
   ]
 }

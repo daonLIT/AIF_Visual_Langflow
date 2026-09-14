@@ -34,7 +34,7 @@ export function JudgmentInputDialog({ onClose }: Props) {
 
   const readFile = async (file: File) => {
     // 줄바꿈·공백을 그대로 보존한다. BOM 만 제거.
-    const content = (await file.text()).replace(/^﻿/, '');
+    const content = (await file.text()).replace(/^\uFEFF/, '');
     setText(content);
     setFileName(file.name);
   };
@@ -112,8 +112,8 @@ export function JudgmentInputDialog({ onClose }: Props) {
           ) : null}
 
           <p className="dialog-note">
-            현재 Langflow flow 는 쟁점을 정확히 3개로 분해하도록 고정되어 있습니다. 쟁점 수가 다른 판결문은 분석이 실패하거나
-            일부 쟁점이 합쳐질 수 있습니다.
+            AI 분석을 누르면 세부 쟁점 카탈로그에서 분석 범위를 고릅니다. v10 flow 는 판결문에 근거가 있는 쟁점 수만큼 가지를 만들며,
+            이전(v9) flow 를 쓰면 쟁점이 3개로 고정됩니다.
           </p>
         </div>
 

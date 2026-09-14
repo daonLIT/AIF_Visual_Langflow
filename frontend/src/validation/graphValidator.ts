@@ -1,4 +1,7 @@
 import type { ArgumentCase, ValidationResult } from '../types/argument';
+import { summaryStateOf } from '../types/argument';
+import { CUSTOM, UNCLASSIFIED } from '../types/scheme';
+import { issueSelectionProblems } from '../store/graphRules';
 
 export interface ValidationSummary {
   results: ValidationResult[];
@@ -19,6 +22,12 @@ export interface ValidationSummary {
  * RULE 08 중복 nodeID (error)
  * RULE 09 중복 edgeID (error)
  * RULE 10 OVA/AIF 불일치 (warning)
+ * RULE 11 scheme 을 쓰는 그래프에서 RA scheme 정보 없음 / 미분류 (warning)
+ * RULE 12 scheme 의 전제·결론 참조가 실제 연결과 다름 (warning)
+ * RULE 13 카탈로그를 쓰는 그래프에서 쟁점 분류 없음 (warning)
+ * RULE 14 세부 쟁점 중복 선택 또는 3개 초과 (error)
+ * RULE 15 scheme 재검토 필요 / 결과 검증 오류 (warning)
+ * RULE 16 요약을 만든 뒤 본문이 바뀜 (warning)
  */
 export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
   const results: ValidationResult[] = [];
@@ -198,6 +207,75 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         }
       }
     }
+  }
+
+  // RULE 11~13: scheme·쟁점 카탈로그를 쓰는 그래프에서만 확인한다(이전 형식 파일에 경고가 쏟아지지 않게).
+  const schemeAware = nodes.some((node) => node.type === 'RA' && node.schemeApplication);
+  const catalogAware = nodes.some((node) => node.type === 'ISSUE' && node.issueRef);
+  const sources = new Map<string, Set<string>>();
+  const targets = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if (!sources.has(edge.target)) sources.set(edge.target, new Set());
+    sources.get(edge.target)!.add(edge.source);
+    if (!targets.has(edge.source)) targets.set(edge.source, new Set());
+    targets.get(edge.source)!.add(edge.target);
+  }
+  for (const node of nodeById.values()) {
+    const application = node.type === 'RA' ? node.schemeApplication : undefined;
+    if (node.type === 'RA' && schemeAware) {
+      if (!application) {
+        // RULE 11
+        results.push({ level: 'warning', code: 'RULE_11_RA_SCHEME_MISSING', nodeId: node.id, message: 'RA 노드에 scheme 정보가 없습니다.' });
+      } else {
+        if (application.schemeKey === UNCLASSIFIED) {
+          results.push({ level: 'warning', code: 'RULE_11_RA_UNCLASSIFIED', nodeId: node.id, message: 'RA 가 미분류(적절한 scheme 없음) 상태입니다.' });
+        }
+        if (application.schemeKey === CUSTOM && !application.customSchemeName) {
+          results.push({ level: 'warning', code: 'RULE_11_RA_CUSTOM_NAME', nodeId: node.id, message: '직접 작성 scheme 의 이름이 없습니다.' });
+        }
+        // RULE 12
+        const incomingIds = sources.get(node.id) ?? new Set<string>();
+        const outgoingIds = targets.get(node.id) ?? new Set<string>();
+        const stale = application.premiseBindings.flatMap((binding) => binding.nodeIds).filter((id) => !incomingIds.has(id));
+        if (stale.length > 0) {
+          results.push({
+            level: 'warning',
+            code: 'RULE_12_SCHEME_REFERENCE',
+            nodeId: node.id,
+            message: `scheme 전제 참조 ${stale.length}개가 이 RA 로 연결된 노드가 아닙니다. scheme 을 다시 확인하세요.`,
+          });
+        }
+        const badConclusions = application.conclusionNodeIds.filter((id) => !outgoingIds.has(id));
+        if (badConclusions.length > 0) {
+          results.push({ level: 'warning', code: 'RULE_12_SCHEME_REFERENCE', nodeId: node.id, message: 'scheme 의 결론 노드가 이 RA 가 가리키는 노드와 다릅니다.' });
+        }
+        // RULE 15
+        if (application.status === 'needs_review') {
+          results.push({
+            level: 'warning',
+            code: 'RULE_15_SCHEME_NEEDS_REVIEW',
+            nodeId: node.id,
+            message: `scheme 재검토 필요: ${(application.reviewReasons ?? []).join(' / ') || '연결 또는 본문 변경'}`,
+          });
+        }
+        if (application.errors && application.errors.length > 0) {
+          results.push({ level: 'warning', code: 'RULE_15_SCHEME_ERRORS', nodeId: node.id, message: `scheme 결과 검증 오류: ${application.errors.join(' / ')}` });
+        }
+      }
+    }
+    // RULE 13
+    if (node.type === 'ISSUE' && catalogAware && !node.issueRef) {
+      results.push({ level: 'warning', code: 'RULE_13_ISSUE_UNCLASSIFIED', nodeId: node.id, message: '쟁점 노드에 카탈로그 쟁점 분류가 없습니다.' });
+    }
+    // RULE 16
+    if ((node.type === 'I' || node.type === 'ISSUE') && summaryStateOf(node) === 'stale') {
+      results.push({ level: 'warning', code: 'RULE_16_SUMMARY_STALE', nodeId: node.id, message: '요약을 만든 뒤 본문이 바뀌었습니다. 요약을 다시 만들거나 고치세요.' });
+    }
+  }
+
+  // RULE 14
+  for (const problem of issueSelectionProblems(nodes)) {
+    results.push({ level: 'error', code: 'RULE_14_ISSUE_SELECTION', message: problem });
   }
 
   const errorCount = results.filter((r) => r.level === 'error').length;

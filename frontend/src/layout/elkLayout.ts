@@ -7,18 +7,26 @@ const elk = new ELK();
 /** 레이아웃 계산에 사용할 노드 크기. 실제 렌더 크기와 맞춰야 한다. */
 export const NODE_SIZE: Record<ArgumentNodeType, { width: number; height: number }> = {
   I: { width: 230, height: 96 },
-  RA: { width: 52, height: 52 },
+  // RA 는 스킴 이름 배지를 담는 알약 모양
+  RA: { width: 124, height: 46 },
   CA: { width: 52, height: 52 },
   ISSUE: { width: 280, height: 110 },
 };
+
+/** 그래프에 표시되는 문자 수 (요약이 있으면 요약, 없으면 본문 앞부분) — NodeShell 과 같은 규칙 */
+function displayLength(node: Pick<ArgumentNode, 'text' | 'summary'>): number {
+  const summary = node.summary?.trim();
+  if (summary) return summary.length;
+  return Math.min(node.text.length, 49);
+}
 
 export function measureNode(node: ArgumentNode): { width: number; height: number } {
   const base = NODE_SIZE[node.type];
   if (node.type === 'RA' || node.type === 'CA') return base;
 
-  // 텍스트 길이에 따라 높이를 늘려 겹침을 줄인다.
+  // 표시 문자 길이에 따라 높이를 늘려 겹침을 줄인다.
   const charsPerLine = node.type === 'ISSUE' ? 18 : 16;
-  const lines = Math.max(1, Math.ceil(node.text.length / charsPerLine));
+  const lines = Math.max(1, Math.ceil(displayLength(node) / charsPerLine));
   const height = Math.min(320, Math.max(base.height, 40 + lines * 22));
   return { width: base.width, height };
 }

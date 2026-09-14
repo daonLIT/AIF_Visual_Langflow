@@ -33,7 +33,7 @@ function check(label: string, condition: boolean, detail = ''): void {
 
 // ---- 1) 서버 adapter 결과와 동일한 형태의 제안 만들기 (fixture + 간단 변환) ----
 const samplePath = resolve(process.cwd(), 'public/sample/sample-case.json');
-const fixturePath = resolve(process.cwd(), '../backend/fixtures/langflow_run_response.sample.json');
+const fixturePath = resolve(process.cwd(), '../backend/fixtures/langflow_run_response.v9.sample.json');
 const text: string = JSON.parse(readFileSync(samplePath, 'utf8')).text;
 const envelope = JSON.parse(readFileSync(fixturePath, 'utf8'));
 const component = envelope.outputs[0].outputs.find((o: { component_id: string }) => o.component_id === 'ChatOutput-nL1VD');

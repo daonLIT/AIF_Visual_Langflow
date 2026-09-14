@@ -5,6 +5,15 @@ import type {
   ArgumentNodeType,
 } from '../types/argument';
 import { isArgumentNodeType } from '../types/argument';
+import {
+  legacySchemeToApplication,
+  readIssueRef,
+  readIssueRefs,
+  readSchemeApplication,
+  type SchemeApplication,
+  type SchemeCatalog,
+} from '../types/scheme';
+import { textHash } from '../utils/textHash';
 import type {
   RawAifEdge,
   RawAifNode,
@@ -21,6 +30,25 @@ export interface ImportResult {
 }
 
 export class ImportError extends Error {}
+
+export interface ImportOptions {
+  /** 검증된 외부 schemeID(aifdbSchemeId) 대응으로 schemefulfillments 를 schemeApplication 으로 가져올 때 사용 */
+  schemeCatalog?: SchemeCatalog | null;
+}
+
+function readSummary(rawNode: RawAifNode, text: string): Pick<ArgumentNode, 'summary' | 'summaryOrigin' | 'summaryStatus' | 'summarySourceHash'> {
+  const summary = typeof rawNode.summary === 'string' ? rawNode.summary.trim() : '';
+  if (!summary) return {};
+  const current = textHash(text);
+  // 해시가 없는 이전 파일은 요약과 본문이 함께 저장된 것으로 보고 현재 본문 해시를 기록한다.
+  const source = typeof rawNode.summarySourceHash === 'string' && rawNode.summarySourceHash ? rawNode.summarySourceHash : current;
+  return {
+    summary,
+    summaryOrigin: rawNode.summaryOrigin === 'human' ? 'human' : 'ai',
+    summaryStatus: source === current ? 'current' : 'stale',
+    summarySourceHash: source,
+  };
+}
 
 const DEFAULT_X = 0;
 const DEFAULT_Y = 0;
@@ -39,7 +67,7 @@ function edgeKey(fromID: string, toID: string): string {
   return `${fromID} ${toID}`;
 }
 
-export function importAifOva(input: unknown, fileName?: string): ImportResult {
+export function importAifOva(input: unknown, fileName?: string, options: ImportOptions = {}): ImportResult {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new ImportError('최상위 구조가 JSON 객체가 아닙니다.');
   }
@@ -99,10 +127,23 @@ export function importAifOva(input: unknown, fileName?: string): ImportResult {
     const hasY = typeof ovaNode?.y === 'number' && Number.isFinite(ovaNode.y);
     if (!hasX || !hasY) missingPosition += 1;
 
+    const type = normalizeType(rawNode.type);
+    const text = typeof rawNode.text === 'string' ? rawNode.text : '';
+    let schemeApplication: SchemeApplication | undefined;
+    if (type === 'RA') {
+      schemeApplication = readSchemeApplication(rawNode.schemeApplication) ?? legacySchemeToApplication(rawNode.scheme);
+      if (!rawNode.schemeApplication && schemeApplication) warnings.push(`RA ${rawNode.nodeID}: 이전 형식 scheme 필드를 schemeApplication 으로 옮겼습니다.`);
+    }
+    const issueRef = type === 'ISSUE' ? readIssueRef(rawNode.issueRef) : undefined;
+    const issueRefs = readIssueRefs(rawNode.issueRefs);
     nodes.push({
       id: rawNode.nodeID,
-      type: normalizeType(rawNode.type),
-      text: typeof rawNode.text === 'string' ? rawNode.text : '',
+      type,
+      text,
+      ...readSummary(rawNode, text),
+      ...(schemeApplication ? { schemeApplication } : {}),
+      ...(issueRef ? { issueRef } : {}),
+      ...(issueRefs ? { issueRefs } : {}),
       x: hasX ? (ovaNode!.x as number) : DEFAULT_X,
       y: hasY ? (ovaNode!.y as number) : DEFAULT_Y,
       visible: ovaNode?.visible === undefined ? true : Boolean(ovaNode.visible),
@@ -145,12 +186,45 @@ export function importAifOva(input: unknown, fileName?: string): ImportResult {
     });
   }
 
+  // ---- AIF schemefulfillments ----
+  // 외부 항목은 보존한다. 검증된 외부 schemeID 대응이 있고 RA 에 scheme 정보가 없으면 내부 모델로 가져온다.
+  // 이전 버전(v10) 편집기가 문자열 schemeId 를 그대로 넣은 항목은 추측된 ID 이므로 제외한다.
+  const rawMetadata = { ...(raw as Record<string, unknown>) };
+  if (Array.isArray(aif.schemefulfillments)) {
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const rawById = new Map(
+      (aif.nodes as RawAifNode[]).filter((item) => item && typeof item.nodeID === 'string').map((item) => [item.nodeID, item]),
+    );
+    const kept: unknown[] = [];
+    for (const entry of aif.schemefulfillments) {
+      const nodeId = (entry as { nodeID?: unknown })?.nodeID;
+      const schemeId = (entry as { schemeID?: unknown })?.schemeID;
+      const legacy = typeof nodeId === 'string' ? (rawById.get(nodeId)?.scheme as { schemeId?: unknown } | undefined) : undefined;
+      if (typeof schemeId === 'string' && legacy && legacy.schemeId === schemeId) {
+        warnings.push(`schemefulfillments: 이전 편집기가 만든 비표준 항목(${nodeId} → ${schemeId})을 제외했습니다.`);
+        continue;
+      }
+      kept.push(entry);
+      const node = typeof nodeId === 'string' ? nodeById.get(nodeId) : undefined;
+      const definition =
+        typeof schemeId === 'number' ? options.schemeCatalog?.schemes.find((item) => item.aifdbSchemeId === schemeId) : undefined;
+      if (node && node.type === 'RA' && !node.schemeApplication && definition) {
+        node.schemeApplication = {
+          ...readSchemeApplication({ schemeKey: definition.schemeKey, origin: 'human', status: 'suggested' })!,
+          catalogVersion: options.schemeCatalog?.schemeCatalogVersion ?? null,
+          notes: `AIF schemefulfillments schemeID ${schemeId} 에서 가져옴`,
+        };
+      }
+    }
+    rawMetadata.AIF = { ...aif, schemefulfillments: kept };
+  }
+
   const argumentCase: ArgumentCase = {
     fileName,
     text: typeof raw.text === 'string' ? raw.text : '',
     nodes,
     edges,
-    rawMetadata: { ...(raw as Record<string, unknown>) },
+    rawMetadata,
   };
 
   return {
@@ -160,12 +234,12 @@ export function importAifOva(input: unknown, fileName?: string): ImportResult {
   };
 }
 
-export function parseCaseJson(source: string, fileName?: string): ImportResult {
+export function parseCaseJson(source: string, fileName?: string, options: ImportOptions = {}): ImportResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);
   } catch (error) {
     throw new ImportError(`JSON 파싱 실패: ${(error as Error).message}`);
   }
-  return importAifOva(parsed, fileName);
+  return importAifOva(parsed, fileName, options);
 }

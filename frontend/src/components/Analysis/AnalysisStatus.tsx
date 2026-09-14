@@ -13,7 +13,7 @@ const STATUS_LABEL: Record<RunStatus, string> = {
 };
 
 function useElapsed(run: AnalysisRunRecord | undefined): string {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const active = run && (run.status === 'queued' || run.status === 'running');
   useEffect(() => {
     if (!active) return;
@@ -27,7 +27,10 @@ function useElapsed(run: AnalysisRunRecord | undefined): string {
   return seconds >= 60 ? `${Math.floor(seconds / 60)}분 ${seconds % 60}초` : `${seconds}초`;
 }
 
-/** 툴바에 붙는 AI 분석 버튼 + 실행 상태. 완료율은 제공되지 않으므로 경과 시간만 표시한다. */
+/**
+ * 툴바에 붙는 AI 분석 버튼 + 실행 상태. 세부 쟁점은 사용자가 미리 고르지 않는다:
+ * flow 가 판결문을 읽고 52개 중 최대 3개를 자동 선택한다. 완료율은 제공되지 않아 경과 시간만 표시한다.
+ */
 export function AnalysisStatus() {
   const caseData = useGraphStore((state) => state.caseData);
   const runs = useAnnotationStore((state) => state.runs);
@@ -45,7 +48,11 @@ export function AnalysisStatus() {
         type="button"
         disabled={!hasText || !!active}
         onClick={() => void startAnalysis()}
-        title={hasText ? 'Langflow 로 판결문을 분석해 초안 제안을 만듭니다' : '먼저 판결문을 입력하세요'}
+        title={
+          hasText
+            ? 'Langflow 로 판결문을 분석합니다: 52개 세부 쟁점 중 최대 3개 자동 선택 → 쟁점별 논증 추출 → 요약 → RA scheme 제안'
+            : '먼저 판결문을 입력하세요'
+        }
       >
         {runs.some((run) => run.imported) ? '다시 분석' : 'AI 분석'}
       </button>
@@ -58,10 +65,21 @@ export function AnalysisStatus() {
           </button>
         </span>
       ) : latest ? (
-        <span className={`run-chip is-${latest.status}`} role="status" title={latest.error?.message ?? undefined}>
+        <span
+          className={`run-chip is-${latest.status}`}
+          role="status"
+          title={
+            latest.error
+              ? [latest.error.message, ...(latest.error.details ?? [])].join('\n')
+              : latest.pipeline
+                ? `flow ${latest.pipeline.flowName ?? latest.pipeline.flowId ?? '?'} · 해시 ${(latest.pipeline.flowHash ?? '?').slice(0, 19)}${latest.pipeline.snapshot ? ' · 실행용 스냅샷' : ''}`
+                : undefined
+          }
+        >
           {STATUS_LABEL[latest.status]}
-          {latest.status === 'succeeded' && latest.summary
-            ? ` · 노드 ${latest.summary.nodeCount} / 관계 ${latest.summary.edgeCount}`
+          {latest.status === 'succeeded' && latest.outcome === 'no_issues' ? ' · 근거 있는 세부 쟁점 없음' : ''}
+          {latest.status === 'succeeded' && latest.outcome !== 'no_issues' && latest.summary
+            ? ` · 노드 ${latest.summary.nodeCount} / 관계 ${latest.summary.edgeCount} / 쟁점 ${latest.summary.issueCount}`
             : ''}
           {latest.status === 'failed' && latest.error ? ` · ${latest.error.code}` : ''}
           {latest.mode === 'mock' ? ' · mock' : ''}

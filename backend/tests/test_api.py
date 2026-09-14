@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("AIF_SKIP_DOTENV", "1")  # app.main import 전에: 실제 .env 를 읽지 않음
+
 import asyncio
 import json
 import time
@@ -6,7 +10,7 @@ from pathlib import Path
 
 from starlette.testclient import TestClient
 
-from app.config import Settings
+from app.config import ConfigError, Settings, load_dotenv_files
 from app.main import create_app
 from app.services.langflow_client import LangflowError, MockLangflowTransport
 from app.services.run_manager import document_hash
@@ -21,7 +25,7 @@ class FailingTransport:
     def __init__(self, error: Exception):
         self.error = error
 
-    async def run(self, judgment_text, case_id):
+    async def run(self, run_input):
         raise self.error
 
 
@@ -31,7 +35,7 @@ class SlowTransport(MockLangflowTransport):
 
 
 class BadOutputTransport:
-    async def run(self, judgment_text, case_id):
+    async def run(self, run_input):
         envelope = json.loads(FIXTURE.read_text(encoding="utf-8"))
         envelope["outputs"][0]["outputs"][0]["results"]["message"]["text"] = '{"AIF": {"nodes": []}}'
         return envelope
@@ -67,6 +71,84 @@ class HealthTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertNotIn("super-secret", response.text)
             self.assertTrue(response.json()["langflow"]["apiKeyConfigured"])
+            self.assertEqual(response.json()["catalogs"]["issueCatalogVersion"], 1)
+
+
+class ConfigTest(unittest.TestCase):
+    def test_invalid_mode_is_a_startup_error(self):
+        with self.assertRaises(ConfigError):
+            Settings(langflow_mode="Live ")  # 공백·대소문자 정규화는 load 경로에서만 한다
+        with self.assertRaises(ConfigError):
+            Settings(langflow_mode="production")
+
+    def test_env_files_are_read_in_order_without_overwriting(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first, second = Path(tmp) / "backend.env", Path(tmp) / "root.env"
+            first.write_text("AIF_TEST_A=from-backend\n", encoding="utf-8")
+            second.write_text("﻿# comment\nAIF_TEST_A=from-root\nAIF_TEST_B='quoted'\n", encoding="utf-8")
+            os.environ.pop("AIF_TEST_A", None)
+            os.environ.pop("AIF_TEST_B", None)
+            try:
+                report = load_dotenv_files((first, second, Path(tmp) / "missing.env"))
+                self.assertEqual(os.environ["AIF_TEST_A"], "from-backend")
+                self.assertEqual(os.environ["AIF_TEST_B"], "quoted")
+                self.assertEqual([r["exists"] for r in report], [True, True, False])
+                self.assertEqual(report[1]["applied"], ["AIF_TEST_B"])
+                self.assertNotIn("from-root", json.dumps(report))
+            finally:
+                os.environ.pop("AIF_TEST_A", None)
+                os.environ.pop("AIF_TEST_B", None)
+
+
+class CatalogApiTest(unittest.TestCase):
+    def test_catalog_endpoints(self):
+        with make_client() as client:
+            issues = client.get("/api/catalogs/issues").json()
+            self.assertEqual(len(issues["issues"]), 52)
+            schemes = client.get("/api/catalogs/schemes").json()
+            self.assertIn("witness_testimony", {s["schemeKey"] for s in schemes["schemes"]})
+
+    def test_run_records_catalog_versions_and_selection(self):
+        with make_client() as client:
+            record = wait_terminal(client, submit(client).json()["runId"])
+            self.assertEqual(record["catalogs"]["issueCatalogVersion"], 1)
+            self.assertEqual(record["catalogs"]["schemeCatalogVersion"], 2)
+            self.assertEqual(record["constraints"]["maxSelectedIssues"], 3)
+            self.assertTrue(record["pipeline"]["mock"])
+            selection = record["result"]["summary"]["issueSelection"]
+            self.assertEqual([s["issueId"] for s in selection["selected"]], ["ISS-007", "ISS-009", "ISS-028"])
+
+    def test_no_issues_and_invalid_selection_runs(self):
+        class NoIssues:
+            async def run(self, run_input):
+                envelope = json.loads(FIXTURE.read_text(encoding="utf-8"))
+                envelope["outputs"][0]["outputs"][0]["results"]["message"]["text"] = json.dumps({"status": "no_issues", "reason": "관련 판단 없음"})
+                return envelope
+
+        class Invalid:
+            async def run(self, run_input):
+                envelope = json.loads(FIXTURE.read_text(encoding="utf-8"))
+                envelope["outputs"][0]["outputs"][0]["results"]["message"]["text"] = json.dumps({"status": "invalid", "errors": ["selected 5 issues"]})
+                return envelope
+
+        with make_client(transport=NoIssues()) as client:
+            record = wait_terminal(client, submit(client).json()["runId"])
+            self.assertEqual(record["status"], "succeeded")
+            self.assertEqual(record["result"]["outcome"], "no_issues")
+            self.assertIsNone(record["result"]["graph"])
+        with make_client(transport=Invalid()) as client:
+            record = wait_terminal(client, submit(client).json()["runId"])
+            self.assertEqual((record["status"], record["error"]["code"]), ("failed", "INVALID_SELECTION"))
+            self.assertEqual(record["error"]["details"], ["selected 5 issues"])
+
+    def test_summaries_are_not_faked_in_mock(self):
+        with make_client() as client:
+            response = client.post("/api/summaries", json={"items": [{"nodeId": "n1", "text": "본문"}]})
+            self.assertEqual(response.status_code, 501)
+            self.assertEqual(response.json()["error"]["code"], "UNSUPPORTED_IN_MOCK")
 
 
 class RunLifecycleTest(unittest.TestCase):
@@ -79,7 +161,8 @@ class RunLifecycleTest(unittest.TestCase):
             self.assertEqual(record["documentHash"], document_hash(TEXT))
             result = record["result"]
             self.assertEqual(result["graph"]["text"], TEXT)
-            self.assertEqual(result["summary"]["nodeCount"], 23)
+            self.assertEqual(result["summary"]["nodeCount"], 24)
+            self.assertEqual(result["summary"]["issueCount"], 3)
             self.assertTrue(all(n["nodeID"].endswith(record["namespace"]) for n in result["graph"]["AIF"]["nodes"]))
 
     def test_validation_errors(self):
@@ -183,6 +266,8 @@ class ProjectTest(unittest.TestCase):
             self.assertEqual(saved.json()["revision"], 1)
             loaded = client.get("/api/projects/p1").json()
             self.assertEqual(loaded["revision"], 1)
+            # v1 파일은 v2 로 저장된다.
+            self.assertEqual(loaded["schemaVersion"], 2)
             self.assertEqual(loaded["annotations"][0]["status"], "accepted")
             self.assertEqual(loaded["document"]["text"], TEXT)
             conflict = client.put("/api/projects/p1", json=self.project(0))

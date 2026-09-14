@@ -5,12 +5,15 @@
 - 동시 실행 수는 세마포어로 제한한다(Ollama 자원 경합 방지).
 - 중복 요청 키(idempotencyKey)가 같으면 새 실행을 만들지 않고 기존 실행을 돌려준다.
 - 로컬 취소는 서버의 대기/응답 반영을 멈출 뿐 Langflow/Ollama 계산 자체를 중단하지 못할 수 있다.
+- 매 실행에 pipeline(flowId·flow 해시·실행용 스냅샷·모델 설정·입출력 컴포넌트)과 카탈로그 버전을 고정해 기록한다.
+  live 실행은 flow 해시별 실행용 스냅샷 flow 로 돌려, 실행 중 원래 flow 를 편집해도 진행 중 요청에 섞이지 않는다.
 - 로그에는 원문·API 키를 남기지 않는다.
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -18,7 +21,8 @@ from datetime import datetime, timezone
 from ..config import Settings
 from ..storage import Database
 from .aif_adapter import InvalidResultError, build_proposal, make_namespace, parse_json_text
-from .langflow_client import LangflowClient, LangflowError
+from .catalogs import IssueCatalog, SchemeCatalog
+from .langflow_client import LangflowClient, LangflowError, RunInput
 
 logger = logging.getLogger("annotation.runs")
 
@@ -35,10 +39,22 @@ def document_hash(text: str) -> str:
 
 
 class RunManager:
-    def __init__(self, settings: Settings, db: Database, client: LangflowClient):
+    def __init__(
+        self,
+        settings: Settings,
+        db: Database,
+        client: LangflowClient,
+        *,
+        issue_catalog: IssueCatalog | None = None,
+        scheme_catalog: SchemeCatalog | None = None,
+    ):
         self.settings = settings
         self.db = db
         self.client = client
+        self.issue_catalog = issue_catalog
+        self.scheme_catalog = scheme_catalog
+        # PipelineService (main.create_app 에서 연결). 없으면 flow 고정 없이 실행한다(테스트용).
+        self.pipeline = None
         self._semaphore = asyncio.Semaphore(max(1, settings.max_concurrency))
         self._tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
@@ -51,11 +67,7 @@ class RunManager:
             record["status"] = "interrupted"
             record["updatedAt"] = now_iso()
             record["finishedAt"] = record["updatedAt"]
-            record["error"] = {
-                "code": "INTERRUPTED",
-                "message": "서버가 재시작되어 실행이 중단되었습니다. 다시 분석하세요.",
-                "details": [],
-            }
+            record["error"] = {"code": "INTERRUPTED", "message": "서버가 재시작되어 실행이 중단되었습니다. 다시 분석하세요.", "details": []}
             self.db.save_run(record, self.db.get_run_document(record["runId"]) or "", None)
             count += 1
         if count:
@@ -69,8 +81,13 @@ class RunManager:
             await asyncio.gather(*self._tasks.values(), return_exceptions=True)
 
     # ---- API ----
-    def public_record(self, record: dict) -> dict:
-        return record
+    def catalog_record(self) -> dict:
+        return {
+            "issueCatalogVersion": self.issue_catalog.version if self.issue_catalog else None,
+            "issueCatalogSha256": self.issue_catalog.sha256 if self.issue_catalog else None,
+            "schemeCatalogVersion": self.scheme_catalog.version if self.scheme_catalog else None,
+            "schemeCatalogSha256": self.scheme_catalog.sha256 if self.scheme_catalog else None,
+        }
 
     async def submit(
         self,
@@ -80,6 +97,8 @@ class RunManager:
         document_version: int,
         case_id: str | None,
         idempotency_key: str | None,
+        flow_id: str | None = None,
+        purpose: str = "analysis",
     ) -> tuple[dict, bool]:
         """(record, created) 를 돌려준다. created=False 면 중복 키로 기존 실행을 재사용한 것."""
         async with self._lock:
@@ -110,16 +129,16 @@ class RunManager:
                 "caseId": case_id or "",
                 "mode": self.settings.langflow_mode,
                 "namespace": namespace,
-                "flowId": self.settings.langflow_flow_id or None,
-                "outputComponentId": self.settings.langflow_output_component_id,
+                "flowId": flow_id or self.settings.langflow_flow_id or None,
+                "purpose": purpose,
+                "catalogs": self.catalog_record(),
+                # 실행 시작 시점에 채운다: flow 해시·실행용 스냅샷·모델 설정·입출력 컴포넌트
+                "pipeline": None,
                 "cancelRequested": False,
                 "error": None,
                 "result": None,
                 "langflow": None,
-                "constraints": {
-                    "issueCount": 3,
-                    "cancelStopsComputation": False,
-                },
+                "constraints": {"maxSelectedIssues": 3, "cancelStopsComputation": False},
             }
             self.db.save_run(record, text, idempotency_key)
             task = asyncio.create_task(self._execute(record["runId"]))
@@ -141,11 +160,7 @@ class RunManager:
         record["status"] = "cancelled"
         record["updatedAt"] = now_iso()
         record["finishedAt"] = record["updatedAt"]
-        record["error"] = {
-            "code": "CANCELLED",
-            "message": "사용자가 취소했습니다. Langflow/Ollama 계산은 계속 진행 중일 수 있습니다.",
-            "details": [],
-        }
+        record["error"] = {"code": "CANCELLED", "message": "사용자가 취소했습니다. Langflow/Ollama 계산은 계속 진행 중일 수 있습니다.", "details": []}
         self._save(record)
         task = self._tasks.get(run_id)
         if task:
@@ -156,6 +171,15 @@ class RunManager:
     # ---- internals ----
     def _save(self, record: dict) -> None:
         self.db.save_run(record, self.db.get_run_document(record["runId"]) or "", None)
+
+    def _capture(self, run_id: str, envelope: dict) -> str | None:
+        directory = self.settings.capture_dir
+        if directory is None:
+            return None
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"langflow_run_{run_id}.json"
+        path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2), encoding="utf-8")
+        return str(path)
 
     async def _execute(self, run_id: str) -> None:
         try:
@@ -169,19 +193,32 @@ class RunManager:
                 self._save(record)
                 text = self.db.get_run_document(run_id) or ""
 
+                pinned = await self.pipeline.pin_run_flow(record.get("flowId")) if self.pipeline else None
+                record["pipeline"] = pinned
+                self._save(record)
+
+                run_input = RunInput(
+                    judgment_text=text,
+                    case_id=record.get("caseId") or None,
+                    issue_catalog=self.issue_catalog.input_items() if self.issue_catalog else [],
+                    issue_catalog_version=self.issue_catalog.version if self.issue_catalog else None,
+                    scheme_catalog=self.scheme_catalog.input_items() if self.scheme_catalog else [],
+                    scheme_catalog_version=self.scheme_catalog.version if self.scheme_catalog else None,
+                    flow_id=(pinned or {}).get("runFlowId") or record.get("flowId"),
+                    input_component_id=((pinned or {}).get("relay") or {}).get("inputComponentId"),
+                    output_component_id=((pinned or {}).get("relay") or {}).get("outputComponentId"),
+                )
                 try:
-                    result = await asyncio.wait_for(
-                        self.client.analyze(text, record.get("caseId") or None),
-                        timeout=self.settings.langflow_timeout_seconds + 5,
-                    )
+                    result = await asyncio.wait_for(self.client.analyze(run_input), timeout=self.settings.langflow_timeout_seconds + 5)
                 except asyncio.TimeoutError:
-                    raise LangflowError("TIMEOUT", "서버 실행 제한 시간을 초과했습니다.")
+                    raise LangflowError("TIMEOUT", f"서버 실행 제한 시간({self.settings.langflow_timeout_seconds}s)을 초과했습니다.")
 
                 # 늦게 도착한 응답: 이미 취소되었으면 반영하지 않는다.
                 current = self.db.get_run(run_id)
                 if current is None or current["status"] != "running" or current.get("cancelRequested"):
                     logger.info("run %s finished after cancel; result discarded", run_id)
                     return
+                captured = self._capture(run_id, result.raw_envelope)
 
                 parsed = parse_json_text(result.output_text)
                 proposal = build_proposal(
@@ -191,38 +228,41 @@ class RunManager:
                     document_version=int(current["documentVersion"]),
                     namespace=current["namespace"],
                     created_at=now_iso(),
+                    issue_catalog=self.issue_catalog,
+                    scheme_catalog=self.scheme_catalog,
                 )
                 current["status"] = "succeeded"
                 current["result"] = proposal.to_dict()
                 current["langflow"] = {
                     "sessionId": result.session_id,
                     "outputComponentId": result.component_id,
-                    "flowId": self.settings.langflow_flow_id or None,
+                    "flowId": current.get("flowId"),
+                    "runFlowId": run_input.flow_id,
+                    "capturedEnvelope": captured,
                 }
                 current["finishedAt"] = now_iso()
                 current["updatedAt"] = current["finishedAt"]
                 self._save(current)
-                logger.info(
-                    "run %s succeeded (%d nodes / %d edges)",
-                    run_id,
-                    proposal.summary["nodeCount"],
-                    proposal.summary["edgeCount"],
-                )
+                logger.info("run %s succeeded (%s, %d nodes)", run_id, proposal.outcome, proposal.summary["nodeCount"])
         except asyncio.CancelledError:
             # cancel() 이 이미 상태를 기록했다.
             return
         except (LangflowError, InvalidResultError) as error:
             self._fail(run_id, getattr(error, "code", "INVALID_RESULT"), str(error), getattr(error, "details", []))
         except Exception as error:  # noqa: BLE001 - 알 수 없는 오류도 실행 실패로 기록한다.
+            code = getattr(error, "code", None)
+            if code:  # PipelineError (flow 고정 실패)
+                self._fail(run_id, code, str(error), getattr(error, "details", []))
+                return
             logger.exception("run %s failed unexpectedly", run_id)
             self._fail(run_id, "INTERNAL", f"예상하지 못한 오류: {error.__class__.__name__}", [])
 
-    def _fail(self, run_id: str, code: str, message: str, details: list[str]) -> None:
+    def _fail(self, run_id: str, code: str, message: str, details: list) -> None:
         record = self.db.get_run(run_id)
         if record is None or record["status"] in TERMINAL_STATUSES:
             return
         record["status"] = "failed"
-        record["error"] = {"code": code, "message": message, "details": list(details)[:50]}
+        record["error"] = {"code": code, "message": message, "details": [d if isinstance(d, str) else json.dumps(d, ensure_ascii=False) for d in list(details)[:50]]}
         record["finishedAt"] = now_iso()
         record["updatedAt"] = record["finishedAt"]
         self._save(record)

@@ -21,10 +21,10 @@ function check(label: string, condition: boolean, detail = ''): void {
 
 async function main() {
   const text: string = JSON.parse(readFileSync(resolve(process.cwd(), 'public/sample/sample-case.json'), 'utf8')).text;
-  const envelope = JSON.parse(readFileSync(resolve(process.cwd(), '../backend/fixtures/langflow_run_response.sample.json'), 'utf8'));
+  const envelope = JSON.parse(readFileSync(resolve(process.cwd(), '../backend/fixtures/langflow_run_response.v9.sample.json'), 'utf8'));
   const graph = JSON.parse(envelope.outputs[0].outputs[0].results.message.text);
 
-  const graphStore = useGraphStore.getState();
+
   const annotationStore = useAnnotationStore.getState();
 
   console.log('1) 새 문서 시작');

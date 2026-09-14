@@ -2,7 +2,9 @@
 Langflow REST API 호출과 응답 envelope 해석.
 
 - 입력은 커스텀 입력 컴포넌트의 `value` 필드에 tweaks 로 전달한다.
-  현재 flow 의 입력 컴포넌트는 `{"case_id": ..., "judgment": ...}` 형태의 JSON 문자열을 기대한다.
+  입력 컴포넌트는 `{"case_id", "judgment", "issue_catalog", "issue_catalog_version", "scheme_catalog",
+  "scheme_catalog_version"}` 형태의 JSON 문자열을 받는다. 카탈로그는 실행마다 서버가 보내 버전이 고정된다.
+- 입력·출력 컴포넌트 ID 는 실행할 flow 에서 확인한 값(RunInput)을 쓴다.
 - 출력은 명시된 출력 컴포넌트(ChatOutput)의 Message 텍스트만 사용한다. 임의의 첫 텍스트를 고르지 않는다.
 - 실제 응답 envelope 는 버전에 따라 다를 수 있어 알려진 형태를 순서대로 시도하고,
   어느 것도 맞지 않으면 원인을 설명하는 오류를 낸다.
@@ -11,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -37,23 +39,54 @@ class LangflowResult:
     raw_envelope: dict
 
 
-def build_input_value(judgment_text: str, case_id: str | None) -> str:
-    return json.dumps({"case_id": case_id or "", "judgment": judgment_text}, ensure_ascii=False)
+@dataclass
+class RunInput:
+    judgment_text: str
+    case_id: str | None
+    issue_catalog: list[dict] = field(default_factory=list)
+    issue_catalog_version: int | None = None
+    scheme_catalog: list[dict] = field(default_factory=list)
+    scheme_catalog_version: int | None = None
+    # 실제로 실행할 flow (실행용 스냅샷). 비어 있으면 설정의 LANGFLOW_FLOW_ID
+    flow_id: str | None = None
+    input_component_id: str | None = None
+    output_component_id: str | None = None
 
 
-def build_run_payload(settings: Settings, judgment_text: str, case_id: str | None) -> dict:
+def build_input_value(run_input: RunInput) -> str:
+    return json.dumps(
+        {
+            "case_id": run_input.case_id or "",
+            "judgment": run_input.judgment_text,
+            "issue_catalog": run_input.issue_catalog,
+            "issue_catalog_version": run_input.issue_catalog_version,
+            "scheme_catalog": run_input.scheme_catalog,
+            "scheme_catalog_version": run_input.scheme_catalog_version,
+        },
+        ensure_ascii=False,
+    )
+
+
+def build_run_payload(settings: Settings, run_input: RunInput) -> dict:
     """
     Langflow v1 run 요청 본문. 커스텀 입력 컴포넌트에는 tweaks 로 값을 넣는다.
     input_value 도 함께 보내지만(일부 버전은 필수) 실제 입력 경로는 tweaks 이다.
     """
-    value = build_input_value(judgment_text, case_id)
+    value = build_input_value(run_input)
     return {
         "input_type": "chat",
         "output_type": "chat",
         "input_value": value,
-        "output_component": settings.langflow_output_component_id,
-        "tweaks": {settings.langflow_input_component_id: {"value": value}},
+        "output_component": run_input.output_component_id or settings.langflow_output_component_id,
+        "tweaks": {(run_input.input_component_id or settings.langflow_input_component_id): {"value": value}},
     }
+
+
+def auth_headers(settings: Settings) -> dict:
+    headers = {"Content-Type": "application/json"}
+    if settings.langflow_api_key:
+        headers["x-api-key"] = settings.langflow_api_key
+    return headers
 
 
 def _message_text(candidate: Any) -> str | None:
@@ -135,43 +168,46 @@ def extract_output_text(envelope: dict, component_id: str) -> tuple[str, str | N
 
 
 class LangflowTransport(Protocol):
-    async def run(self, judgment_text: str, case_id: str | None) -> dict: ...
+    async def run(self, run_input: RunInput) -> dict: ...
+
+
+def raise_for_langflow_status(response: httpx.Response, *, not_found: str) -> None:
+    if response.status_code in (401, 403):
+        raise LangflowError("AUTH", "Langflow 인증에 실패했습니다. API 키 설정을 확인하세요.", status=response.status_code)
+    if response.status_code == 404:
+        raise LangflowError("FLOW_NOT_FOUND", not_found, status=404)
+    if response.status_code >= 400:
+        detail = ""
+        try:
+            body = response.json()
+            detail = str(body.get("detail") or body.get("message") or "") if isinstance(body, dict) else str(body)
+        except ValueError:
+            detail = response.text
+        raise LangflowError("HTTP", f"Langflow 오류 {response.status_code}: {detail[:300]}", status=response.status_code)
 
 
 class HttpLangflowTransport:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, http_transport: httpx.AsyncBaseTransport | None = None):
         self.settings = settings
+        self.http_transport = http_transport
 
-    async def run(self, judgment_text: str, case_id: str | None) -> dict:
+    async def run(self, run_input: RunInput) -> dict:
         settings = self.settings
-        if not settings.langflow_flow_id:
+        flow_id = run_input.flow_id or settings.langflow_flow_id
+        if not flow_id:
             raise LangflowError("NOT_CONFIGURED", "LANGFLOW_FLOW_ID 가 설정되지 않았습니다.")
-        url = f"{settings.langflow_base_url}/api/v1/run/{settings.langflow_flow_id}"
-        headers = {"Content-Type": "application/json"}
-        if settings.langflow_api_key:
-            headers["x-api-key"] = settings.langflow_api_key
-        payload = build_run_payload(settings, judgment_text, case_id)
+        url = f"{settings.langflow_base_url}/api/v1/run/{flow_id}"
+        payload = build_run_payload(settings, run_input)
         timeout = httpx.Timeout(settings.langflow_timeout_seconds, connect=15.0)
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(url, json=payload, headers=headers)
+            async with httpx.AsyncClient(timeout=timeout, transport=self.http_transport) as client:
+                response = await client.post(url, json=payload, headers=auth_headers(settings))
         except httpx.TimeoutException as error:
             raise LangflowError("TIMEOUT", f"Langflow 응답 대기 시간({settings.langflow_timeout_seconds}s)을 초과했습니다.") from error
         except httpx.HTTPError as error:
             raise LangflowError("CONNECTION", f"Langflow 서버에 연결할 수 없습니다: {error.__class__.__name__}") from error
 
-        if response.status_code in (401, 403):
-            raise LangflowError("AUTH", "Langflow 인증에 실패했습니다. API 키 설정을 확인하세요.", status=response.status_code)
-        if response.status_code == 404:
-            raise LangflowError("FLOW_NOT_FOUND", "Flow ID 에 해당하는 flow 를 찾을 수 없습니다.", status=404)
-        if response.status_code >= 400:
-            detail = ""
-            try:
-                body = response.json()
-                detail = str(body.get("detail") or body.get("message") or "")[:300]
-            except ValueError:
-                detail = response.text[:300]
-            raise LangflowError("HTTP", f"Langflow 오류 {response.status_code}: {detail}", status=response.status_code)
+        raise_for_langflow_status(response, not_found="Flow ID 에 해당하는 flow 를 찾을 수 없습니다.")
         try:
             return response.json()
         except ValueError as error:
@@ -185,7 +221,7 @@ class MockLangflowTransport:
         self.fixture_path = fixture_path
         self.delay_seconds = delay_seconds
 
-    async def run(self, judgment_text: str, case_id: str | None) -> dict:
+    async def run(self, run_input: RunInput) -> dict:
         if not self.fixture_path.exists():
             raise LangflowError("NOT_CONFIGURED", f"mock fixture 가 없습니다: {self.fixture_path.name}")
         if self.delay_seconds > 0:
@@ -195,7 +231,7 @@ class MockLangflowTransport:
 
 
 def make_transport(settings: Settings) -> LangflowTransport:
-    if settings.langflow_mode == "live":
+    if settings.is_live:
         return HttpLangflowTransport(settings)
     return MockLangflowTransport(settings.mock_fixture_path, settings.mock_delay_seconds)
 
@@ -205,12 +241,11 @@ class LangflowClient:
         self.settings = settings
         self.transport = transport or make_transport(settings)
 
-    async def analyze(self, judgment_text: str, case_id: str | None) -> LangflowResult:
-        envelope = await self.transport.run(judgment_text, case_id)
-        text, session_id = extract_output_text(envelope, self.settings.langflow_output_component_id)
-        return LangflowResult(
-            output_text=text,
-            session_id=session_id,
-            component_id=self.settings.langflow_output_component_id,
-            raw_envelope=envelope,
-        )
+    async def analyze(self, run_input: RunInput) -> LangflowResult:
+        envelope = await self.transport.run(run_input)
+        output_id = run_input.output_component_id or self.settings.langflow_output_component_id
+        if not self.settings.is_live:
+            # mock fixture 는 저장소 flow 의 출력 ID 로 만들어져 있다.
+            output_id = self.settings.langflow_output_component_id
+        text, session_id = extract_output_text(envelope, output_id)
+        return LangflowResult(output_text=text, session_id=session_id, component_id=output_id, raw_envelope=envelope)

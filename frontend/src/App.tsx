@@ -5,10 +5,14 @@ import { JudgmentPanel } from './components/JudgmentPanel/JudgmentPanel';
 import { ArgumentGraph } from './components/Graph/ArgumentGraph';
 import { ValidationPanel } from './components/Validation/ValidationPanel';
 import { AnnotationPanel } from './components/Annotation/AnnotationPanel';
+import { PipelineEditor } from './components/Pipeline/PipelineEditor';
 import { useGraphStore } from './store/graphStore';
 import { useAnnotationStore } from './store/annotationStore';
+import { useCatalogStore } from './store/catalogStore';
+import { usePipelineStore } from './store/pipelineStore';
 
 type Pane = 'text' | 'graph' | 'review';
+type View = 'argument' | 'pipeline';
 
 /** 좁은 화면(< 1100px)에서는 세 패널을 탭으로 전환한다. */
 function useNarrow(): boolean {
@@ -65,7 +69,7 @@ function StatusBar() {
       )}
       <span className="status-spacer" />
       <span className="status-hint">
-        캔버스 우클릭: 노드 추가 · 더블클릭: 텍스트 편집 · 아래 핸들→위 핸들 드래그: 엣지 · 점선 노드: AI 초안
+        캔버스 우클릭: 노드 추가 · 노드 클릭: 본문·스킴 보기(수정 버튼으로 편집) · 아래 핸들→위 핸들 드래그: 엣지 · 점선 노드: AI 초안
       </span>
     </footer>
   );
@@ -92,9 +96,20 @@ export default function App() {
   const dirty = useAnnotationStore((state) => state.dirty);
   const narrow = useNarrow();
   const [pane, setPane] = useState<Pane>('graph');
+  const [view, setView] = useState<View>('argument');
   const [reviewCollapsed, setReviewCollapsed] = useState(false);
+  const pipelineDirty = usePipelineStore((state) => state.dirty);
+  // 초안이 서버에 자동 저장된 편집은 새로고침해도 남으므로 떠나기 경고는 저장 전 편집에만 띄운다.
+  const pipelineUnsaved = usePipelineStore((state) => state.dirty && !state.draftSaved);
+  const loadCatalogs = useCatalogStore((state) => state.load);
 
   useEffect(() => {
+    void loadCatalogs();
+  }, [loadCatalogs]);
+
+  useEffect(() => {
+    // 논증 그래프 단축키. 파이프라인 탭은 자체 undo/redo 를 쓴다.
+    if (view !== 'argument') return;
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const typing =
@@ -117,21 +132,48 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, select]);
+  }, [undo, redo, select, view]);
 
   // 저장하지 않은 변경이 있으면 새로고침/닫기 전에 확인한다.
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
-      if (!dirty) return;
+      if (!dirty && !pipelineUnsaved) return;
       event.preventDefault();
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
+  }, [dirty, pipelineUnsaved]);
+
+  const viewTabs = (
+    <nav className="view-tabs" aria-label="화면 선택">
+      {(
+        [
+          ['argument', '논증 그래프'],
+          ['pipeline', '파이프라인'],
+        ] as Array<[View, string]>
+      ).map(([key, label]) => (
+        <button key={key} type="button" className={view === key ? 'is-active' : ''} aria-pressed={view === key} onClick={() => setView(key)}>
+          {label}
+          {key === 'pipeline' && pipelineDirty ? ' •' : ''}
+        </button>
+      ))}
+    </nav>
+  );
+
+  if (view === 'pipeline') {
+    return (
+      <div className="app-shell is-pipeline">
+        {viewTabs}
+        <PipelineEditor active />
+        <ErrorToast />
+      </div>
+    );
+  }
 
   return (
     <ReactFlowProvider>
       <div className={`app-shell ${narrow ? 'is-narrow' : ''} ${reviewCollapsed ? 'is-review-collapsed' : ''}`}>
+        {viewTabs}
         <Toolbar />
         {narrow ? (
           <nav className="pane-tabs" aria-label="패널 선택">

@@ -4,9 +4,14 @@ import type {
   ArgumentEdge,
   ArgumentNode,
   ArgumentNodeType,
+  NodeFieldsPatch,
 } from '../types/argument';
+import { applyNodePatch } from '../types/argument';
+import { isContentModified } from './reviewLogic';
+import { afterTextEdit, flagSchemesForReview, issueAcceptProblem, raEndpoints } from './graphRules';
 import type { Annotation, EvidenceSpan, NodeAnnotation } from '../types/annotation';
 import { parseCaseJson } from '../io/importAifOva';
+import { useCatalogStore } from './catalogStore';
 import { layoutCase } from '../layout/elkLayout';
 import { validateCase } from '../validation/graphValidator';
 import type { ValidationSummary } from '../validation/graphValidator';
@@ -98,6 +103,8 @@ interface GraphActions {
     options?: AddNodeOptions,
   ) => string;
   updateNodeText: (nodeId: string, text: string) => void;
+  /** 확정 노드의 본문·요약·스킴·쟁점 참조 수정 (undo 1단계) */
+  updateNodeFields: (nodeId: string, patch: NodeFieldsPatch) => void;
   deleteNodes: (nodeIds: string[]) => void;
 
   addEdge: (source: string, target: string) => number | null;
@@ -149,16 +156,17 @@ function maxEdgeId(edges: ArgumentEdge[]): number {
   return edges.reduce((max, edge) => Math.max(max, edge.id), 0);
 }
 
-/** 그래프 편집이 검토 상태에 미치는 영향을 반영한다 (텍스트 수정 → modified, 삭제 → rejected). */
-function annotationsAfterNodeTextEdit(annotations: Annotation[], nodeId: string, text: string): Annotation[] {
+/** 그래프 편집이 검토 상태에 미치는 영향을 반영한다 (내용 수정 → modified, 삭제 → rejected). */
+function annotationsAfterNodeEdit(annotations: Annotation[], nodeId: string, patch: NodeFieldsPatch): Annotation[] {
   return annotations.map((annotation) => {
     if (annotation.kind !== 'node' || annotation.nodeId !== nodeId) return annotation;
     if (annotation.status === 'rejected' || annotation.status === 'pending') return annotation;
-    const modified = annotation.origin !== 'human' && text !== annotation.originalValue.text;
+    const currentValue = applyNodePatch(annotation.currentValue, patch);
+    const modified = annotation.origin !== 'human' && isContentModified(annotation.originalValue, currentValue);
     return {
       ...annotation,
       status: modified ? 'modified' : annotation.status === 'modified' ? 'accepted' : annotation.status,
-      currentValue: { ...annotation.currentValue, text },
+      currentValue,
       updatedAt: nowIso(),
     };
   });
@@ -231,7 +239,7 @@ export const useGraphStore = create<GraphStore>((set, get) => {
 
     async loadFromJsonText(source, fileName) {
       try {
-        const result = parseCaseJson(source, fileName);
+        const result = parseCaseJson(source, fileName, { schemeCatalog: useCatalogStore.getState().schemes });
         resetFor(result.case, [], fileName ?? null, result.warnings);
         if (result.needsLayout) {
           await get().runAutoLayout();
@@ -308,30 +316,55 @@ export const useGraphStore = create<GraphStore>((set, get) => {
     },
 
     updateNodeText(nodeId, text) {
+      get().updateNodeFields(nodeId, { text });
+    },
+
+    updateNodeFields(nodeId, patch) {
       const { caseData, annotations } = get();
       if (!caseData) return;
-      const nodes = caseData.nodes.map((node) => (node.id === nodeId ? { ...node, text } : node));
-      commit({ ...caseData, nodes }, { annotations: annotationsAfterNodeTextEdit(annotations, nodeId, text) });
+      const previous = caseData.nodes.find((node) => node.id === nodeId);
+      if (!previous) return;
+      if (patch.issueRef) {
+        const problem = issueAcceptProblem(caseData, nodeId, { ...previous, issueRef: patch.issueRef });
+        if (problem) {
+          set({ errorMessage: problem });
+          return;
+        }
+      }
+      const nodes = caseData.nodes.map((node) => (node.id === nodeId ? applyNodePatch(node, patch) : node));
+      let nextCase: ArgumentCase = { ...caseData, nodes };
+      let nextAnnotations = annotationsAfterNodeEdit(annotations, nodeId, patch);
+      // 본문이 바뀌면 연결된 RA scheme 과 이 노드의 근거를 재검토 대상으로 표시한다.
+      if (patch.text !== undefined && patch.text !== previous.text) {
+        const effects = afterTextEdit(nextCase, nextAnnotations, nodeId);
+        nextCase = effects.caseData;
+        nextAnnotations = effects.annotations;
+      }
+      commit(nextCase, { annotations: nextAnnotations });
     },
 
     deleteNodes(nodeIds) {
       const { caseData, annotations } = get();
       if (!caseData || nodeIds.length === 0) return;
       const removing = new Set(nodeIds);
-      const removedEdges = new Set(
-        caseData.edges
-          .filter((edge) => removing.has(edge.source) || removing.has(edge.target))
-          .map((edge) => edge.id),
-      );
-      commit(
+      const removedEdgeList = caseData.edges.filter((edge) => removing.has(edge.source) || removing.has(edge.target));
+      const removedEdges = new Set(removedEdgeList.map((edge) => edge.id));
+      // 남는 RA 의 전제·결론이 사라지면 scheme 을 재검토 대상으로 둔다.
+      const affectedRas = removedEdgeList
+        .flatMap((edge) => raEndpoints(caseData, annotations, edge.source, edge.target))
+        .filter((id) => !removing.has(id));
+      const flagged = flagSchemesForReview(
         {
           ...caseData,
           nodes: caseData.nodes.filter((node) => !removing.has(node.id)),
           // 노드를 지우면 그 노드에 붙은 엣지도 함께 지운다.
           edges: caseData.edges.filter((edge) => !removedEdges.has(edge.id)),
         },
-        { annotations: annotationsAfterDelete(annotations, removing, removedEdges) },
+        annotationsAfterDelete(annotations, removing, removedEdges),
+        affectedRas,
+        '연결된 노드가 삭제되어 전제·결론이 바뀜',
       );
+      commit(flagged.caseData, { annotations: flagged.annotations });
       set({
         selectedNodeIds: get().selectedNodeIds.filter((id) => !removing.has(id)),
       });
@@ -351,7 +384,14 @@ export const useGraphStore = create<GraphStore>((set, get) => {
         ...caseData.edges.map((edge) => edge.id),
       ]);
       const edge: ArgumentEdge = { id, source, target, visible: true };
-      commit({ ...caseData, edges: [...caseData.edges, edge] });
+      const { annotations } = get();
+      const flagged = flagSchemesForReview(
+        { ...caseData, edges: [...caseData.edges, edge] },
+        annotations,
+        raEndpoints(caseData, annotations, source, target),
+        '전제·결론 연결이 추가됨',
+      );
+      commit(flagged.caseData, { annotations: flagged.annotations });
       set({ edgeIdHighWater: Math.max(edgeIdHighWater, id) });
       return id;
     },
@@ -360,13 +400,16 @@ export const useGraphStore = create<GraphStore>((set, get) => {
       const { caseData, annotations } = get();
       if (!caseData || edgeIds.length === 0) return;
       const removing = new Set(edgeIds);
-      commit(
-        {
-          ...caseData,
-          edges: caseData.edges.filter((edge) => !removing.has(edge.id)),
-        },
-        { annotations: annotationsAfterDelete(annotations, new Set(), removing) },
+      const affectedRas = caseData.edges
+        .filter((edge) => removing.has(edge.id))
+        .flatMap((edge) => raEndpoints(caseData, annotations, edge.source, edge.target));
+      const flagged = flagSchemesForReview(
+        { ...caseData, edges: caseData.edges.filter((edge) => !removing.has(edge.id)) },
+        annotationsAfterDelete(annotations, new Set(), removing),
+        affectedRas,
+        '전제·결론 연결이 삭제됨',
       );
+      commit(flagged.caseData, { annotations: flagged.annotations });
       set({
         selectedEdgeIds: get().selectedEdgeIds.filter((id) => !removing.has(id)),
       });

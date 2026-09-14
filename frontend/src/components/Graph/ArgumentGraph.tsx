@@ -29,6 +29,10 @@ import { CANode } from './nodes/CANode';
 import { IssueNode } from './nodes/IssueNode';
 import type { ArgumentNodeData } from './nodes/NodeShell';
 import { GraphContextMenu, type ContextMenuState } from './GraphContextMenu';
+import { NodeDetailPanel } from './NodeDetailPanel';
+import { findIssue, useCatalogStore } from '../../store/catalogStore';
+import { schemeShortName, type IssueCatalog, type SchemeCatalog } from '../../types/scheme';
+import { summaryStateOf, type NodeContent } from '../../types/argument';
 
 const nodeTypes = {
   I: INode,
@@ -86,12 +90,35 @@ function draftAnnotations(
   };
 }
 
+interface Catalogs {
+  issues: IssueCatalog | null;
+  schemes: SchemeCatalog | null;
+}
+
+/** 요약·스킴 배지·카탈로그 쟁점 이름 (확정/초안 노드 공통) */
+function displayData(
+  value: NodeContent & { type: ArgumentNodeType },
+  catalogs: Catalogs,
+): Pick<ArgumentNodeData, 'summary' | 'summaryStale' | 'schemeLabel' | 'schemeStatus' | 'issueLabel'> {
+  return {
+    summary: value.summary,
+    summaryStale: summaryStateOf(value) === 'stale',
+    schemeLabel: value.type === 'RA' ? schemeShortName(value.schemeApplication, catalogs.schemes) : undefined,
+    schemeStatus: value.type === 'RA' ? (value.schemeApplication?.status ?? null) : undefined,
+    issueLabel:
+      value.type === 'ISSUE' && value.issueRef
+        ? (findIssue(catalogs.issues, value.issueRef.issueId)?.label ?? value.issueRef.issueId)
+        : undefined,
+  };
+}
+
 function toFlowNodes(
   argumentCase: ArgumentCase,
   highlighted: Set<string> | null,
   drafts: NodeAnnotation[],
   annotations: Annotation[],
   selectedAnnotationId: string | null,
+  catalogs: Catalogs,
 ): Node<ArgumentNodeData>[] {
   const accepted: Node<ArgumentNodeData>[] = argumentCase.nodes
     .filter((node) => node.visible)
@@ -104,6 +131,7 @@ function toFlowNodes(
         data: {
           text: node.text,
           nodeType: node.type,
+          ...displayData(node, catalogs),
           draft: false,
           status: annotation?.status,
           origin: annotation?.origin,
@@ -128,6 +156,7 @@ function toFlowNodes(
       data: {
         text: annotation.currentValue.text,
         nodeType: annotation.currentValue.type,
+        ...displayData(annotation.currentValue, catalogs),
         draft: true,
         status: annotation.status,
         origin: annotation.origin,
@@ -200,6 +229,8 @@ export function ArgumentGraph() {
   const selectAnnotation = useAnnotationStore((state) => state.select);
   const moveDraft = useAnnotationStore((state) => state.moveDraft);
   const rejectAnnotation = useAnnotationStore((state) => state.reject);
+  const issueCatalog = useCatalogStore((state) => state.issues);
+  const schemeCatalog = useCatalogStore((state) => state.schemes);
 
   const { fitView, setCenter, screenToFlowPosition } = useReactFlow();
 
@@ -221,7 +252,10 @@ export function ArgumentGraph() {
       return;
     }
     const drafts = draftAnnotations(annotations, activeRunId, showRejected);
-    const flowNodes = toFlowNodes(caseData, highlighted, drafts.nodes, annotations, selectedAnnotationId);
+    const flowNodes = toFlowNodes(caseData, highlighted, drafts.nodes, annotations, selectedAnnotationId, {
+      issues: issueCatalog,
+      schemes: schemeCatalog,
+    });
     const flowEdges = toFlowEdges(caseData, highlighted, drafts.edges, new Set(flowNodes.map((node) => node.id)));
     // 다시 만들 때 React Flow 의 선택 상태는 유지한다 (카드 선택 동기화로 재빌드되어도 선택이 풀리지 않게).
     setNodes((previous) => {
@@ -233,7 +267,7 @@ export function ArgumentGraph() {
       return flowEdges.map((edge) => (selected.has(edge.id) ? { ...edge, selected: true } : edge));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphVersion, highlighted, caseData === null, activeRunId, showRejected, selectedAnnotationId]);
+  }, [graphVersion, highlighted, caseData === null, activeRunId, showRejected, selectedAnnotationId, issueCatalog, schemeCatalog]);
 
   // Fit view 요청
   useEffect(() => {
@@ -256,6 +290,7 @@ export function ArgumentGraph() {
             id: draft.nodeId,
             type: draft.currentValue.type,
             text: draft.currentValue.text,
+            summary: draft.currentValue.summary,
             x: draft.currentValue.x ?? 0,
             y: draft.currentValue.y ?? 0,
             visible: true,
@@ -429,6 +464,8 @@ export function ArgumentGraph() {
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable nodeStrokeWidth={2} />
       </ReactFlow>
+
+      <NodeDetailPanel />
 
       {menu ? (
         <GraphContextMenu
