@@ -195,6 +195,10 @@ AIF.schemefulfillments 는 scheme 카탈로그에 검증된 외부 schemeID(aifd
   형식·비판적 질문은 공개 자료(Walton, Reed & Macagno 2008 기반 CQ 템플릿, Carneades walton.yml)와 대조했고 번역은 구현자가 했습니다.
   Inconsistent Commitment · Effect to Cause · Best Explanation 은 공개 자료에서 원문을 찾지 못해 `verification: needs-book-check`(원서 대조 필요)로 표시되어 있습니다.
   scheme 마다 `sourceNote` 에 출처가 있고 RA 상세 패널의 [출처]에서 볼 수 있습니다.
+- 이전 카탈로그(v2)로 저장된 RA scheme 은 `backend/catalog/scheme_catalog_migrations.json` 대응표로 프로젝트·JSON 을 불러올 때 v3 로 옮깁니다.
+  서버가 시작할 때 대응표의 대상 key·역할·CQ 가 v3 에 있는지 검사하고 `/api/catalogs/schemes` 의 `migrations` 로 내보냅니다.
+  자동으로 확정하지 않습니다. key 를 바꾸거나(`lack_of_evidence`→`ignorance`, `abduction`→`best_explanation`) 미분류로 돌리거나 옮기지 못한 역할·CQ 응답이 있으면
+  "재검토 필요"로 표시하고, 원래 key·역할 배정·CQ 응답은 RA 상세의 수정 이력(카탈로그 전환)에 남깁니다. 과거 실행 기록은 바꾸지 않습니다.
 - JSON 이 정상 출력되는 것과 쟁점 선택·scheme 분류가 정확한 것은 별개입니다. 분류 품질은 사람이 검토해야 합니다.
 - 파이프라인 탭의 코드 재구성·코드 검사와 AI 요약 생성은 live 모드에서만 됩니다(mock 은 로컬 SQLite 사본 편집, 요약은 501).
 - CA(반박) 노드는 자동 생성되지 않습니다. 수동 편집으로 추가하세요.

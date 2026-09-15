@@ -686,16 +686,23 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
 
     async loadProjectFile(source, fileName) {
       let project: ProjectFile;
+      // 이전 카탈로그 scheme 전환에 대응표가 필요하다. 아직 못 읽었으면 먼저 읽고, 그래도 없으면 전환하지 않는다.
+      if (!useCatalogStore.getState().schemes) await useCatalogStore.getState().load();
+      const schemeCatalog = useCatalogStore.getState().schemes;
+      const migratedAt = new Date().toISOString();
       try {
-        project = migrateProjectFile(source);
+        project = migrateProjectFile(source, { schemeCatalog, migratedAt });
       } catch (error) {
         useGraphStore.getState().setErrorMessage((error as Error).message);
         return;
       }
       stopPolling();
-      const imported = importAifOva({ ...project.acceptedGraph, text: project.document.text }, fileName, {
-        schemeCatalog: useCatalogStore.getState().schemes,
-      });
+      const imported = importAifOva({ ...project.acceptedGraph, text: project.document.text }, fileName, { schemeCatalog, migratedAt });
+      const annotationsMigrated = project.annotations.some(
+        (annotation) =>
+          annotation.kind === 'node' &&
+          (annotation.currentValue.schemeApplication?.history ?? []).some((entry) => entry.action === 'catalog_migration' && entry.at === migratedAt),
+      );
       const graph = useGraphStore.getState();
       graph.loadSnapshot({ caseData: imported.case, annotations: project.annotations }, fileName ?? project.title ?? null);
       if (imported.warnings.length > 0) useGraphStore.setState({ importWarnings: imported.warnings });
@@ -715,9 +722,13 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         reviewEvents: project.reviewEvents,
         activeRunId: project.analysisRuns.find((run) => run.imported)?.runId ?? null,
         // v1 파일을 v2 로 올렸거나 이전 형식 필드를 옮겼으면 저장이 필요하다.
-        dirty: source.schemaVersion !== PROJECT_SCHEMA_VERSION || imported.warnings.some((warning) => warning.includes('이전')),
+        dirty:
+          source.schemaVersion !== PROJECT_SCHEMA_VERSION || annotationsMigrated || imported.warnings.some((warning) => warning.includes('이전')),
         lastSavedAt: project.savedAt ?? null,
       });
+      if (annotationsMigrated && !imported.warnings.some((warning) => warning.includes('scheme 카탈로그'))) {
+        set({ notice: '이전 scheme 카탈로그로 저장된 AI 제안의 scheme 을 현재 카탈로그 기준으로 옮겼습니다. 원래 scheme 은 RA 상세의 수정 이력에 있습니다.' });
+      }
       if (hash && hash !== project.document.hash) {
         set({ notice: '프로젝트 파일의 문서 해시가 원문과 다릅니다. 파일이 손상되었거나 수정되었을 수 있습니다.' });
       }

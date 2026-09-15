@@ -148,7 +148,7 @@ class GraphTest(unittest.TestCase):
         graph = load_graph()
         ra = next(n for n in graph["AIF"]["nodes"] if n["type"] == "RA")
         application = ra.pop("schemeApplication")
-        premise = application["premiseBindings"][0]["nodeIds"][0]
+        premise = next(edge["fromID"] for edge in graph["AIF"]["edges"] if edge["toID"] == ra["nodeID"])
         ra["scheme"] = {"schemeId": "other", "schemeName": "경험칙", "premises": [{"nodeId": premise, "role": None}], "conclusion": {"nodeId": application["conclusionNodeIds"][0]}, "criticalQuestions": []}
         proposal = build(graph, namespace="20260914010208")
         converted = next(n for n in proposal.graph["AIF"]["nodes"] if n["type"] == "RA")["schemeApplication"]

@@ -67,7 +67,7 @@ async def scheme_catalog(request: Request) -> Response:
     catalog = request.app.state.scheme_catalog
     if catalog is None:
         return _error(503, "NO_CATALOG", "스킴 카탈로그를 불러오지 못했습니다.", request.app.state.catalog_errors)
-    return JSONResponse(catalog.data)
+    return JSONResponse(catalog.public_data())
 
 
 async def create_run(request: Request) -> Response:

@@ -33,6 +33,8 @@ API Text Input ─▶ 0. Judgment Splitter ─┬▶ 1. Main Claim Prompt ─▶
   요약하지 못한 노드는 채워 넣지 않고 `meta.summaries.missing` 에 보고합니다.
 - **Scheme Assigner**: RA 마다 전제 노드 전체·결론 노드·근거를 보여 주고 허용된 scheme key 중 하나 또는 `unclassified` 를 고르게 합니다.
   응답은 스키마 검증만 하고 실행하지 않으며, 허용되지 않은 key·역할·노드 참조·질문 ID 는 오류로 남기고 미분류로 둡니다. `schemeApplication.origin: ai`, `status: suggested`.
+  한 전제를 두 역할에 넣으면 오류로 알려 재시도하게 하고, 끝내 고치지 않으면 처음 역할만 남깁니다. 설명·CQ 답·대안 이유에 섞인 모델 입력용 별칭(R1, N2…)은
+  그 그룹에 실제로 준 별칭만 지웁니다. 프롬프트는 구조·근거 규칙만 두고 법리 해석(어떤 scheme 이 법적으로 맞는지)은 넣지 않습니다.
 - **Result Validator**: 구조, 세부 쟁점 ≤3·카탈로그·중복, RA 전제/결론, 바인딩 참조, 요약 해시를 확인해 `meta.validation` 에 기록합니다. 오류가 있으면 `status: invalid`.
 - 중계 서버(`aif_adapter.py`)는 같은 제약을 다시 검증하고 노드 ID namespace 를 바꾸면서 `premiseBindings` / `conclusionNodeIds` / schemefulfillments·descriptor 항목의 nodeID 도 함께 바꿉니다.
 - 커스텀 컴포넌트는 Langflow 의 Ollama 컴포넌트가 아니라 컴포넌트 안에서 Ollama `/api/chat`(`format: json`)을 직접 호출합니다. 모델·온도·컨텍스트·timeout 은 각 컴포넌트 필드입니다.

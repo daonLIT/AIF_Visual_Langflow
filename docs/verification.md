@@ -150,3 +150,19 @@ Best Explanation, Ignorance, Verbal Classification, an Established Rule)만 남�
 - live 실행(두 번째 판결문, 약 8분): 성공. RA 9개 중 무지(증거 부재) 3 · 결과에서 원인으로 1 · 미분류 5, scheme 결과 검증 오류 0, flow 검증 통과.
   scheme 목록이 줄어 미분류가 늘었고, 모델이 억지로 scheme 을 붙이지 않았습니다. 이 응답을 `backend/fixtures/langflow_run_response.live_v11.json` 으로 교체했습니다.
 - 이전 카탈로그(v2)로 저장된 프로젝트·실행 결과의 scheme key(예: credibility_assessment)는 새 카탈로그에 없어 RA 상세에 "카탈로그에 없는 key"로 표시됩니다.
+  → 2026-09-15 대응표 전환으로 해결(아래).
+
+## 이전 scheme 카탈로그(v2) key 전환 (2026-09-15)
+
+`backend/catalog/scheme_catalog_migrations.json` 에 v2 17개 key 의 처리를 정했습니다.
+
+| 처리 | key |
+| --- | --- |
+| key 유지 (역할·CQ 번호 대응) | sign, witness_testimony(CQ6 없음), verbal_classification, evidence_to_hypothesis(CQ2→CQ3), inconsistent_commitment(역할 이름 변경), established_rule(facts→applicability, 항상 재검토) |
+| 새 key 로 교체 + 재검토 | lack_of_evidence→ignorance, abduction→best_explanation |
+| 미분류 + 재검토 + 대안 후보 | position_to_know·credibility_assessment → witness_testimony 후보 |
+| 미분류 + 재검토 (후보 없음) | convergent_facts, cause_to_effect, correlation_to_cause, expert_opinion, perception, analogy, bias |
+
+- backend 97개(대응표 검사 2개 추가), frontend `npm run check` 통과(smoke:v2 11번 항목 24개 추가, 실제 v2 결과 `test_outputs/02_judgment2` 포함).
+- 브라우저: 서버 프로젝트 "live v11 합성 판결문 2"를 열자 안내가 뜨고 RA 배지가 "무지(증거 부재) · 재검토", "미분류 · 재검토"로 바뀜.
+  RA 상세에 전환 사유, 옮긴 역할(알려질 조건/알려지지 않음)·CQ1 응답, 대안 후보(증인 진술), 이력의 이전 key·역할·CQ 응답이 표시됨. 서버에는 저장하지 않음.

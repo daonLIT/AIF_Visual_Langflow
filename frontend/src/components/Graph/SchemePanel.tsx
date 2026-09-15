@@ -231,9 +231,22 @@ function SchemeView({ application, original, premises, conclusions, onEdit, onSa
               .map((entry, index) => (
                 <li key={`${entry.at}-${index}`}>
                   {new Date(entry.at).toLocaleString()} · {entry.by === 'human' ? '사람' : '자동'} ·{' '}
-                  {{ edit: '수정', confirm: '검토 확정', needs_review: '재검토 표시' }[entry.action]} · 이전:{' '}
-                  {schemeFullName({ ...application, schemeKey: entry.previousKey, customSchemeName: entry.previousCustomName ?? null }, catalog)} (
-                  {SCHEME_STATUS_LABEL[entry.previousStatus]}){entry.detail ? ` — ${entry.detail}` : ''}
+                  {{ edit: '수정', confirm: '검토 확정', needs_review: '재검토 표시', catalog_migration: '카탈로그 전환' }[entry.action]} · 이전:{' '}
+                  {schemeFullName({ ...application, schemeKey: entry.previousKey, customSchemeName: entry.previousCustomName ?? null }, catalog)}
+                  {entry.previousCatalogVersion ? ` (카탈로그 v${entry.previousCatalogVersion})` : ''} ({SCHEME_STATUS_LABEL[entry.previousStatus]})
+                  {entry.detail ? ` — ${entry.detail}` : ''}
+                  {entry.action === 'catalog_migration' && (entry.previousPremiseBindings?.length || entry.previousCriticalQuestionResponses?.length) ? (
+                    <div className="node-detail-muted">
+                      {entry.previousPremiseBindings?.length
+                        ? `이전 역할: ${entry.previousPremiseBindings.map((binding) => `${binding.roleId ?? '역할 미지정'}=${binding.nodeIds.join(', ')}`).join(' / ')}`
+                        : ''}
+                      {entry.previousCriticalQuestionResponses?.map((response) => (
+                        <div key={response.questionId}>
+                          이전 {response.questionId} ({CQ_STATUS_LABEL[response.status]}){response.answer ? `: ${response.answer}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </li>
               ))}
           </ul>

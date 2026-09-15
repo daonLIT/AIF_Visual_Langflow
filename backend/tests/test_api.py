@@ -110,6 +110,7 @@ class CatalogApiTest(unittest.TestCase):
             self.assertEqual(len(issues["issues"]), 52)
             schemes = client.get("/api/catalogs/schemes").json()
             self.assertIn("witness_testimony", {s["schemeKey"] for s in schemes["schemes"]})
+            self.assertEqual([(m["fromVersion"], m["toVersion"]) for m in schemes["migrations"]], [(2, 3)])
 
     def test_run_records_catalog_versions_and_selection(self):
         with make_client() as client:

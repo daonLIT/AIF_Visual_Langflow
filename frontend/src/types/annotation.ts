@@ -7,7 +7,7 @@
 import type { ArgumentNodeType, NodeContent } from './argument';
 import { summaryStateOf } from './argument';
 import type { RawCaseJson } from './rawJson';
-import { legacySchemeToApplication } from './scheme';
+import { legacySchemeToApplication, migrateSchemeApplication, type SchemeCatalog } from './scheme';
 import { textHash } from '../utils/textHash';
 
 /**
@@ -246,8 +246,18 @@ export interface ProjectFile {
   savedAt?: string | null;
 }
 
-/** 이전 형식의 노드 값을 현재 형식으로: `scheme` → schemeApplication, 해시 없는 요약에 본문 해시 기록 */
-export function migrateNodeValue(value: NodeValue): NodeValue {
+export interface ProjectMigrationOptions {
+  /** 있으면 이전 카탈로그 버전의 scheme 을 대응표로 옮긴다 */
+  schemeCatalog?: SchemeCatalog | null;
+  /** 전환 이력에 남길 시각 */
+  migratedAt?: string;
+}
+
+/**
+ * 이전 형식의 노드 값을 현재 형식으로: `scheme` → schemeApplication, 이전 카탈로그 scheme → 현재 카탈로그,
+ * 해시 없는 요약에 본문 해시 기록
+ */
+export function migrateNodeValue(value: NodeValue, options: ProjectMigrationOptions = {}): NodeValue {
   const raw = value as NodeValue & { scheme?: unknown };
   let next: NodeValue = value;
   if (raw.scheme !== undefined) {
@@ -257,6 +267,10 @@ export function migrateNodeValue(value: NodeValue): NodeValue {
       const application = legacySchemeToApplication(scheme);
       if (application) next = { ...next, schemeApplication: application };
     }
+  }
+  if (next.schemeApplication && options.schemeCatalog) {
+    const outcome = migrateSchemeApplication(next.schemeApplication, options.schemeCatalog, options.migratedAt ?? new Date().toISOString());
+    if (outcome.migrated) next = { ...next, schemeApplication: outcome.application };
   }
   if (next.summary && !next.summarySourceHash) {
     next = { ...next, summaryOrigin: next.summaryOrigin ?? 'ai', summarySourceHash: textHash(next.text), summaryStatus: 'current' };
@@ -268,7 +282,7 @@ export function migrateNodeValue(value: NodeValue): NodeValue {
 }
 
 /** 이전 버전 프로젝트 파일을 현재 형식으로 올린다. 지원하지 않는 버전이면 오류. */
-export function migrateProjectFile(project: ProjectFile): ProjectFile {
+export function migrateProjectFile(project: ProjectFile, options: ProjectMigrationOptions = {}): ProjectFile {
   const version = (project as { schemaVersion?: unknown }).schemaVersion;
   if (version !== PROJECT_SCHEMA_VERSION && version !== 1) {
     throw new Error(`지원하지 않는 프로젝트 schemaVersion: ${String(version)}`);
@@ -276,7 +290,12 @@ export function migrateProjectFile(project: ProjectFile): ProjectFile {
   // v1 → v2 는 새 필드가 모두 선택 사항이다. v2 파일도 v10 시절 scheme 필드가 있을 수 있어 노드 값을 정리한다.
   const annotations = project.annotations.map((annotation) =>
     annotation.kind === 'node'
-      ? { ...annotation, originalValue: migrateNodeValue(annotation.originalValue), currentValue: migrateNodeValue(annotation.currentValue) }
+      ? {
+          ...annotation,
+          // AI 원안과 현재 값을 같은 규칙으로 옮겨 내용 비교(수락/수정 수락 판정)가 바뀌지 않게 한다.
+          originalValue: migrateNodeValue(annotation.originalValue, options),
+          currentValue: migrateNodeValue(annotation.currentValue, options),
+        }
       : annotation,
   );
   const settings = { ...(project.analysisSettings ?? {}) };

@@ -11,7 +11,7 @@ sys.path.insert(0, str(BACKEND / "scripts"))
 
 from import_issue_catalog import CatalogImportError, build_catalog  # noqa: E402
 
-from app.services.catalogs import IssueCatalog, SchemeCatalog  # noqa: E402
+from app.services.catalogs import CatalogError, IssueCatalog, SchemeCatalog  # noqa: E402
 
 HEADER = ["상위 쟁점군", "세부 쟁점", "비교·판단 기준"]
 
@@ -149,6 +149,47 @@ class CatalogServiceTest(unittest.TestCase):
         for scheme in self.schemes.data["schemes"]:
             self.assertIn(scheme["verification"], self.schemes.data["verificationLabels"], scheme["schemeKey"])
             self.assertTrue(scheme["sourceNote"] and scheme["criticalQuestions"], scheme["schemeKey"])
+
+    def test_scheme_migrations_cover_all_v2_keys(self):
+        # 대응표는 카탈로그와 함께 읽히며 검사를 통과해야 한다 (load 에서 CatalogError 가 나지 않음).
+        [migration] = self.schemes.migrations
+        self.assertEqual((migration["fromVersion"], migration["toVersion"]), (2, 3))
+        v2_keys = {
+            "witness_testimony", "expert_opinion", "position_to_know", "perception", "sign", "evidence_to_hypothesis",
+            "abduction", "cause_to_effect", "correlation_to_cause", "established_rule", "verbal_classification",
+            "analogy", "lack_of_evidence", "inconsistent_commitment", "bias", "credibility_assessment", "convergent_facts",
+        }
+        self.assertEqual(set(migration["schemes"]), v2_keys)
+        rules = migration["schemes"]
+        self.assertEqual((rules["lack_of_evidence"]["action"], rules["lack_of_evidence"]["to"]), ("replace", "ignorance"))
+        self.assertEqual((rules["abduction"]["action"], rules["abduction"]["to"]), ("replace", "best_explanation"))
+        self.assertEqual(rules["convergent_facts"].get("candidates"), None)
+        self.assertEqual(self.schemes.public_data()["migrations"], self.schemes.migrations)
+
+    def test_scheme_migrations_reject_unknown_targets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "walton_schemes.json").write_bytes((BACKEND / "catalog" / "walton_schemes.json").read_bytes())
+            bad = {
+                "migrations": [
+                    {
+                        "fromVersion": 2,
+                        "toVersion": 3,
+                        "schemes": {
+                            "lack_of_evidence": {"action": "replace", "to": "ignorance", "roleMap": {"absence": "missing"}},
+                            "position_to_know": {"action": "unclassify", "candidates": [{"schemeKey": "expert_opinion"}]},
+                            "sign": {"action": "unclassify"},
+                        },
+                    }
+                ]
+            }
+            (folder / "scheme_catalog_migrations.json").write_text(json.dumps(bad), encoding="utf-8")
+            with self.assertRaises(CatalogError) as caught:
+                SchemeCatalog.load(folder / "walton_schemes.json")
+            message = str(caught.exception)
+            self.assertIn("ignorance 에 없는 역할", message)
+            self.assertIn("expert_opinion", message)
+            self.assertIn("sign: 현재 카탈로그에 있는 key 는 keep", message)
 
     def test_scheme_catalog_shape(self):
         self.assertEqual(self.schemes.data["status"], "draft")

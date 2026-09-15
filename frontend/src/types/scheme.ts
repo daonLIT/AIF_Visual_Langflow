@@ -29,16 +29,21 @@ export interface SchemeAlternative {
   rationale: string;
 }
 
-/** 사용자 수정·재검토 표시 이력 (직전 상태를 남긴다) */
+/** 사용자 수정·재검토 표시·카탈로그 전환 이력 (직전 상태를 남긴다) */
 export interface SchemeHistoryEntry {
   at: string;
   by: 'human' | 'system';
-  action: 'edit' | 'confirm' | 'needs_review';
+  action: 'edit' | 'confirm' | 'needs_review' | 'catalog_migration';
   /** 이 동작 전의 scheme */
   previousKey: string;
   previousStatus: SchemeStatus;
   previousCustomName?: string | null;
   previousRationale?: string;
+  /** catalog_migration: 전환 전 카탈로그 버전과 옮기거나 버린 역할 배정·CQ 응답·대안 후보 */
+  previousCatalogVersion?: number | null;
+  previousPremiseBindings?: PremiseBinding[];
+  previousCriticalQuestionResponses?: CriticalQuestionResponse[];
+  previousAlternatives?: SchemeAlternative[];
   detail?: string;
 }
 
@@ -105,6 +110,27 @@ export interface SchemeDefinition {
   verification?: string;
 }
 
+/** 이전 카탈로그 key 한 개의 전환 규칙 (backend/catalog/scheme_catalog_migrations.json) */
+export interface SchemeMigrationRule {
+  action: 'keep' | 'replace' | 'unclassify';
+  /** replace 의 새 key */
+  to?: string;
+  /** 이전 역할 ID → 새 역할 ID. keep 에서 없으면 같은 ID 를 쓴다 */
+  roleMap?: Record<string, string>;
+  /** 이전 CQ ID → 새 CQ ID. keep 에서 없으면 같은 ID 를 쓴다 */
+  questionMap?: Record<string, string>;
+  /** keep 이어도 항상 재검토 필요로 표시 */
+  review?: boolean;
+  candidates?: SchemeAlternative[];
+  note?: string;
+}
+
+export interface SchemeCatalogMigration {
+  fromVersion: number;
+  toVersion: number;
+  schemes: Record<string, SchemeMigrationRule>;
+}
+
 export interface SchemeCatalog {
   schemeCatalogVersion: number;
   status?: string;
@@ -114,6 +140,8 @@ export interface SchemeCatalog {
   reservedKeys?: Record<string, string>;
   verificationLabels?: Record<string, string>;
   schemes: SchemeDefinition[];
+  /** 서버가 카탈로그와 함께 내보내는 이전 버전 대응표 */
+  migrations?: SchemeCatalogMigration[];
 }
 
 export interface IssueCatalogItem {
@@ -328,6 +356,134 @@ export function markSchemeNeedsReview(application: SchemeApplication, reason: st
     reviewReasons: [...(application.reviewReasons ?? []).filter((item) => item !== reason), reason],
     history: pushHistory(application, { at, by: 'system', action: 'needs_review', detail: reason }),
   };
+}
+
+export interface SchemeMigrationOutcome {
+  application: SchemeApplication;
+  /** 카탈로그 버전을 올렸는지 (내용이 같아도 버전만 올린 경우 포함) */
+  migrated: boolean;
+  needsReview: boolean;
+}
+
+/** 같은 역할로 옮겨진 전제를 하나로 합친다 (역할 순서는 처음 나온 순서) */
+function mergeBindings(bindings: PremiseBinding[]): PremiseBinding[] {
+  const merged = new Map<string | null, string[]>();
+  for (const binding of bindings) {
+    const nodeIds = merged.get(binding.roleId) ?? [];
+    merged.set(binding.roleId, [...nodeIds, ...binding.nodeIds.filter((id) => !nodeIds.includes(id))]);
+  }
+  return [...merged.entries()].map(([roleId, nodeIds]) => ({ roleId, nodeIds }));
+}
+
+/**
+ * 이전 카탈로그 버전으로 저장된 schemeApplication 을 카탈로그의 대응표(migrations)로 현재 버전까지 옮긴다.
+ * 자동으로 확정하지 않으며, key 를 바꾸거나 옮기지 못한 값이 있으면 재검토 필요로 표시하고 원래 값을 이력에 남긴다.
+ * 카탈로그 버전을 모르는(null) 값과 대응표가 없는 버전은 추측하지 않고 그대로 둔다.
+ */
+export function migrateSchemeApplication(application: SchemeApplication, catalog: SchemeCatalog | null, at: string): SchemeMigrationOutcome {
+  let current = application;
+  let migrated = false;
+  let needsReview = false;
+  const reservedKeys: string[] = [UNCLASSIFIED, CUSTOM];
+  while (catalog && current.catalogVersion !== null && current.catalogVersion < catalog.schemeCatalogVersion) {
+    const migration = catalog.migrations?.find((item) => item.fromVersion === current.catalogVersion);
+    if (!migration) break;
+    const toCurrent = migration.toVersion === catalog.schemeCatalogVersion;
+    const existsInTarget = (key: string) => !toCurrent || !!findSchemeDefinition(catalog, key);
+    const reserved = reservedKeys.includes(current.schemeKey);
+    // 대응표에 없는 key: 새 카탈로그에 있으면 그대로, 없으면 미분류
+    const rule: SchemeMigrationRule = reserved
+      ? { action: 'keep' }
+      : (migration.schemes[current.schemeKey] ?? { action: existsInTarget(current.schemeKey) ? 'keep' : 'unclassify', note: '대응표에 없는 key 입니다.' });
+    const schemeKey = rule.action === 'replace' && rule.to ? rule.to : rule.action === 'unclassify' ? UNCLASSIFIED : current.schemeKey;
+    const definition = toCurrent ? findSchemeDefinition(catalog, schemeKey) : undefined;
+    const identity = rule.action === 'keep';
+
+    let lostRoles = 0;
+    const premiseBindings = mergeBindings(
+      current.premiseBindings.map((binding) => {
+        if (binding.roleId === null || reserved) return binding;
+        const mapped = rule.action === 'unclassify' ? null : (rule.roleMap?.[binding.roleId] ?? (identity && !rule.roleMap ? binding.roleId : null));
+        const valid = mapped !== null && (!definition || definition.premiseRoles.some((role) => role.roleId === mapped));
+        if (!valid) lostRoles += 1;
+        return { roleId: valid ? mapped : null, nodeIds: binding.nodeIds };
+      }),
+    );
+
+    let droppedQuestions = 0;
+    let remappedQuestions = 0;
+    const criticalQuestionResponses: CriticalQuestionResponse[] = reserved ? current.criticalQuestionResponses : [];
+    for (const response of reserved ? [] : current.criticalQuestionResponses) {
+      const mapped = rule.action === 'unclassify' ? undefined : (rule.questionMap?.[response.questionId] ?? (identity && !rule.questionMap ? response.questionId : undefined));
+      if (!mapped || (definition && !definition.criticalQuestions.some((question) => question.id === mapped))) {
+        droppedQuestions += 1;
+        continue;
+      }
+      if (mapped !== response.questionId) remappedQuestions += 1;
+      criticalQuestionResponses.push({ ...response, questionId: mapped });
+    }
+
+    // 대안 후보도 같은 규칙으로 옮기고, 새 key 와 같거나 새 카탈로그에 없는 후보는 뺀다.
+    const alternatives: SchemeAlternative[] = [];
+    const addAlternative = (alternative: SchemeAlternative) => {
+      if (alternative.schemeKey === schemeKey || alternatives.some((item) => item.schemeKey === alternative.schemeKey)) return;
+      if (!existsInTarget(alternative.schemeKey)) return;
+      alternatives.push(alternative);
+    };
+    for (const alternative of current.alternatives) {
+      const altRule = migration.schemes[alternative.schemeKey];
+      if (altRule?.action === 'replace' && altRule.to) addAlternative({ ...alternative, schemeKey: altRule.to });
+      else if (altRule?.action !== 'unclassify') addAlternative(alternative);
+    }
+    for (const candidate of rule.candidates ?? []) addAlternative(candidate);
+
+    const keyChanged = schemeKey !== current.schemeKey;
+    const review = !reserved && (keyChanged || !!rule.review || lostRoles > 0 || droppedQuestions > 0 || remappedQuestions > 0);
+    const next: SchemeApplication = {
+      ...current,
+      schemeKey,
+      catalogVersion: migration.toVersion,
+      premiseBindings,
+      criticalQuestionResponses,
+      alternatives,
+    };
+    const contentChanged = !sameValue(schemeContent({ ...next, catalogVersion: current.catalogVersion }), schemeContent(current));
+    if (review || contentChanged) {
+      const parts = [
+        keyChanged ? `${current.schemeKey} → ${schemeKey === UNCLASSIFIED ? '미분류' : schemeKey}` : `${current.schemeKey} 유지`,
+        lostRoles > 0 ? `역할 ${lostRoles}개 비움` : '',
+        remappedQuestions > 0 ? `CQ ${remappedQuestions}개 번호 변경` : '',
+        droppedQuestions > 0 ? `CQ 응답 ${droppedQuestions}개 이력으로 이동` : '',
+        rule.candidates?.length ? `대안 후보 ${rule.candidates.length}개` : '',
+      ].filter(Boolean);
+      const detail = `scheme 카탈로그 v${current.catalogVersion} → v${migration.toVersion}: ${parts.join(', ')}${rule.note ? ` (${rule.note})` : ''}`;
+      next.history = [
+        ...(current.history ?? []),
+        {
+          at,
+          by: 'system' as const,
+          action: 'catalog_migration' as const,
+          previousKey: current.schemeKey,
+          previousStatus: current.status,
+          previousCustomName: current.customSchemeName,
+          previousRationale: current.rationale,
+          previousCatalogVersion: current.catalogVersion,
+          previousPremiseBindings: current.premiseBindings,
+          previousCriticalQuestionResponses: current.criticalQuestionResponses,
+          previousAlternatives: current.alternatives,
+          detail,
+        },
+      ].slice(-HISTORY_LIMIT);
+      if (review) {
+        next.status = 'needs_review';
+        next.reviewReasons = [...(current.reviewReasons ?? []), detail];
+        needsReview = true;
+      }
+    }
+    current = next;
+    migrated = true;
+  }
+  return { application: current, migrated, needsReview };
 }
 
 /** 사람이 scheme 을 저장: 사람 수정으로 기록하고 확정한다. 이전 상태는 이력에 남긴다. */

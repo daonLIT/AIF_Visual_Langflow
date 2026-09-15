@@ -236,12 +236,35 @@ argumentation schemes.
   inference actually relies on an expert's assertion.
 - Use only scheme_key values from the Scheme Catalog. If no scheme fits, use "unclassified". Do not force a scheme.
 - Use "custom" only when a clear non-catalog scheme applies; then give custom_scheme_name.
-- premise_bindings: map premises (by their ids such as N1, N2) to role_id values of the chosen scheme. Use only
-  premises listed for that RA. A premise may stay unbound when no role fits. Leave empty for unclassified.
-- critical_question_responses: only for critical questions of the chosen scheme that the judgment actually addresses;
-  status is satisfied, challenged or open; answer is a short Korean answer grounded in the judgment. Omit the rest.
+- Nodes of type ISSUE are issues the court decided. Their text may state the court's finding or may be phrased as a
+  question ("...여부", "...인지"). Treat an ISSUE premise or conclusion like any other node when choosing the scheme.
+- Choose established_rule only when the texts state or cite the rule itself (a statute, a precedent, a legal
+  standard). Do not invent a rule, generalization or legal standard that the texts do not state.
+
+# Premise bindings (map premise ids such as N1, N2 to role_id values of the chosen scheme)
+- Every role has a template (premiseRoles[].template). Bind a premise to a role only when the premise text itself
+  states what that template says. A premise phrased as a question cannot fill a role. Do not put a specific fact
+  into a role that needs a general rule or generalization (for example "A is generally a sign of B").
+- Bind each premise to at most one role. Never list the same premise id under two roles. An RA with one premise
+  fills at most one role.
+- Roles that no listed premise states are implicit and stay unbound. Unbound roles are normal and are not a reason
+  to choose "unclassified": choose the scheme by how the premises support the conclusion.
+- Use only premise ids listed for that RA. Leave premise_bindings empty for unclassified.
+
+# Critical questions
+- Answer only critical questions of the chosen scheme that the premise, conclusion or evidence texts actually
+  address. Omit the others instead of guessing.
+- status: "satisfied" = the judgment answers the question in a way that supports the inference; "challenged" =
+  the judgment gives a reason that weakens the inference; "open" = the judgment raises it without resolving it.
+- answer: one short Korean sentence saying what the judgment says. Do not add facts, investigations or legal
+  standards that the given texts do not mention.
+
+# Writing (read by legal reviewers who cannot see any ids)
+- Never write ids such as R1, N2 or (N3, N4) in rationale, answers or alternative rationales. Refer to a premise by
+  its content in a few words instead.
+- rationale is required for every RA: 1-2 Korean sentences on how the premises support the conclusion under the
+  chosen scheme, or, for "unclassified", why no catalog scheme fits.
 - alternatives: up to 2 other catalog schemes that could also fit, each with a short Korean rationale. Empty if none.
-- rationale: 1-2 Korean sentences on how the premises support the conclusion under the chosen scheme.
 
 # Output
 Return valid JSON only, one assignment for every RA id, in exactly this shape:

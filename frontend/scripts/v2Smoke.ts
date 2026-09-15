@@ -10,6 +10,7 @@
  *  8) 프로젝트 마이그레이션 (v1, v10 시절 scheme 필드)
  *  9) 파이프라인 flow 유틸 (handle 왕복, 프롬프트 변수, 연결 가능성, 템플릿, 차이 계산)
  * 10) 파이프라인 스토어 편집과 undo/redo (네트워크 없이)
+ * 11) 이전 scheme 카탈로그(v2) → 현재(v3) 전환 (대응표 적용·재검토 표시·이력 보존)
  * 실행: npm run smoke:v2
  */
 import { readFileSync } from 'node:fs';
@@ -23,13 +24,14 @@ import { applyNodePatch, summaryStateOf, type ArgumentCase } from '../src/types/
 import {
   confirmScheme,
   humanSchemeEdit,
+  migrateSchemeApplication,
   schemeShortName,
   shortKoreanName,
   type SchemeApplication,
   type SchemeCatalog,
 } from '../src/types/scheme';
 import { textHash } from '../src/utils/textHash';
-import { acceptAnnotation, importProposals, setDraftValue, type ReviewSnapshot } from '../src/store/reviewLogic';
+import { acceptAnnotation, importProposals, isContentModified, setDraftValue, type ReviewSnapshot } from '../src/store/reviewLogic';
 import {
   applyGeneratedSummaries,
   expectationFor,
@@ -114,7 +116,7 @@ const legacyGraph = clone(graph);
 const legacyRa = legacyGraph.AIF.nodes.find((n: { type: string }) => n.type === 'RA');
 const application = legacyRa.schemeApplication;
 delete legacyRa.schemeApplication;
-legacyRa.scheme = { schemeId: 'other', schemeName: '경험칙', premises: [{ nodeId: application.premiseBindings[0].nodeIds[0], role: null }], conclusion: { nodeId: application.conclusionNodeIds[0] }, rationale: 'r', criticalQuestions: [], source: 'ai' };
+legacyRa.scheme = { schemeId: 'other', schemeName: '경험칙', premises: [{ nodeId: legacyGraph.AIF.edges.find((e: { toID: string }) => e.toID === legacyRa.nodeID).fromID, role: null }], conclusion: { nodeId: application.conclusionNodeIds[0] }, rationale: 'r', criticalQuestions: [], source: 'ai' };
 legacyGraph.AIF.schemefulfillments = [{ nodeID: legacyRa.nodeID, schemeID: 'other' }];
 const legacyImport = importAifOva(legacyGraph);
 const converted = legacyImport.case.nodes.find((n) => n.id === legacyRa.nodeID)!.schemeApplication!;
@@ -136,7 +138,7 @@ check('요약 삭제(null) → 요약 메타 모두 제거', !('summarySourceHas
 
 console.log('3) scheme·근거 재검토 표시');
 const raNode = ra[0];
-const premiseId = raNode.schemeApplication!.premiseBindings[0].nodeIds[0];
+const premiseId = imported.edges.find((e) => e.target === raNode.id)!.source;
 useGraphStore.getState().loadSnapshot({ caseData: clone(imported), annotations: [] });
 useGraphStore.getState().updateNodeFields(premiseId, { text: '전제 본문을 사람이 고침' });
 const afterText = useGraphStore.getState().caseData!;
@@ -337,6 +339,94 @@ const addedId = store.addComponent('llm', { x: 10, y: 10 });
 check('팔레트로 컴포넌트 추가 + 선택', !!addedId && usePipelineStore.getState().selectedNodeId === addedId);
 store.deleteNodes([addedId!]);
 check('추가한 컴포넌트 삭제', !usePipelineStore.getState().data!.nodes.some((n) => n.id === addedId));
+
+console.log('11) scheme 카탈로그 v2 → v3 전환');
+const migrationsFile = JSON.parse(readFileSync(resolve(root, '../backend/catalog/scheme_catalog_migrations.json'), 'utf8'));
+const catalogV3: SchemeCatalog = { ...schemes, migrations: migrationsFile.migrations };
+const at = '2026-09-15T00:00:00.000Z';
+const v2App = (patch: Partial<SchemeApplication>): SchemeApplication => ({
+  schemeKey: 'unclassified',
+  catalogVersion: 2,
+  status: 'confirmed',
+  origin: 'ai',
+  rationale: '원래 이유',
+  premiseBindings: [],
+  conclusionNodeIds: ['c'],
+  criticalQuestionResponses: [],
+  notes: '사람 메모',
+  customSchemeName: null,
+  alternatives: [],
+  ...patch,
+});
+const lack = migrateSchemeApplication(
+  v2App({
+    schemeKey: 'lack_of_evidence',
+    premiseBindings: [{ roleId: 'conditional', nodeIds: ['p1'] }, { roleId: 'absence', nodeIds: ['p2'] }],
+    criticalQuestionResponses: [{ questionId: 'CQ1', status: 'satisfied', answer: '충분' }, { questionId: 'CQ2', status: 'challenged', answer: '시간 경과' }],
+    alternatives: [{ schemeKey: 'convergent_facts', rationale: '' }, { schemeKey: 'abduction', rationale: '대안' }],
+  }),
+  catalogV3,
+  at,
+);
+const lackApp = lack.application;
+const lackHistory = lackApp.history?.at(-1);
+check('lack_of_evidence → ignorance, 재검토 필요, 카탈로그 v3', lackApp.schemeKey === 'ignorance' && lackApp.status === 'needs_review' && lackApp.catalogVersion === 3 && lack.needsReview);
+check('역할 대응 (conditional→wouldBeKnown, absence→notKnown)', JSON.stringify(lackApp.premiseBindings) === JSON.stringify([{ roleId: 'wouldBeKnown', nodeIds: ['p1'] }, { roleId: 'notKnown', nodeIds: ['p2'] }]));
+check('CQ1 은 옮기고 대응 없는 CQ2 는 이력으로', lackApp.criticalQuestionResponses.length === 1 && lackApp.criticalQuestionResponses[0].questionId === 'CQ1' && lackHistory?.previousCriticalQuestionResponses?.length === 2);
+check('이력에 원래 key·상태·버전', lackHistory?.action === 'catalog_migration' && lackHistory.previousKey === 'lack_of_evidence' && lackHistory.previousStatus === 'confirmed' && lackHistory.previousCatalogVersion === 2 && lackHistory.at === at);
+check('대안 후보도 옮김 (abduction→best_explanation, 대응 없는 후보 제외)', JSON.stringify(lackApp.alternatives.map((a) => a.schemeKey)) === JSON.stringify(['best_explanation']));
+check('이유·메모·결론은 그대로', lackApp.rationale === '원래 이유' && lackApp.notes === '사람 메모' && lackApp.conclusionNodeIds[0] === 'c');
+check('다시 적용해도 바뀌지 않음', !migrateSchemeApplication(lackApp, catalogV3, at).migrated);
+
+const sign = migrateSchemeApplication(v2App({ schemeKey: 'sign', premiseBindings: [{ roleId: 'specific', nodeIds: ['p'] }], criticalQuestionResponses: [{ questionId: 'CQ1', status: 'open', answer: '' }] }), catalogV3, at);
+check('sign 은 버전만 올리고 상태·이력 유지', sign.migrated && !sign.needsReview && sign.application.status === 'confirmed' && sign.application.catalogVersion === 3 && !sign.application.history);
+const witness = migrateSchemeApplication(v2App({ schemeKey: 'witness_testimony', criticalQuestionResponses: [{ questionId: 'CQ6', status: 'challenged', answer: '위치 의문' }] }), catalogV3, at).application;
+check('witness_testimony CQ6 응답 → 이력, 재검토', witness.schemeKey === 'witness_testimony' && witness.status === 'needs_review' && witness.criticalQuestionResponses.length === 0);
+const e2h = migrateSchemeApplication(v2App({ schemeKey: 'evidence_to_hypothesis', criticalQuestionResponses: [{ questionId: 'CQ2', status: 'challenged', answer: '다른 이유' }] }), catalogV3, at).application;
+check('evidence_to_hypothesis CQ2 → CQ3, 재검토', e2h.criticalQuestionResponses[0]?.questionId === 'CQ3' && e2h.status === 'needs_review');
+const inconsistent = migrateSchemeApplication(v2App({ schemeKey: 'inconsistent_commitment', premiseBindings: [{ roleId: 'initial', nodeIds: ['a'] }, { roleId: 'contrary', nodeIds: ['b'] }] }), catalogV3, at);
+check('inconsistent_commitment 역할 이름만 변경 → 상태 유지, 이력 남김', inconsistent.application.premiseBindings.map((b) => b.roleId).join() === 'initialCommitment,opposedCommitment' && inconsistent.application.status === 'confirmed' && inconsistent.application.history?.length === 1);
+const ruleApp = migrateSchemeApplication(v2App({ schemeKey: 'established_rule', premiseBindings: [{ roleId: 'facts', nodeIds: ['f'] }] }), catalogV3, at).application;
+check('established_rule facts→applicability, 항상 재검토', ruleApp.premiseBindings[0].roleId === 'applicability' && ruleApp.status === 'needs_review');
+const credibility = migrateSchemeApplication(
+  v2App({ schemeKey: 'credibility_assessment', premiseBindings: [{ roleId: 'indicators', nodeIds: ['x'] }, { roleId: 'standard', nodeIds: ['y'] }], criticalQuestionResponses: [{ questionId: 'CQ1', status: 'open', answer: '' }] }),
+  catalogV3,
+  at,
+).application;
+check('credibility_assessment → 미분류 + witness_testimony 후보', credibility.schemeKey === 'unclassified' && credibility.status === 'needs_review' && credibility.alternatives.map((a) => a.schemeKey).join() === 'witness_testimony');
+check('미분류 전환: 전제는 역할 없이 한 묶음, CQ 응답은 이력으로', JSON.stringify(credibility.premiseBindings) === JSON.stringify([{ roleId: null, nodeIds: ['x', 'y'] }]) && credibility.criticalQuestionResponses.length === 0);
+const convergent = migrateSchemeApplication(v2App({ schemeKey: 'convergent_facts' }), catalogV3, at).application;
+check('convergent_facts → 미분류, 후보 없음', convergent.schemeKey === 'unclassified' && convergent.alternatives.length === 0 && convergent.status === 'needs_review');
+const unclassifiedV2 = migrateSchemeApplication(v2App({ status: 'suggested' }), catalogV3, at);
+check('v2 미분류는 버전만 올림', unclassifiedV2.application.catalogVersion === 3 && unclassifiedV2.application.status === 'suggested' && !unclassifiedV2.needsReview);
+const unknownVersion = migrateSchemeApplication(v2App({ schemeKey: 'lack_of_evidence', catalogVersion: null }), catalogV3, at);
+check('카탈로그 버전을 모르면 추측하지 않음', !unknownVersion.migrated && unknownVersion.application.schemeKey === 'lack_of_evidence');
+check('대응표 없는 카탈로그면 그대로', !migrateSchemeApplication(v2App({ schemeKey: 'lack_of_evidence' }), schemes, at).migrated);
+
+const judgment2 = JSON.parse(readFileSync(resolve(root, '../test_outputs/02_judgment2/aif_graph.json'), 'utf8'));
+const imported2 = importAifOva(judgment2, 'judgment2.json', { schemeCatalog: catalogV3, migratedAt: at });
+const ra2 = imported2.case.nodes.filter((node) => node.type === 'RA');
+check(
+  '실제 v2 결과 import: 모든 RA 가 v3 key 또는 미분류',
+  ra2.length > 0 &&
+    ra2.every(
+      (node) =>
+        node.schemeApplication?.catalogVersion === 3 &&
+        (node.schemeApplication.schemeKey === 'unclassified' || schemes.schemes.some((d) => d.schemeKey === node.schemeApplication!.schemeKey)),
+    ),
+);
+check('import 경고는 1개로 요약 (이전 포함 → 저장 필요 표시)', imported2.warnings.filter((w) => w.includes('scheme 카탈로그')).length === 1 && imported2.warnings.some((w) => w.includes('이전 scheme 카탈로그(v2)')));
+const roundTrip = exportAifOva(imported2.case, { schemeCatalog: catalogV3 });
+const reimported = importAifOva(roundTrip, 'again.json', { schemeCatalog: catalogV3 });
+check('전환 결과 export → import 는 다시 전환하지 않음', !reimported.warnings.some((w) => w.includes('scheme 카탈로그')));
+
+const pendingV2 = clone(proposals.find((p) => p.kind === 'node' && p.currentValue.type === 'RA')!) as NodeAnnotation;
+const v2Value = { ...pendingV2.currentValue, schemeApplication: v2App({ schemeKey: 'lack_of_evidence', status: 'suggested' }) };
+const projectV2 = { ...v1, schemaVersion: 2, annotations: [{ ...pendingV2, originalValue: v2Value, currentValue: clone(v2Value) }] } as unknown as ProjectFile;
+const migratedProjectAnnotation = migrateProjectFile(projectV2, { schemeCatalog: catalogV3, migratedAt: at }).annotations[0] as NodeAnnotation;
+check('프로젝트 annotation: 원안·현재 값 모두 전환', migratedProjectAnnotation.originalValue.schemeApplication?.schemeKey === 'ignorance' && migratedProjectAnnotation.currentValue.schemeApplication?.schemeKey === 'ignorance');
+check('원안·현재 값을 같이 옮겨 수정 판정이 바뀌지 않음', !isContentModified(migratedProjectAnnotation.originalValue, migratedProjectAnnotation.currentValue));
+check('카탈로그 없이 migrateProjectFile 은 scheme 을 건드리지 않음', (migrateProjectFile(projectV2).annotations[0] as NodeAnnotation).currentValue.schemeApplication?.schemeKey === 'lack_of_evidence');
 
 console.log(failures === 0 ? '\nALL OK' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

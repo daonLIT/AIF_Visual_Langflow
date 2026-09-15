@@ -1,0 +1,89 @@
+{
+  "note": "이전 scheme 카탈로그로 저장된 RA schemeApplication 을 현재 카탈로그로 옮기는 대응표. 서버가 카탈로그와 함께 읽어 /api/catalogs/schemes 의 migrations 로 내보내고, 프런트가 프로젝트·JSON 을 불러올 때 적용한다. 자동으로 확정하지 않으며 원래 key·역할 배정·CQ 응답은 scheme 이력(catalog_migration)에 남긴다. 과거 실행 기록은 바꾸지 않는다.",
+  "rules": {
+    "keep": "key 유지. roleMap/questionMap 이 없으면 같은 ID 를 그대로 쓴다. 옮기지 못한 CQ 응답이 있거나, 다른 번호로 옮겼거나, review 가 true 면 재검토 필요로 표시한다.",
+    "replace": "key 를 to 로 바꾸고 항상 재검토 필요로 표시한다. roleMap/questionMap 에 없는 역할은 비우고 CQ 응답은 이력에만 남긴다.",
+    "unclassify": "미분류로 바꾸고 재검토 필요로 표시한다. 전제·결론 노드는 두되 역할은 비우고, CQ 응답은 이력에만 남긴다. candidates 는 대안 후보로 제안한다."
+  },
+  "migrations": [
+    {
+      "fromVersion": 2,
+      "toVersion": 3,
+      "schemes": {
+        "sign": { "action": "keep" },
+        "witness_testimony": {
+          "action": "keep",
+          "questionMap": { "CQ1": "CQ1", "CQ2": "CQ2", "CQ3": "CQ3", "CQ4": "CQ4", "CQ5": "CQ5" },
+          "note": "v2 CQ6(알 수 있는 위치였는가)은 v3 에서 빠졌다."
+        },
+        "verbal_classification": {
+          "action": "keep",
+          "questionMap": { "CQ1": "CQ1", "CQ2": "CQ2" }
+        },
+        "evidence_to_hypothesis": {
+          "action": "keep",
+          "questionMap": { "CQ1": "CQ1", "CQ2": "CQ3" },
+          "note": "v2 CQ2(다른 이유로 B 가 관찰될 수 있는가)는 v3 CQ3 이다. v3 CQ2(B 가 관찰되었는가)는 새 질문이다."
+        },
+        "inconsistent_commitment": {
+          "action": "keep",
+          "roleMap": { "initial": "initialCommitment", "contrary": "opposedCommitment" },
+          "questionMap": {},
+          "note": "역할 ID 이름만 바뀌었다. CQ 는 세 개 모두 다른 질문이라 옮기지 않는다."
+        },
+        "established_rule": {
+          "action": "keep",
+          "roleMap": { "rule": "rule", "facts": "applicability" },
+          "questionMap": { "CQ2": "CQ2", "CQ4": "CQ3" },
+          "review": true,
+          "note": "v2 facts(요건 충족)를 v3 applicability(규칙이 이 대상에 적용됨)로 옮겼다. 뜻이 조금 달라 확인이 필요하다. v2 CQ1(유효한 규칙인가)·CQ3(예외 사유)은 대응 질문이 없다."
+        },
+        "lack_of_evidence": {
+          "action": "replace",
+          "to": "ignorance",
+          "roleMap": { "conditional": "wouldBeKnown", "absence": "notKnown" },
+          "questionMap": { "CQ1": "CQ1" },
+          "note": "증거 부재 논증은 v3 무지(증거 부재)에 의한 논증과 형식이 같다."
+        },
+        "abduction": {
+          "action": "replace",
+          "to": "best_explanation",
+          "roleMap": { "findings": "findings", "explanation": "explanation", "best": "noBetterAlternative" },
+          "questionMap": { "CQ1": "CQ1", "CQ2": "CQ2", "CQ3": "CQ3" },
+          "note": "최선의 설명 추론은 v3 최선의 설명에 의한 논증과 같은 추론이다."
+        },
+        "position_to_know": {
+          "action": "unclassify",
+          "candidates": [
+            {
+              "schemeKey": "witness_testimony",
+              "rationale": "증인 진술 논증은 알 수 있는 위치 논증의 하위 유형이다. 사람의 진술일 때만 맞고, 기관·기록의 주장이면 맞지 않는다."
+            }
+          ]
+        },
+        "credibility_assessment": {
+          "action": "unclassify",
+          "candidates": [
+            {
+              "schemeKey": "witness_testimony",
+              "rationale": "신빙성 판단 요소(일관성·객관 증거와의 부합·다른 진술과의 부합)는 증인 진술 논증의 CQ1~3 에 해당한다. 진술 번복이 중심이면 모순된 공약 논증이 맞을 수 있다."
+            }
+          ]
+        },
+        "convergent_facts": {
+          "action": "unclassify",
+          "note": "여러 정황을 모아 결론을 내는 논증은 현재 카탈로그에 직접 대응하는 scheme 이 없다."
+        },
+        "cause_to_effect": {
+          "action": "unclassify",
+          "note": "결과에서 원인으로의 논증은 추론 방향이 반대라 후보로 두지 않았다."
+        },
+        "correlation_to_cause": { "action": "unclassify", "note": "현재 카탈로그에 대응하는 scheme 이 없다." },
+        "expert_opinion": { "action": "unclassify", "note": "현재 카탈로그에서 뺀 scheme 이다." },
+        "perception": { "action": "unclassify", "note": "현재 카탈로그에 대응하는 scheme 이 없다." },
+        "analogy": { "action": "unclassify", "note": "현재 카탈로그에 대응하는 scheme 이 없다." },
+        "bias": { "action": "unclassify", "note": "진술자의 편향은 증인 진술 논증의 CQ4(편향)로 다룰 수 있다." }
+      }
+    }
+  ]
+}

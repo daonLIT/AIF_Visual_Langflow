@@ -7,6 +7,7 @@ import type {
 import { isArgumentNodeType } from '../types/argument';
 import {
   legacySchemeToApplication,
+  migrateSchemeApplication,
   readIssueRef,
   readIssueRefs,
   readSchemeApplication,
@@ -34,6 +35,8 @@ export class ImportError extends Error {}
 export interface ImportOptions {
   /** 검증된 외부 schemeID(aifdbSchemeId) 대응으로 schemefulfillments 를 schemeApplication 으로 가져올 때 사용 */
   schemeCatalog?: SchemeCatalog | null;
+  /** 이전 카탈로그 scheme 을 옮길 때 이력에 남길 시각 (같은 프로젝트의 여러 경로를 한 시각으로 묶는다) */
+  migratedAt?: string;
 }
 
 function readSummary(rawNode: RawAifNode, text: string): Pick<ArgumentNode, 'summary' | 'summaryOrigin' | 'summaryStatus' | 'summarySourceHash'> {
@@ -85,6 +88,8 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
   }
 
   const warnings: string[] = [];
+  const migratedAt = options.migratedAt ?? new Date().toISOString();
+  const schemeMigration = { migrated: 0, needsReview: 0, fromVersions: new Set<number>() };
 
   const ova = (typeof raw.OVA === 'object' && raw.OVA !== null ? raw.OVA : {}) as NonNullable<
     RawCaseJson['OVA']
@@ -133,6 +138,15 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
     if (type === 'RA') {
       schemeApplication = readSchemeApplication(rawNode.schemeApplication) ?? legacySchemeToApplication(rawNode.scheme);
       if (!rawNode.schemeApplication && schemeApplication) warnings.push(`RA ${rawNode.nodeID}: 이전 형식 scheme 필드를 schemeApplication 으로 옮겼습니다.`);
+      if (schemeApplication) {
+        const outcome = migrateSchemeApplication(schemeApplication, options.schemeCatalog ?? null, migratedAt);
+        if (outcome.migrated) {
+          schemeMigration.migrated += 1;
+          if (outcome.needsReview) schemeMigration.needsReview += 1;
+          if (schemeApplication.catalogVersion !== null) schemeMigration.fromVersions.add(schemeApplication.catalogVersion);
+          schemeApplication = outcome.application;
+        }
+      }
     }
     const issueRef = type === 'ISSUE' ? readIssueRef(rawNode.issueRef) : undefined;
     const issueRefs = readIssueRefs(rawNode.issueRefs);
@@ -217,6 +231,14 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
       }
     }
     rawMetadata.AIF = { ...aif, schemefulfillments: kept };
+  }
+
+  if (schemeMigration.migrated > 0) {
+    // '이전' 이 들어간 경고는 프로젝트를 저장이 필요한 상태로 표시한다 (annotationStore.loadProjectFile).
+    warnings.push(
+      `이전 scheme 카탈로그(v${[...schemeMigration.fromVersions].sort().join(', v')})로 저장된 RA ${schemeMigration.migrated}개를 ` +
+        `v${options.schemeCatalog?.schemeCatalogVersion} 기준으로 옮겼습니다. 재검토 필요 ${schemeMigration.needsReview}개 — 원래 scheme 은 RA 상세의 수정 이력에 있습니다.`,
+    );
   }
 
   const argumentCase: ArgumentCase = {

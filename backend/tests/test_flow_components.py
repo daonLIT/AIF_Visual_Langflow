@@ -228,6 +228,31 @@ class StagesTest(unittest.TestCase):
         self.assertIn("no valid assignment returned", third["errors"])
         self.assertTrue(out["meta"]["schemes"]["errors"])
 
+    def test_scheme_assigner_binding_rules_and_alias_text(self):
+        catalog = {
+            "ignorance": {"premiseRoles": [{"roleId": "wouldBeKnown"}, {"roleId": "notKnown"}], "criticalQuestions": [{"id": "CQ1"}]},
+        }
+        alias = {"ra": {"nodeID": "ra"}, "premises": {"N1": "issue-node", "N2": "fact-a", "N3": "fact-b"}, "conclusions": ["c"]}
+        raw = {
+            "scheme_key": "ignorance",
+            "rationale": "사실(N2, N3)을 종합하면 전제 N3의 내용처럼 알려지지 않았다. N95 마스크 기록(N9)은 별개다.",
+            "premise_bindings": [
+                {"role_id": "wouldBeKnown", "premises": ["N1", "N2"]},
+                {"role_id": "notKnown", "premises": ["N2", "N3", "N3"]},
+            ],
+            "critical_question_responses": [{"question_id": "CQ1", "status": "satisfied", "answer": "N2와 N3를 보면 조사가 이루어졌다."}],
+        }
+        application, errors = Assigner.validate_assignment(raw, alias, catalog, {"R1", "N1", "N2", "N3"})
+        # 한 전제는 처음 역할에만 남기고 오류로 알린다 (같은 역할 안의 중복은 조용히 합친다).
+        self.assertEqual(
+            application["premiseBindings"],
+            [{"roleId": "wouldBeKnown", "nodeIds": ["issue-node", "fact-a"]}, {"roleId": "notKnown", "nodeIds": ["fact-b"]}],
+        )
+        self.assertEqual(errors, ["premise N2 is bound to more than one role (wouldBeKnown, notKnown); bind each premise to at most one role"])
+        # 이 그룹에 준 별칭만 지우고, 판결문 표기(N95)나 모르는 별칭(N9)은 남긴다.
+        self.assertEqual(application["rationale"], "사실을 종합하면 전제의 내용처럼 알려지지 않았다. N95 마스크 기록(N9)은 별개다.")
+        self.assertEqual(application["criticalQuestionResponses"][0]["answer"], "해당 전제를 보면 조사가 이루어졌다.")
+
     def test_validator_flags_constraint_violations(self):
         graph = json.loads(run_pipeline(SAMPLE_TEXT))
         issue_nodes = [n for n in graph["AIF"]["nodes"] if n["type"] == "ISSUE"]

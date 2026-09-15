@@ -9,6 +9,14 @@ from lfx.io import DropdownInput, FloatInput, IntInput, MessageTextInput, Multil
 from lfx.schema.message import Message
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
+# 모델 입력용 별칭(R1, N2…)이 한국어 설명에 섞인 경우: 괄호 묶음은 지우고, 맨 별칭은 "해당 전제/추론"으로 바꾼다.
+# 그 그룹에 실제로 준 별칭만 지운다 (판결문의 "N95" 같은 표기는 건드리지 않는다).
+_ALIAS = r"[RN]\d{1,2}"
+_ALIAS_LIST = rf"(?<![A-Za-z0-9]){_ALIAS}(?:\s*(?:,|/|·|와|과|및)\s*{_ALIAS})*(?![A-Za-z0-9])"
+_ALIAS_PAREN = re.compile(rf"\s*[(\[（]\s*({_ALIAS_LIST})\s*[)\]）]")
+_ALIAS_AFTER_WORD = re.compile(rf"(전제|추론|노드)\s*({_ALIAS_LIST})")
+_ALIAS_BARE = re.compile(rf"({_ALIAS_LIST})")
+_ALIAS_TOKEN = re.compile(_ALIAS)
 RESERVED = ("unclassified", "custom")
 CQ_STATUSES = ("open", "satisfied", "challenged")
 
@@ -107,6 +115,24 @@ class SchemeAssigner(Component):
         return [{"instanceId": key, "items": items} for key, items in grouped.items()]
 
     @staticmethod
+    def strip_aliases(text, known: set[str]) -> str:
+        """설명 문장에서 모델 입력용 별칭(known)을 없앤다. 사용자 화면에는 별칭이 없어 뜻이 통하지 않는다."""
+
+        def only_known(group: str) -> bool:
+            return all(token in known for token in _ALIAS_TOKEN.findall(group))
+
+        def bare(match: re.Match) -> str:
+            if not only_known(match.group(1)):
+                return match.group(0)
+            return "해당 추론" if match.group(1).startswith("R") else "해당 전제"
+
+        text = str(text or "")
+        text = _ALIAS_PAREN.sub(lambda m: "" if only_known(m.group(1)) else m.group(0), text)
+        text = _ALIAS_AFTER_WORD.sub(lambda m: m.group(1) if only_known(m.group(2)) else m.group(0), text)
+        text = _ALIAS_BARE.sub(bare, text)
+        return re.sub(r"[ \t]{2,}", " ", text).strip()
+
+    @staticmethod
     def quotes(node: dict) -> list[str]:
         return [e.get("quote") for e in node.get("evidence") or [] if isinstance(e, dict) and e.get("quote")]
 
@@ -130,9 +156,10 @@ class SchemeAssigner(Component):
         return items, aliases
 
     @staticmethod
-    def validate_assignment(raw: dict, alias: dict, catalog: dict[str, dict]) -> tuple[dict, list[str]]:
+    def validate_assignment(raw: dict, alias: dict, catalog: dict[str, dict], known_aliases: set[str] | None = None) -> tuple[dict, list[str]]:
         """한 RA 의 답을 schemeApplication 필드로 바꾼다. (결과, 오류)"""
         errors: list[str] = []
+        known = known_aliases if known_aliases is not None else set(alias["premises"])
         key = str(raw.get("scheme_key") or "").strip()
         if key not in catalog and key not in RESERVED:
             errors.append(f"scheme_key {key!r} is not allowed")
@@ -140,20 +167,26 @@ class SchemeAssigner(Component):
         roles = {r["roleId"] for r in catalog[key]["premiseRoles"]} if key in catalog else set()
         questions = {q["id"] for q in catalog[key]["criticalQuestions"]} if key in catalog else set()
         bindings = []
+        bound_refs: dict[str, str] = {}
         for binding in raw.get("premise_bindings") or []:
             if not isinstance(binding, dict):
                 continue
             role = str(binding.get("role_id") or "").strip()
-            node_ids = []
-            for ref in binding.get("premises") or []:
-                real = alias["premises"].get(str(ref))
-                if real is None:
-                    errors.append(f"premise reference {ref!r} is not a premise of this RA")
-                else:
-                    node_ids.append(real)
             if key in catalog and role not in roles:
                 errors.append(f"role_id {role!r} is not a role of {key}")
                 continue
+            node_ids = []
+            for ref in binding.get("premises") or []:
+                ref = str(ref)
+                real = alias["premises"].get(ref)
+                if real is None:
+                    errors.append(f"premise reference {ref!r} is not a premise of this RA")
+                elif ref in bound_refs and bound_refs[ref] != role:
+                    # 한 명제가 서로 다른 두 전제 역할을 동시에 채울 수는 없다. 처음 역할만 남긴다.
+                    errors.append(f"premise {ref} is bound to more than one role ({bound_refs[ref]}, {role}); bind each premise to at most one role")
+                elif ref not in bound_refs:
+                    bound_refs[ref] = role
+                    node_ids.append(real)
             if node_ids:
                 bindings.append({"roleId": role or None, "nodeIds": node_ids})
         responses = []
@@ -166,7 +199,11 @@ class SchemeAssigner(Component):
                 continue
             status = str(item.get("status") or "").strip().lower()
             responses.append(
-                {"questionId": question_id, "status": status if status in CQ_STATUSES else "open", "answer": str(item.get("answer") or "").strip()}
+                {
+                    "questionId": question_id,
+                    "status": status if status in CQ_STATUSES else "open",
+                    "answer": SchemeAssigner.strip_aliases(item.get("answer"), known),
+                }
             )
         alternatives = []
         for item in raw.get("alternatives") or []:
@@ -174,7 +211,7 @@ class SchemeAssigner(Component):
                 continue
             alt = str(item.get("scheme_key") or "").strip()
             if alt in catalog and alt != key:
-                alternatives.append({"schemeKey": alt, "rationale": str(item.get("rationale") or "").strip()})
+                alternatives.append({"schemeKey": alt, "rationale": SchemeAssigner.strip_aliases(item.get("rationale"), known)})
             elif alt:
                 errors.append(f"alternative scheme_key {alt!r} is not allowed")
         custom_name = str(raw.get("custom_scheme_name") or "").strip() or None
@@ -183,7 +220,7 @@ class SchemeAssigner(Component):
                 "schemeKey": key,
                 "status": "suggested",
                 "origin": "ai",
-                "rationale": str(raw.get("rationale") or "").strip(),
+                "rationale": SchemeAssigner.strip_aliases(raw.get("rationale"), known),
                 "premiseBindings": bindings,
                 "conclusionNodeIds": alias["conclusions"],
                 "criticalQuestionResponses": responses,
@@ -221,6 +258,7 @@ class SchemeAssigner(Component):
         messages.append({"role": "user", "content": prompt})
         results: dict[str, tuple[dict, list[str]]] = {}
         group_errors: list[str] = []
+        known_aliases = set(aliases) | {ref for info in aliases.values() for ref in info["premises"]}
         for attempt in range(1, max(1, int(self.retries or 0) + 1) + 1):
             try:
                 content = self.call_model(messages)
@@ -232,7 +270,7 @@ class SchemeAssigner(Component):
             for raw in answer.get("assignments") or []:
                 if not isinstance(raw, dict) or str(raw.get("ra")) not in aliases:
                     continue
-                application, errors = self.validate_assignment(raw, aliases[str(raw["ra"])], catalog)
+                application, errors = self.validate_assignment(raw, aliases[str(raw["ra"])], catalog, known_aliases)
                 previous = results.get(str(raw["ra"]))
                 # 더 나은(오류가 적은) 답만 남긴다.
                 if previous is None or len(errors) < len(previous[1]):
