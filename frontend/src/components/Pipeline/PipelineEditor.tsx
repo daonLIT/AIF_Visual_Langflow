@@ -90,6 +90,9 @@ function PipelineToolbar() {
 
   const flow = current?.flow;
   const production = !!flow?.isProduction;
+  const dirtyText = `적용 안 된 편집${diff ? ` · ${describeDiff(diff)}` : ''} · ${
+    draftSaved ? `초안 저장됨${draftSavedAt ? ` ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}` : '초안 저장 대기'
+  }`;
 
   return (
     <header className="pipeline-toolbar">
@@ -130,16 +133,23 @@ function PipelineToolbar() {
       <button type="button" disabled={!flow || !dirty || !!busy} onClick={() => void store().saveDraft()} title="서버에 초안으로 저장 (Langflow 에는 적용하지 않음) · Ctrl+S">
         초안 저장
       </button>
-      {current?.draft ? (
-        <>
-          <button type="button" disabled={!!busy} onClick={() => void store().loadDraft()}>
-            초안 불러오기
-          </button>
-          <button type="button" disabled={!!busy} onClick={() => window.confirm('저장된 초안을 버릴까요?') && void store().discardDraft()}>
-            초안 버리기
-          </button>
-        </>
-      ) : null}
+      {/* 초안 유무에 따라 버튼을 넣고 빼면 뒤 버튼들이 밀려 잘못 누르기 쉬우므로 항상 두고 비활성화만 한다. */}
+      <button
+        type="button"
+        disabled={!current?.draft || !!busy}
+        onClick={() => void store().loadDraft()}
+        title={current?.draft ? '서버에 저장된 초안을 편집기로 불러옵니다' : '저장된 초안이 없습니다'}
+      >
+        초안 불러오기
+      </button>
+      <button
+        type="button"
+        disabled={!current?.draft || !!busy}
+        onClick={() => window.confirm('저장된 초안을 버릴까요?') && void store().discardDraft()}
+        title={current?.draft ? '서버에 저장된 초안을 버립니다' : '저장된 초안이 없습니다'}
+      >
+        초안 버리기
+      </button>
       <button type="button" disabled={!flow || !!busy} onClick={() => void store().validate(mode === 'live')} title="서버 규칙으로 연결·형식·프롬프트 변수·중계 계약을 검사합니다 (live 모드는 바뀐 코드도 검사)">
         검증
       </button>
@@ -179,18 +189,19 @@ function PipelineToolbar() {
       <button type="button" disabled={!!busy} onClick={() => void store().runDiagnostics()} title="설정 존재 여부와 별개로 Langflow·분석 flow·Ollama·모델에 실제로 연결되는지 확인합니다">
         연결 확인
       </button>
-      <span className="status-spacer" />
-      {busy ? (
-        <span className="run-chip is-active">
-          <span className="run-spinner" aria-hidden="true" />
-          {busy}
-        </span>
-      ) : dirty ? (
-        <span className="run-chip is-failed" title={diff ? describeDiff(diff) : undefined}>
-          적용 안 된 편집{diff ? ` · ${describeDiff(diff)}` : ''} ·{' '}
-          {draftSaved ? `초안 저장됨${draftSavedAt ? ` ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}` : '초안 저장 대기'}
-        </span>
-      ) : null}
+      {/* 상태 표시는 남는 폭만 쓰고 넘치면 말줄임한다 — 길이가 바뀌어도 툴바가 줄바꿈되지 않게 한다. */}
+      <span className="pipeline-toolbar-status">
+        {busy ? (
+          <span className="run-chip is-active" title={busy}>
+            <span className="run-spinner" aria-hidden="true" />
+            <span className="run-chip-text">{busy}</span>
+          </span>
+        ) : dirty ? (
+          <span className="run-chip is-failed" title={dirtyText}>
+            <span className="run-chip-text">{dirtyText}</span>
+          </span>
+        ) : null}
+      </span>
       {versionsOpen ? <VersionsDialog onClose={() => setVersionsOpen(false)} /> : null}
       {applyOpen ? <ApplyDialog onClose={() => setApplyOpen(false)} /> : null}
     </header>
