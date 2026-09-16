@@ -6,7 +6,9 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-MAX_SELECTED_ISSUES = 3
+# 쟁점 수는 판결문이 정하고 이 값은 천장일 뿐이다(사람이 만든 정답 그래프는 1~4개, 평균 2.65).
+# flow 의 Issue Selector·Branch Extractor·Graph Builder·Result Validator 의 MAX_SELECTED 와 같은 값이어야 한다.
+MAX_SELECTED_ISSUES = 5
 UNCLASSIFIED = "unclassified"
 CUSTOM = "custom"
 RESERVED_SCHEME_KEYS = (UNCLASSIFIED, CUSTOM)

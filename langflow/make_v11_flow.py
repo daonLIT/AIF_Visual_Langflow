@@ -9,7 +9,7 @@ v9(근거 인용) flow 에서 계획서의 처리 순서를 따르는 v11 flow �
 처리 순서 (계획서 5절)
     판결문 + 52개 쟁점 카탈로그 + 카탈로그 버전
      → 1. Main Claim (Prompt + Ollama LLM)
-     → 2. Issue Selector: 원문 기반 세부 쟁점 자동 선택 (중복 없이 최대 3개, 선택 이유·근거 인용, 검증·제한된 재시도)
+     → 2. Issue Selector: 원문 기반 세부 쟁점 자동 선택 (판결문이 정하는 수, 중복 없이 상한 이하, 선택 이유·근거 인용, 검증·제한된 재시도)
      → 3. Issue Branch Extractor: 선택된 쟁점별 I-node 본문·근거 추출
      → 4. Graph Builder: 선택 개수에 맞는 그래프 (I/RA/ISSUE, 참조 ID 확정). 0개면 no_issues, 무효면 invalid
      → 5. I-node Summarizer: 요약 단계
@@ -17,7 +17,7 @@ v9(근거 인용) flow 에서 계획서의 처리 순서를 따르는 v11 flow �
      → 7. Result Validator: 구조·카탈로그·참조 검증
      → Final AIF JSON
 
-- 선택 쟁점은 최대 3개라 쟁점마다 한 번씩 순서대로 호출한다(52개별 호출·무제한 추출 없음).
+- 선택 쟁점은 상한 이하라 쟁점마다 한 번씩 순서대로 호출한다(52개별 호출·무제한 추출 없음).
 - 쟁점·scheme 카탈로그는 중계 서버가 매 실행 입력으로 보내 실행마다 버전이 고정된다.
 - 커스텀 컴포넌트 template 은 Langflow 설치본의 lfx 로 만들고, 프롬프트 템플릿은 f-string 렌더링으로 검사한다.
 """
@@ -113,22 +113,31 @@ from a fixed catalog of 52 detailed issues.
 
 # Task
 1. Read the entire judgment.
-2. Select AT MOST {max_issues} catalog items that best describe the grounds the court actually decided in order to
-   reach the Main Claim.
-3. Selection criteria, in this order:
+2. FIRST, before looking at the catalog, list for yourself the SEPARATE GROUNDS the court actually decided on the
+   way to the Main Claim. A separate ground is one the court argues on its own footing - typically its own
+   numbered item or its own 판단 paragraph. Two statements about the same ground are ONE ground.
+3. The number of grounds you found decides how many items you select. It is NOT a target to fill.
+   - Most judgments have 2 or 3 separate grounds. Some have 1. Some have 4.
+   - {max_issues} is a hard ceiling, not a goal. Selecting fewer is the normal outcome, never a failure.
+   - If you are about to select the ceiling number, re-check that each one really stands on its own footing.
+4. THEN map each ground to the single catalog item that best describes it.
+   - One ground gives exactly one item. Never split one ground across two items to raise the count.
+   - Two selected items must never quote the same passage as their evidence.
+   - If a ground fits no catalog item well, drop that ground rather than forcing a poor fit.
+5. Selection criteria, in this order:
    a. relevance to what the court actually judged in this judgment,
    b. a grounding passage exists in the judgment,
    c. centrality to the court's conclusion,
    d. minimal overlap between the selected items.
-4. You select detailed issues (issue_id), not categories. Two different detailed issues of the same category may both
-   be selected when both are central and they do not overlap.
-5. Use each issue_id at most once.
-6. If only 1 or 2 items are appropriate, return only those. Never add an item just to reach {max_issues}.
-7. If no catalog item has a grounding passage, return an empty list and explain why in no_issue_reason.
-8. For each selected item write:
+6. You select detailed issues (issue_id), not categories. Two different detailed issues of the same category may both
+   be selected when each corresponds to a separate ground.
+7. Use each issue_id at most once.
+8. If no catalog item has a grounding passage, return an empty list and explain why in no_issue_reason.
+9. For each selected item write:
    - issue_text: "쟁점: <case-specific proposition in Korean>", as close to the court's wording as possible.
      It must describe this case, not repeat the catalog label.
-   - selection_reason: 1-2 Korean sentences on why this catalog item fits this judgment and why it is central.
+   - selection_reason: 1-2 Korean sentences naming the separate ground this item stands for and why that ground
+     is central to the court's conclusion.
    - evidence_quote: see the evidence rules.
 
 # Output
@@ -344,7 +353,7 @@ def run_langflow_helper(python: Path, request: dict) -> dict:
 
 CUSTOM = {
     "splitter": ("judgment_splitter.py", SPLITTER_ID, "0. Judgment Splitter", (380, 420), None),
-    "selector": ("issue_selector.py", SELECTOR_ID, "2. Issue Selector (최대 3개)", (1580, 300), "selection_json"),
+    "selector": ("issue_selector.py", SELECTOR_ID, "2. Issue Selector", (1580, 300), "selection_json"),
     "extractor": ("issue_branch_extractor.py", EXTRACTOR_ID, "3. Issue Branch Extractor", (1980, 520), "branches_json"),
     "builder": ("aif_graph_builder.py", BUILDER_ID, "4. AIF Graph Builder (v11)", (2380, 300), "graph_json"),
     "summarizer": ("node_summarizer.py", SUMMARIZER_ID, "5. I-node Summarizer", (2780, 300), "summarized_graph"),
@@ -448,10 +457,12 @@ def main() -> None:
     flow["data"]["edges"] = edges
     flow["id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, "aif-visual-langflow/v11-top3-issues"))
     flow["name"] = "TopDown_Judgment_to_AIF_v11_Top3Issues"
+    # 이름·ID 는 flow 의 uuid5 시드라 바꾸지 않는다 ("top3" 는 이제 최대 5개의 옛 이름이다).
     flow["description"] = (
-        "v11: main claim → automatic selection of at most 3 detailed issues from the 52-item catalog (reasons, evidence, "
-        "validation) → per-issue I-node extraction → graph builder → I-node summary stage → RA Walton scheme assignment "
-        "stage → result validation → final AIF JSON."
+        "v11: main claim → automatic selection of the detailed issues the court actually decided, at most 5, from the "
+        "52-item catalog (reasons, evidence, validation) → per-issue I-node extraction → graph builder (issues converge "
+        "into one aggregation RA) → I-node summary stage → RA scheme assignment stage (issue relations from structure, "
+        "Walton schemes for substantive inferences) → result validation → final AIF JSON."
     )
     flow["tags"] = ["AIF", "legal", "top-down", "source-grounded", "evidence", "issue-catalog", "top3", "summary", "walton-scheme", "v11"]
     TARGET.write_text(json.dumps(flow, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from ..config import Settings
 from ..storage import Database
 from .aif_adapter import InvalidResultError, build_proposal, make_namespace, parse_json_text
-from .catalogs import IssueCatalog, SchemeCatalog
+from .catalogs import MAX_SELECTED_ISSUES, IssueCatalog, SchemeCatalog
 from .langflow_client import LangflowClient, LangflowError, RunInput
 
 logger = logging.getLogger("annotation.runs")
@@ -138,7 +138,7 @@ class RunManager:
                 "error": None,
                 "result": None,
                 "langflow": None,
-                "constraints": {"maxSelectedIssues": 3, "cancelStopsComputation": False},
+                "constraints": {"maxSelectedIssues": MAX_SELECTED_ISSUES, "cancelStopsComputation": False},
             }
             self.db.save_run(record, text, idempotency_key)
             task = asyncio.create_task(self._execute(record["runId"]))

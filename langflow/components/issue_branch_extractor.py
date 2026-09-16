@@ -10,7 +10,8 @@ from lfx.io import DropdownInput, FloatInput, IntInput, MessageTextInput, Multil
 from lfx.schema.message import Message
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
-MAX_SELECTED = 3
+# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 여유를 두어 5개까지 받고, 몇 개를 고를지는 판결문이 정한다.
+MAX_SELECTED = 5
 
 
 class BranchError(ValueError):
@@ -20,7 +21,7 @@ class BranchError(ValueError):
 class IssueBranchExtractor(Component):
     display_name = "Issue Branch Extractor"
     description = (
-        "For each selected issue (at most 3) calls Ollama once to extract the upper/lower I-node texts with "
+        "For each selected issue (at most 5) calls Ollama once to extract the upper/lower I-node texts with "
         "verbatim evidence quotes. Summaries and Walton schemes are produced by later stages. Per-issue failures "
         "and context-limit warnings are reported instead of being dropped."
     )

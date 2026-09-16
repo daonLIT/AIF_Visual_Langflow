@@ -9,15 +9,16 @@ from lfx.io import DropdownInput, FloatInput, IntInput, MessageTextInput, Multil
 from lfx.schema.message import Message
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
-MAX_SELECTED = 3
+# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 여유를 두어 5개까지 받고, 몇 개를 고를지는 판결문이 정한다.
+MAX_SELECTED = 5
 
 
 class IssueSelector(Component):
     display_name = "Issue Selector"
     description = (
-        "Reads the whole judgment and automatically selects at most 3 distinct detailed issues from the 52-item "
+        "Reads the whole judgment and automatically selects the detailed issues the court actually decided (at most 5) from the 52-item "
         "issue catalog, each with a selection reason and a verbatim evidence quote. Validates the answer "
-        "(at most 3, catalog IDs only, no duplicates) with limited retries. Zero is allowed with a reason."
+        "(at most 5, catalog IDs only, no duplicates, no two issues grounded in the same quote) with limited retries. Zero is allowed with a reason."
     )
     icon = "ListChecks"
     name = "IssueSelector"
@@ -92,6 +93,7 @@ class IssueSelector(Component):
             errors.append(f"selected {len(items)} issues; at most {MAX_SELECTED} are allowed")
         selected: list[dict] = []
         seen: set[str] = set()
+        quotes_seen: dict[str, int] = {}
         for index, item in enumerate(items, start=1):
             if not isinstance(item, dict):
                 errors.append(f"selected_issues[{index}] must be an object")
@@ -110,6 +112,16 @@ class IssueSelector(Component):
                 errors.append(f"selected_issues[{index}].issue_text is empty")
             if not reason:
                 errors.append(f"selected_issues[{index}].selection_reason is empty")
+            quote = str(item.get("evidence_quote") or "").strip()
+            # 같은 대목을 근거로 든 두 쟁점은 한 쟁점을 쪼갠 것이다. 수를 채우려고 나눈 경우를 막는다.
+            if quote and quote in quotes_seen:
+                errors.append(
+                    f"selected_issues[{index}] is grounded in the same quote as selected_issues[{quotes_seen[quote]}]; "
+                    "select one issue for one ground instead of splitting it"
+                )
+                continue
+            if quote:
+                quotes_seen[quote] = index
             selected.append(
                 {
                     "issue_id": issue_id,
@@ -215,7 +227,8 @@ class IssueSelector(Component):
                     "role": "user",
                     "content": "Your previous answer was invalid:\n- "
                     + "\n- ".join(errors)
-                    + f"\nReturn corrected JSON only. Select at most {MAX_SELECTED} distinct issue_id values from the catalog.",
+                    + f"\nReturn corrected JSON only. Select at most {MAX_SELECTED} distinct issue_id values from the catalog, "
+                    + "one per separate ground the court decided. Do not add issues to reach the maximum.",
                 },
             ]
         self.status = "invalid selection"

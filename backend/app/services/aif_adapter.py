@@ -9,7 +9,7 @@ Langflow 응답(AIF/OVA JSON 문자열) -> 검증된 제안(proposal) 변환.
 - 근거 인용문(evidence)이 있으면 원문 위치를 확인하고, 없으면 노드 텍스트로 매칭을 시도하되 파생(derived)임을 표시한다.
 - v11 계약
   * status: ok | no_issues | invalid. no_issues 는 그래프 없이 사유만, invalid 는 명시적 오류.
-  * ISSUE 는 최대 3개, 카탈로그에 있는 issueId, 중복 없음. 어기면 검증 실패.
+  * ISSUE 는 MAX_SELECTED_ISSUES 이하, 카탈로그에 있는 issueId, 중복 없음. 어기면 검증 실패.
   * I/ISSUE summary 는 text 를 대체하지 않는다. summarySourceHash 가 현재 본문과 다르면 stale.
   * RA schemeApplication 은 허용된 scheme key 만. 잘못된 참조는 오류로 남기고 unclassified 로 둔다.
   * schemefulfillments 는 카탈로그에 검증된 외부 schemeID(aifdbSchemeId)가 있을 때만 만든다.
@@ -369,7 +369,7 @@ def build_proposal(
     ova = raw.get("OVA") if isinstance(raw.get("OVA"), dict) else {}
     warnings: list[str] = []
 
-    # 쟁점 선택 제약: 최대 3개, 카탈로그 ID, 중복 없음
+    # 쟁점 선택 제약: 상한 이하, 카탈로그 ID, 중복 없음 (몇 개인지는 판결문이 정한다)
     issue_nodes_raw = [n for n in aif["nodes"] if n["type"] == "ISSUE"]
     constraint_errors = []
     if len(issue_nodes_raw) > MAX_SELECTED_ISSUES:
@@ -386,7 +386,7 @@ def build_proposal(
             constraint_errors.append(f"issueId '{issue_id}' 가 중복 선택되었습니다.")
         seen_issue_ids.add(issue_id)
     if constraint_errors:
-        raise InvalidResultError("쟁점 선택 제약(최대 3개·카탈로그 ID·중복 없음)을 어겼습니다.", constraint_errors, code="INVALID_SELECTION")
+        raise InvalidResultError(f"쟁점 선택 제약(최대 {MAX_SELECTED_ISSUES}개·카탈로그 ID·중복 없음)을 어겼습니다.", constraint_errors, code="INVALID_SELECTION")
 
     used: set[str] = set()
     id_map: dict[str, str] = {}

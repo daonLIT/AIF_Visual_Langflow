@@ -501,7 +501,7 @@ class PipelineService:
                 add(
                     "flow_contract",
                     not missing,
-                    "쟁점 자동 선택(최대 3개)·요약·scheme·검증 단계가 있는 v11 flow" if not missing else f"계획서의 처리 단계가 없는 flow 입니다: {', '.join(missing)} (v11 flow 가져오기 필요)",
+                    "쟁점 자동 선택·요약·scheme·검증 단계가 있는 v11 flow" if not missing else f"계획서의 처리 단계가 없는 flow 입니다: {', '.join(missing)} (v11 flow 가져오기 필요)",
                 )
             except (LangflowError, PipelineError) as error:
                 add("analysis_flow", False, str(error))

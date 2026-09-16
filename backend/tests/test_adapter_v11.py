@@ -4,6 +4,7 @@ import json
 import unittest
 from pathlib import Path
 
+from app.services.catalogs import MAX_SELECTED_ISSUES
 from app.services.aif_adapter import InvalidResultError, build_proposal, parse_json_text
 from app.services.catalogs import IssueCatalog, SchemeCatalog
 from app.services.langflow_client import extract_output_text
@@ -50,9 +51,17 @@ class OutcomeTest(unittest.TestCase):
         [n for n in duplicate["AIF"]["nodes"] if n["type"] == "ISSUE"][1]["issueRef"]["issueId"] = issues[0]["issueRef"]["issueId"]
         unknown = copy.deepcopy(graph)
         [n for n in unknown["AIF"]["nodes"] if n["type"] == "ISSUE"][0]["issueRef"]["issueId"] = "ISS-999"
+        # 상한을 넘을 만큼 채운다 (상한 자체는 판결문이 정하는 수의 천장일 뿐이다).
         too_many = copy.deepcopy(graph)
-        too_many["AIF"]["nodes"].append({"nodeID": "99_20260903190000", "text": "쟁점: 넷째", "type": "ISSUE", "issueRef": {"issueId": "ISS-001"}})
-        for broken, needle in ((duplicate, "중복"), (unknown, "ISS-999"), (too_many, "최대 3개")):
+        for i in range(MAX_SELECTED_ISSUES - len(issues) + 1):
+            too_many["AIF"]["nodes"].append(
+                {"nodeID": f"9{i}_20260903190000", "text": f"쟁점: 추가 {i}", "type": "ISSUE", "issueRef": {"issueId": f"ISS-00{i + 4}"}}
+            )
+        within_cap = copy.deepcopy(graph)
+        within_cap["AIF"]["nodes"].append({"nodeID": "98_20260903190000", "text": "쟁점: 넷째", "type": "ISSUE", "issueRef": {"issueId": "ISS-004"}})
+        # 3개를 넘어도 상한 안이면 통과한다.
+        build(within_cap)
+        for broken, needle in ((duplicate, "중복"), (unknown, "ISS-999"), (too_many, f"최대 {MAX_SELECTED_ISSUES}개")):
             with self.assertRaises(InvalidResultError) as ctx:
                 build(broken)
             self.assertEqual(ctx.exception.code, "INVALID_SELECTION")

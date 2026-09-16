@@ -22,6 +22,7 @@ import type { Annotation, NodeAnnotation, ProjectFile } from '../src/types/annot
 import { migrateProjectFile } from '../src/types/annotation';
 import { applyNodePatch, summaryStateOf, type ArgumentCase } from '../src/types/argument';
 import {
+  MAX_SELECTED_ISSUES,
   confirmScheme,
   humanSchemeEdit,
   migrateSchemeApplication,
@@ -155,15 +156,21 @@ useGraphStore.getState().addEdge(issues[2].id, ra[5].id);
 check('RA 연결 추가 → 재검토 필요', useGraphStore.getState().caseData!.nodes.find((n) => n.id === ra[5].id)!.schemeApplication!.status === 'needs_review');
 check('scheme 없는 RA 는 표시하지 않음', flagSchemesForReview({ ...imported, nodes: imported.nodes.map((n) => ({ ...n, schemeApplication: undefined })) }, [], [raNode.id], 'x').flagged.length === 0);
 
-console.log('4) 세부 쟁점 최대 3개');
+console.log(`4) 세부 쟁점 최대 ${MAX_SELECTED_ISSUES}개 (수는 판결문이 정하고 이 값은 천장)`);
 check('현재 3개는 문제 없음', issueSelectionProblems(imported.nodes).length === 0);
+// 상한을 넘기려면 몇 개가 더 필요한지 상수에서 계산한다 (상한이 바뀌어도 이 검사는 그대로 맞는다).
+const padIssues = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({ ...issues[0], id: `pad_${i}`, issueRef: { issueId: `ISS-90${i}` } }));
+const upToCap = [...imported.nodes, ...padIssues(MAX_SELECTED_ISSUES - 3)];
+check(`상한까지는 문제 없음 (${MAX_SELECTED_ISSUES}개)`, issueSelectionProblems(upToCap).length === 0);
 const dupNodes = imported.nodes.map((n) => (n.id === issues[1].id ? { ...n, issueRef: { issueId: 'ISS-007' } } : n));
 check('중복 선택 감지', issueSelectionProblems(dupNodes).some((p) => p.includes('중복')));
-const fourth = { ...issues[0], id: '99_x', issueRef: { issueId: 'ISS-001' } };
-check('4개 감지', issueSelectionProblems([...imported.nodes, fourth]).some((p) => p.includes('최대 3개')));
+const overflow = { ...issues[0], id: '99_x', issueRef: { issueId: 'ISS-999' } };
+check('상한 초과 감지', issueSelectionProblems([...upToCap, overflow]).some((p) => p.includes(`최대 ${MAX_SELECTED_ISSUES}개`)));
 check('편집 선택지: 다른 확정 쟁점과 같은 ID 금지', issueOptionState(imported, [], issues[1].id, 'ISS-007').disabled);
 check('편집 선택지: 자기 자리 교체는 허용', !issueOptionState(imported, [], issues[1].id, 'ISS-001').disabled);
-check('확정 그래프에 4번째 쟁점 수락 차단', !!issueAcceptProblem(imported, '99_x', { type: 'ISSUE', text: 't', issueRef: { issueId: 'ISS-001' } }));
+check('상한 안에서는 쟁점 수락 허용', !issueAcceptProblem(imported, '99_x', { type: 'ISSUE', text: 't', issueRef: { issueId: 'ISS-999' } }));
+check('상한을 넘는 쟁점 수락 차단', !!issueAcceptProblem({ ...imported, nodes: upToCap }, '99_x', { type: 'ISSUE', text: 't', issueRef: { issueId: 'ISS-999' } }));
 const graphCodes = (c: ArgumentCase) => validateCase(c).results.map((r) => r.code);
 check('검증 RULE_14 (error)', graphCodes({ ...imported, nodes: dupNodes }).includes('RULE_14_ISSUE_SELECTION') && validateCase({ ...imported, nodes: dupNodes }).errorCount > 0);
 
@@ -220,10 +227,20 @@ outcome = setDraftValue(snapshot, raId, { schemeApplication: null });
 check('scheme 삭제(null) → 값 제거', !(outcome.snapshot.annotations.find((a) => a.id === raId) as NodeAnnotation).currentValue.schemeApplication);
 check('빈 본문 수정은 거부', !!setDraftValue(snapshot, premiseAnnotationId, { text: '   ' }).error);
 for (const issue of issues) snapshot = acceptAnnotation(snapshot, `r:node:${issue.id}`).snapshot;
-const extraIssue: NodeAnnotation = { ...(proposals.find((p) => p.kind === 'node' && p.nodeId === issues[0].id) as NodeAnnotation), id: 'r2:node:99_x', runId: 'r2', nodeId: '99_x' };
-extraIssue.currentValue = { ...extraIssue.currentValue, issueRef: { issueId: 'ISS-001' } };
+// 확정 쟁점이 상한에 찰 때까지 채운 뒤, 그다음 수락이 막히는지 본다.
+const issueProposal = proposals.find((p) => p.kind === 'node' && p.nodeId === issues[0].id) as NodeAnnotation;
+for (let i = 0; i < MAX_SELECTED_ISSUES - issues.length; i += 1) {
+  const pad: NodeAnnotation = { ...issueProposal, id: `r2:node:pad_${i}`, runId: 'r2', nodeId: `pad_${i}` };
+  pad.currentValue = { ...pad.currentValue, issueRef: { issueId: `ISS-90${i}` } };
+  snapshot = importProposals(snapshot, [pad]).snapshot;
+  const padOutcome = acceptAnnotation(snapshot, `r2:node:pad_${i}`);
+  check(`수락: 상한 안 ${issues.length + i + 1}번째 쟁점은 허용`, !padOutcome.error);
+  snapshot = padOutcome.snapshot;
+}
+const extraIssue: NodeAnnotation = { ...issueProposal, id: 'r2:node:99_x', runId: 'r2', nodeId: '99_x' };
+extraIssue.currentValue = { ...extraIssue.currentValue, issueRef: { issueId: 'ISS-999' } };
 snapshot = importProposals(snapshot, [extraIssue]).snapshot;
-check('수락: 4번째 세부 쟁점은 오류', !!acceptAnnotation(snapshot, 'r2:node:99_x').error);
+check('수락: 상한을 넘는 세부 쟁점은 오류', !!acceptAnnotation(snapshot, 'r2:node:99_x').error);
 const summaryOnly = setDraftValue(snapshot, `r:node:${target.id}`, { summary: '초안 사람 요약' });
 check('초안 요약 수정 → pending 유지', (summaryOnly.snapshot.annotations.find((a) => a.id === `r:node:${target.id}`) as NodeAnnotation).status === 'pending');
 

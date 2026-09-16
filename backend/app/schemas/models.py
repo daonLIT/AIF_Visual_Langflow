@@ -15,7 +15,7 @@ class AnalysisRunCreate(BaseModel):
     caseId: str | None = Field(None, max_length=128)
     idempotencyKey: str | None = Field(None, max_length=256)
     # 생략하면 파이프라인 탭에서 지정한 분석 flow(없으면 LANGFLOW_FLOW_ID).
-    # 쟁점은 사용자가 미리 고르지 않는다: flow 가 52개 카탈로그 중 최대 3개를 자동 선택한다.
+    # 쟁점은 사용자가 미리 고르지 않는다: flow 가 52개 카탈로그 중 판결문이 정하는 수만큼(상한 이하) 자동 선택한다.
     flowId: str | None = Field(None, max_length=128)
     purpose: Literal["analysis", "pipeline-test"] = "analysis"
 
