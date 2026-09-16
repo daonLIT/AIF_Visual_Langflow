@@ -130,7 +130,16 @@ class TopDownAIFGraphBuilder(Component):
         main_id = next_id()
         nodes.append(self._node(main_id, main_text, "I", self._clean(claim.get("evidence_quote"))))
         spacing = 620
-        layout[main_id] = (int(420 + (len(selected) - 1) * spacing / 2), 60)
+        center_x = int(420 + (len(selected) - 1) * spacing / 2)
+        layout[main_id] = (center_x, 60)
+
+        # 쟁점별 판단은 하나의 RA 로 모여 주 주장에 이른다 (판결문의 "사정들을 종합하여 보면").
+        # 쟁점마다 따로 이으면 각 쟁점이 독립적으로 주 주장을 지지한다는 뜻이 되어 판결 구조와 다르다.
+        aggregation_id = next_id()
+        aggregation_refs: list[dict] = []
+        nodes.append(self._node(aggregation_id, "RA", "RA", issueRefs=aggregation_refs))
+        layout[aggregation_id] = (center_x, 155)
+        add_edge(aggregation_id, main_id)
 
         for position, item in enumerate(selected, start=1):
             issue_id = self._clean(item.get("issue_id"))
@@ -149,11 +158,8 @@ class TopDownAIFGraphBuilder(Component):
                 )
             )
             layout[issue_node_id] = (x, 250)
-            ra_claim = next_id()
-            nodes.append(self._node(ra_claim, "RA", "RA", issueRefs=membership))
-            layout[ra_claim] = (x, 155)
-            add_edge(issue_node_id, ra_claim)
-            add_edge(ra_claim, main_id)
+            aggregation_refs.extend(membership)
+            add_edge(issue_node_id, aggregation_id)
 
             branch = branch_by_index.get(position)
             report = {

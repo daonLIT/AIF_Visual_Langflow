@@ -154,8 +154,13 @@ class BuilderTest(unittest.TestCase):
         self.assertEqual([n["issueRef"]["issueId"] for n in issues], ["ISS-009", "ISS-001"])
         self.assertEqual(issues[0]["issueRef"]["selectionReason"], "번복")
         self.assertEqual(out["AIF"]["schemefulfillments"], [])
-        # 쟁점 2 는 ISSUE + RA 만 남는다.
-        self.assertEqual(len(nodes), 1 + 2 * 2 + 3 + 2)
+        # 주 주장 1 + 쟁점 종합 RA 1 + ISSUE 2 + (성공한 가지: upper·RA 2개) 3 + lower 2.
+        # 실패한 쟁점 2 는 ISSUE 만 남고, 쟁점 종합 RA 에는 그대로 이어진다.
+        self.assertEqual(len(nodes), 1 + 1 + 2 + 3 + 2)
+        aggregation = [n for n in nodes if n["type"] == "RA" and len(n.get("issueRefs") or []) == 2]
+        self.assertEqual(len(aggregation), 1)
+        incoming = [e["fromID"] for e in out["AIF"]["edges"] if e["toID"] == aggregation[0]["nodeID"]]
+        self.assertEqual([n["nodeID"] for n in issues], incoming)
         self.assertEqual(out["meta"]["branches"][1]["status"], "failed")
         self.assertTrue(all(n.get("issueRefs") for n in nodes if n["type"] in ("I", "RA") and n["nodeID"] != nodes[0]["nodeID"]))
 
@@ -176,7 +181,8 @@ class StagesTest(unittest.TestCase):
                 self.assertEqual((app["status"], app["origin"], app["catalogVersion"]), ("suggested", "ai", 3))
         keys = graph["meta"]["schemes"]["keys"]
         # 쟁점에 닿는 RA 는 구조로 정해지므로 모델의 답과 무관하게 항상 쟁점 관계 scheme 이다.
-        self.assertEqual(keys.get("issue_aggregation"), 3)
+        # 쟁점 종합 RA 는 쟁점 수와 무관하게 하나다 (수렴).
+        self.assertEqual(keys.get("issue_aggregation"), 1)
         self.assertEqual(keys.get("issue_resolution"), 3)
         # 실질 추론(ra_lower)만 모델이 분류한다. 예전에 미분류였던 것은 쟁점 관계 RA 였다.
         self.assertIsNone(keys.get("unclassified"))
@@ -232,7 +238,10 @@ class StagesTest(unittest.TestCase):
         by_role: dict[str, list[dict]] = {}
         for ra in (n for n in out["AIF"]["nodes"] if n["type"] == "RA"):
             by_role.setdefault(self._ra_role(out, ra), []).append(ra["schemeApplication"])
-        self.assertEqual([a["schemeKey"] for a in by_role["ra_claim"]], ["issue_aggregation"] * 3)
+        # 쟁점 종합 RA 는 쟁점 전부를 전제로 받는 하나뿐이다.
+        self.assertEqual([a["schemeKey"] for a in by_role["ra_claim"]], ["issue_aggregation"])
+        self.assertEqual([b["roleId"] for b in by_role["ra_claim"][0]["premiseBindings"]], ["issueFinding"])
+        self.assertEqual(len(by_role["ra_claim"][0]["premiseBindings"][0]["nodeIds"]), 3)
         self.assertEqual([a["schemeKey"] for a in by_role["ra_upper"]], ["issue_resolution"] * 3)
         # 모델이 침묵한 실질 추론만 미분류로 남는다.
         self.assertEqual([a["schemeKey"] for a in by_role["ra_lower"]], ["unclassified"] * 3)
