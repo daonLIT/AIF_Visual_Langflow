@@ -5,7 +5,7 @@ import re
 
 import httpx
 from lfx.custom import Component
-from lfx.io import DropdownInput, FloatInput, IntInput, MessageTextInput, MultilineInput, Output, StrInput
+from lfx.io import BoolInput, DropdownInput, FloatInput, IntInput, MessageTextInput, MultilineInput, Output, StrInput
 from lfx.schema.message import Message
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
@@ -57,12 +57,19 @@ class SchemeAssigner(Component):
         DropdownInput(
             name="model_name",
             display_name="Model Name",
-            options=["gemma4:e4b-it-qat", "solar:10.7b", "qwen2.5:7b-instruct", "qwen2.5:14b-instruct"],
-            value="gemma4:e4b-it-qat",
+            options=["qwen36-27b-q8-ctx32k", "qwen36-27b-q8-ctx32k-np", "gemma4-e4b-ctx32k", "gemma4:e4b-it-qat", "qwen2.5:14b-instruct"],
+            value="qwen36-27b-q8-ctx32k",
             combobox=True,
         ),
+        BoolInput(
+            name="think",
+            display_name="Thinking",
+            value=False,
+            info="추론 모델의 사고 과정을 켠다. 답의 JSON 은 그대로지만 생성이 10배 이상 느려진다.",
+            advanced=True,
+        ),
         FloatInput(name="temperature", display_name="Temperature", value=0.1),
-        IntInput(name="num_ctx", display_name="Context Window Size", value=16384),
+        IntInput(name="num_ctx", display_name="Context Window Size", value=32768),
         IntInput(name="timeout", display_name="Timeout per call (s)", value=600, info="0 = no limit"),
         IntInput(name="retries", display_name="Retries on invalid answer", value=1, advanced=True),
     ]
@@ -310,6 +317,7 @@ class SchemeAssigner(Component):
                 "messages": messages,
                 "format": "json",
                 "stream": False,
+                "think": bool(getattr(self, "think", False)),
                 "options": {"temperature": float(self.temperature or 0), "num_ctx": int(self.num_ctx or 2048)},
             },
             timeout=None if timeout <= 0 else float(timeout),

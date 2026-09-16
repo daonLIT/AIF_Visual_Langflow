@@ -327,6 +327,19 @@ def make_edge(nodes: dict, source_id: str, output_name: str, target_id: str, fie
     }
 
 
+def apply_model_settings(template: dict, num_ctx: int, think: bool | None = None) -> None:
+    """LLM 을 부르는 노드에 모델·주소·컨텍스트를 박는다. 없는 필드는 건너뛴다(노드마다 입력이 다르다)."""
+    values = {"base_url": OLLAMA_BASE_URL, "model_name": MODEL_NAME, "temperature": TEMPERATURE, "num_ctx": num_ctx}
+    if think is not None:
+        values["think"] = think
+    for field, value in values.items():
+        spec = template.get(field)
+        if isinstance(spec, dict):
+            spec["value"] = value
+    if isinstance(template.get("model_name"), dict):
+        template["model_name"]["options"] = list(MODEL_OPTIONS)
+
+
 def custom_node(node_id: str, frontend_node: dict, position: tuple[int, int], display_name: str, selected_output: str | None) -> dict:
     node = copy.deepcopy(frontend_node)
     node.setdefault("lf_version", "1.11.0")
@@ -361,6 +374,30 @@ CUSTOM = {
     "validator": ("result_validator.py", VALIDATOR_ID, "7. AIF Result Validator", (3580, 300), "final_graph"),
 }
 PROMPTS = {"selector": SELECTOR_PROMPT, "extractor": BRANCH_PROMPT, "summarizer": SUMMARY_PROMPT, "assigner": SCHEME_PROMPT}
+
+# ---- 모델 설정 (LLM 단계 전체에 적용) ----
+# 예전에는 v9 flow 의 Main Claim LLM 노드 값을 그대로 베꼈고 num_ctx 는 아예 옮기지 않아,
+# 어떤 모델/컨텍스트로 돌았는지가 flow 파일 안에만 남았다. 여기로 모아 커밋에 남게 한다.
+#
+# 추론은 서버(spark-a164, 210.115.229.70)의 Ollama 로 하고, SSH 터널로 이 PC 의 localhost 에 붙인다.
+#   ssh -N -L 11434:localhost:11434 litailab01@210.115.229.70
+# 터널을 쓰므로 base_url 은 localhost 그대로다(서버 Ollama 를 공용망에 열지 않는다).
+OLLAMA_BASE_URL = "http://localhost:11434"
+# 서버에 올라간 27.8B Q8_0 빌드. 원래 컨텍스트는 262144 이고 Modelfile 이 32768 로 잡아 두었다.
+# (-np 변형은 TEMPLATE 이 {{ .Prompt }} 인 raw 빌드라 /api/chat 에는 맞지 않는다.)
+MODEL_NAME = "qwen36-27b-q8-ctx32k"
+TEMPERATURE = 0.1
+# 단계별 컨텍스트 창. 판결문 전문이 들어가는 단계는 32k 로 잡는다.
+# 16384 로는 최장 판결문(20,115자)의 쟁점 선택이 빈 응답으로 실패했다(prod-47991b91).
+# 요약 단계만 노드 본문 하나씩 처리하므로 작게 둔다.
+NUM_CTX = {"claim": 32768, "selector": 32768, "extractor": 32768, "summarizer": 8192, "assigner": 32768}
+# 추론 모델의 사고 과정. 답의 JSON 형식은 그대로지만(생각은 thinking 필드로 빠진다) 생성이 크게 느려진다.
+# 10,531자 판결문 1회 호출로 잰 값: 켬 146초 / 끔 10초.
+# 기본은 꺼 둔다. 쟁점 선택 정확도를 올리려면 "selector" 만 켜서 재평가로 비교하는 편이 낫다.
+# (Main Claim 은 Langflow 내장 Ollama 컴포넌트라 이 옵션이 없어 항상 켜진 채로 돈다.)
+THINK = {"selector": False, "extractor": False, "summarizer": False, "assigner": False}
+# 파이프라인 편집기 드롭다운에 함께 보일 후보 (combobox 라 직접 입력도 된다).
+MODEL_OPTIONS = [MODEL_NAME, "qwen36-27b-q8-ctx32k-np", "gemma4-e4b-ctx32k", "gemma4:e4b-it-qat", "qwen2.5:14b-instruct"]
 
 
 def main() -> None:
@@ -411,18 +448,15 @@ def main() -> None:
     nodes[CLAIM_PROMPT_ID] = claim_node
     claim_llm = copy.deepcopy(v9[CLAIM_LLM_ID])
     claim_llm["position"] = {"x": 1180, "y": 0}
+    apply_model_settings(claim_llm["data"]["node"]["template"], NUM_CTX["claim"])
     nodes[CLAIM_LLM_ID] = claim_llm
 
-    llm_template = v9[CLAIM_LLM_ID]["data"]["node"]["template"]
     for key, (_file, node_id, display, position, selected) in CUSTOM.items():
         node = custom_node(node_id, built["components"][key], position, display, selected)
         template = node["data"]["node"]["template"]
         if key in PROMPTS:
             template["prompt_template"]["value"] = PROMPTS[key]
-            template["base_url"]["value"] = llm_template["base_url"]["value"]
-            template["model_name"]["value"] = llm_template["model_name"]["value"]
-            template["model_name"]["options"] = llm_template["model_name"].get("options") or template["model_name"].get("options")
-            template["temperature"]["value"] = llm_template["temperature"]["value"]
+            apply_model_settings(template, NUM_CTX[key], THINK[key])
         nodes[node_id] = node
 
     output_node = copy.deepcopy(v9[OUTPUT_ID])

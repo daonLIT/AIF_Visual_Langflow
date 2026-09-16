@@ -46,6 +46,7 @@ def install() -> None:
         "IntInput",
         "FloatInput",
         "DropdownInput",
+        "BoolInput",
         "Output",
     ):
         setattr(io, name, _input)
