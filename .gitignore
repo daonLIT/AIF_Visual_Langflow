@@ -27,3 +27,5 @@ langflow/original_langflow_260904h.json
 backend/data/captures/
 
 test_outputs/
+judgment/
+eval/
