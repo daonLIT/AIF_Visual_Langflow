@@ -19,14 +19,25 @@ _ALIAS_BARE = re.compile(rf"({_ALIAS_LIST})")
 _ALIAS_TOKEN = re.compile(_ALIAS)
 RESERVED = ("unclassified", "custom")
 CQ_STATUSES = ("open", "satisfied", "challenged")
+# 쟁점 노드에 닿는 RA 는 실질 추론이 아니라 그래프의 구조 관계다. 모델에게 묻지 않고 구조로 정한다.
+# (묻게 두면 아래 추론을 다시 서술하거나 미분류로 떨어진다.)
+ISSUE_RESOLUTION = "issue_resolution"
+ISSUE_AGGREGATION = "issue_aggregation"
+STRUCTURAL_ROLES = {ISSUE_RESOLUTION: "finding", ISSUE_AGGREGATION: "issueFinding"}
+STRUCTURAL_RATIONALES = {
+    ISSUE_RESOLUTION: "쟁점을 결론으로 두는 연결이므로 쟁점 판단 관계로 둔다. 실질 추론은 이 아래 RA 가 담는다.",
+    ISSUE_AGGREGATION: "쟁점별 판단을 종국 판단으로 잇는 연결이므로 쟁점 종합 관계로 둔다.",
+}
 
 
 class SchemeAssigner(Component):
     display_name = "RA Scheme Assigner"
     description = (
-        "RA scheme assignment stage. For every RA of the built graph it classifies the inference with one scheme key "
-        "from the allowed Walton scheme catalog (or 'unclassified' when none fits), based on the full premise texts, "
-        "the conclusion text and their evidence quotes - not on summaries. Validates keys, roles and premise "
+        "RA scheme assignment stage. RAs that touch an ISSUE node are graph structure, not substantive inference, so "
+        "they are assigned from the structure ('issue_resolution' when the ISSUE is the conclusion, 'issue_aggregation' "
+        "when ISSUEs are the premises) and are never sent to the model. Every other RA is classified with one scheme "
+        "key from the allowed Walton scheme catalog (or 'unclassified' when none fits), based on the full premise "
+        "texts, the conclusion text and their evidence quotes - not on summaries. Validates keys, roles and premise "
         "references with a limited retry; invalid parts are recorded as errors and never invented."
     )
     icon = "Workflow"
@@ -91,6 +102,24 @@ class SchemeAssigner(Component):
         return catalog
 
     @staticmethod
+    def selectable_catalog_text(text: str) -> str:
+        """모델에게 보여줄 카탈로그. 구조로 정해지는 쟁점 관계 scheme 은 고르지 못하도록 뺀다."""
+        kept = []
+        for line in str(text or "").splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                item = json.loads(stripped, strict=False)
+            except ValueError:
+                kept.append(line)
+                continue
+            if isinstance(item, dict) and item.get("schemeKey") in STRUCTURAL_ROLES:
+                continue
+            kept.append(line)
+        return "\n".join(kept)
+
+    @staticmethod
     def groups(graph: dict) -> list[dict]:
         """쟁점 가지(instance)별로 RA 와 전제·결론 노드를 묶는다."""
         nodes = {n["nodeID"]: n for n in graph["AIF"]["nodes"]}
@@ -113,6 +142,43 @@ class SchemeAssigner(Component):
                 }
             )
         return [{"instanceId": key, "items": items} for key, items in grouped.items()]
+
+    @staticmethod
+    def structural_key(entry: dict) -> str | None:
+        """쟁점 노드에 닿는 RA 인지 구조로 판별한다. 아니면 None (모델이 분류한다)."""
+        if any(node.get("type") == "ISSUE" for node in entry["conclusions"]):
+            return ISSUE_RESOLUTION
+        if any(node.get("type") == "ISSUE" for node in entry["premises"]):
+            return ISSUE_AGGREGATION
+        return None
+
+    @staticmethod
+    def structural_application(entry: dict, key: str, catalog: dict[str, dict]) -> tuple[dict, list[str]]:
+        """구조로 정해지는 RA 의 schemeApplication. 모델을 부르지 않으므로 지어낸 설명이 들어가지 않는다."""
+        errors: list[str] = []
+        if key not in catalog:
+            errors.append(f"scheme_key {key!r} is not in the catalog; the catalog must define the issue relation schemes")
+            key = "unclassified"
+        role = STRUCTURAL_ROLES.get(key)
+        node_ids = [p["nodeID"] for p in entry["premises"]]
+        return (
+            {
+                "schemeKey": key,
+                "status": "suggested",
+                "origin": "ai",
+                "rationale": STRUCTURAL_RATIONALES.get(key, ""),
+                "premiseBindings": [{"roleId": role, "nodeIds": node_ids}] if role and node_ids else [],
+                "conclusionNodeIds": [c["nodeID"] for c in entry["conclusions"]],
+                # 비판적 질문은 사람이 검토할 몫이라 열어 둔다.
+                "criticalQuestionResponses": [
+                    {"questionId": q["id"], "status": "open", "answer": ""} for q in catalog.get(key, {}).get("criticalQuestions", [])
+                ],
+                "notes": "",
+                "customSchemeName": None,
+                "alternatives": [],
+            },
+            errors,
+        )
 
     @staticmethod
     def strip_aliases(text, known: set[str]) -> str:
@@ -161,7 +227,11 @@ class SchemeAssigner(Component):
         errors: list[str] = []
         known = known_aliases if known_aliases is not None else set(alias["premises"])
         key = str(raw.get("scheme_key") or "").strip()
-        if key not in catalog and key not in RESERVED:
+        if key in STRUCTURAL_ROLES:
+            # 쟁점 관계 scheme 은 구조로만 정한다. 모델이 고르면 받지 않는다.
+            errors.append(f"scheme_key {key!r} is assigned by graph structure only and cannot be chosen")
+            key = "unclassified"
+        elif key not in catalog and key not in RESERVED:
             errors.append(f"scheme_key {key!r} is not allowed")
             key = "unclassified"
         roles = {r["roleId"] for r in catalog[key]["premiseRoles"]} if key in catalog else set()
@@ -249,8 +319,23 @@ class SchemeAssigner(Component):
         return (response.json().get("message") or {}).get("content") or ""
 
     def assign_group(self, group: dict, catalog: dict[str, dict], catalog_text: str, template: str, version) -> list[str]:
-        items, aliases = self.build_items(group)
-        prompt = template.replace("{scheme_catalog}", catalog_text).replace("{ra_items_json}", json.dumps(items, ensure_ascii=False, indent=2))
+        # 쟁점에 닿는 RA 는 구조로 정하고 모델에게 보내지 않는다.
+        structural = [(entry, key) for entry in group["items"] if (key := self.structural_key(entry))]
+        remaining = {"instanceId": group["instanceId"], "items": [entry for entry in group["items"] if not self.structural_key(entry)]}
+        report: list[str] = []
+        for entry, key in structural:
+            application, errors = self.structural_application(entry, key, catalog)
+            application["catalogVersion"] = version
+            if errors:
+                application["errors"] = errors
+                report.append(f"{entry['ra']['nodeID']}: " + "; ".join(errors))
+            entry["ra"]["schemeApplication"] = application
+        if not remaining["items"]:
+            return report
+
+        items, aliases = self.build_items(remaining)
+        selectable = self.selectable_catalog_text(catalog_text)
+        prompt = template.replace("{scheme_catalog}", selectable).replace("{ra_items_json}", json.dumps(items, ensure_ascii=False, indent=2))
         messages = []
         system = self._text(getattr(self, "system_message", ""))
         if system.strip():
@@ -287,7 +372,7 @@ class SchemeAssigner(Component):
                 {"role": "assistant", "content": content},
                 {"role": "user", "content": "Your previous answer had problems:\n- " + "\n- ".join(feedback) + "\nReturn corrected JSON only, one assignment per RA."},
             ]
-        report: list[str] = list(group_errors)
+        report.extend(group_errors)
         for alias, info in aliases.items():
             application, errors = results.get(
                 alias,

@@ -175,7 +175,12 @@ class StagesTest(unittest.TestCase):
                 app = node["schemeApplication"]
                 self.assertEqual((app["status"], app["origin"], app["catalogVersion"]), ("suggested", "ai", 3))
         keys = graph["meta"]["schemes"]["keys"]
-        self.assertEqual(keys.get("unclassified"), 1)
+        # 쟁점에 닿는 RA 는 구조로 정해지므로 모델의 답과 무관하게 항상 쟁점 관계 scheme 이다.
+        self.assertEqual(keys.get("issue_aggregation"), 3)
+        self.assertEqual(keys.get("issue_resolution"), 3)
+        # 실질 추론(ra_lower)만 모델이 분류한다. 예전에 미분류였던 것은 쟁점 관계 RA 였다.
+        self.assertIsNone(keys.get("unclassified"))
+        self.assertEqual(graph["meta"]["schemes"]["errors"], [])
 
     def test_summarizer_reports_missing_and_never_fills(self):
         graph = json.loads(
@@ -196,29 +201,98 @@ class StagesTest(unittest.TestCase):
         self.assertEqual(len(with_summary), 1)
         self.assertEqual(len(out["meta"]["summaries"]["missing"]), 5)
 
+    @staticmethod
+    def _ra_role(graph: dict, ra: dict) -> str:
+        """RA 가 그래프에서 어느 자리인지. ra_claim(쟁점→주장) · ra_upper(→쟁점) · ra_lower(실질 추론)."""
+        nodes = {n["nodeID"]: n for n in graph["AIF"]["nodes"]}
+        sources = {nodes[e["fromID"]]["type"] for e in graph["AIF"]["edges"] if e["toID"] == ra["nodeID"]}
+        targets = {nodes[e["toID"]]["type"] for e in graph["AIF"]["edges"] if e["fromID"] == ra["nodeID"]}
+        if "ISSUE" in sources:
+            return "ra_claim"
+        return "ra_upper" if "ISSUE" in targets else "ra_lower"
+
+    def test_issue_facing_ras_are_assigned_from_structure(self):
+        """쟁점에 닿는 RA 는 모델을 부르지 않고 구조로 정한다. 모델이 답을 안 줘도 미분류가 되지 않는다."""
+        graph = json.loads(run_pipeline(SAMPLE_TEXT))
+        for node in graph["AIF"]["nodes"]:
+            node.pop("schemeApplication", None)
+        splitter = Splitter(payload=Message(json.dumps({"judgment": "x", "scheme_catalog": [
+            {"schemeKey": "issue_resolution", "premiseRoles": [{"roleId": "finding"}], "criticalQuestions": [{"id": "CQ1"}, {"id": "CQ2"}]},
+            {"schemeKey": "issue_aggregation", "premiseRoles": [{"roleId": "issueFinding"}], "criticalQuestions": [{"id": "CQ1"}]},
+        ]})))
+
+        class Silent(Assigner):
+            def call_model(self, messages):
+                return json.dumps({"assignments": []})
+
+        out = json.loads(
+            Silent(graph_json=Message(json.dumps(graph, ensure_ascii=False)), scheme_catalog=splitter.build_scheme_catalog(),
+                   prompt_template="{scheme_catalog}{ra_items_json}", retries=0, **MODEL).assign().text
+        )
+        by_role: dict[str, list[dict]] = {}
+        for ra in (n for n in out["AIF"]["nodes"] if n["type"] == "RA"):
+            by_role.setdefault(self._ra_role(out, ra), []).append(ra["schemeApplication"])
+        self.assertEqual([a["schemeKey"] for a in by_role["ra_claim"]], ["issue_aggregation"] * 3)
+        self.assertEqual([a["schemeKey"] for a in by_role["ra_upper"]], ["issue_resolution"] * 3)
+        # 모델이 침묵한 실질 추론만 미분류로 남는다.
+        self.assertEqual([a["schemeKey"] for a in by_role["ra_lower"]], ["unclassified"] * 3)
+        upper = by_role["ra_upper"][0]
+        self.assertEqual([b["roleId"] for b in upper["premiseBindings"]], ["finding"])
+        self.assertEqual([r["questionId"] for r in upper["criticalQuestionResponses"]], ["CQ1", "CQ2"])
+        self.assertTrue(all(r["status"] == "open" and r["answer"] == "" for r in upper["criticalQuestionResponses"]))
+        self.assertNotIn("errors", upper)
+        self.assertTrue(upper["rationale"])
+        self.assertEqual(upper["alternatives"], [])
+
+    def test_structural_scheme_keys_cannot_be_chosen_by_the_model(self):
+        """모델이 쟁점 관계 key 를 답해도 받지 않는다 (구조로만 정해지는 key)."""
+        catalog = {"issue_resolution": {"premiseRoles": [{"roleId": "finding"}], "criticalQuestions": [{"id": "CQ1"}]}}
+        alias = {"ra": {"nodeID": "ra"}, "premises": {"N1": "a"}, "conclusions": ["c"]}
+        application, errors = Assigner.validate_assignment({"scheme_key": "issue_resolution"}, alias, catalog)
+        self.assertEqual(application["schemeKey"], "unclassified")
+        self.assertEqual(errors, ["scheme_key 'issue_resolution' is assigned by graph structure only and cannot be chosen"])
+
     def test_scheme_assigner_validation(self):
         graph = json.loads(run_pipeline(SAMPLE_TEXT))
         for node in graph["AIF"]["nodes"]:
             node.pop("schemeApplication", None)
-        bad = [
-            [
-                {"ra": "R1", "scheme_key": "made_up", "premise_bindings": [{"role_id": "x", "premises": ["N9"]}]},
-                {"ra": "R2", "scheme_key": "sign", "premise_bindings": [{"role_id": "specific", "premises": ["N2"]}],
-                 "critical_question_responses": [{"question_id": "CQ9", "status": "satisfied"}], "alternatives": [{"scheme_key": "nope"}]},
-            ]
-        ] * 6
-        splitter = Splitter(payload=Message(json.dumps({"judgment": "x", "scheme_catalog": [{"schemeKey": "sign", "premiseRoles": [{"roleId": "specific"}], "criticalQuestions": [{"id": "CQ1"}]}]})))
+        # 쟁점마다 그룹이 따로 돌고, 이제 그룹에 남는 RA 는 실질 추론 하나(R1)뿐이다.
+        # 그룹1: 끝까지 잘못된 답 / 그룹2: 올바른 key 에 잘못된 CQ·대안 / 그룹3: 답 없음
+        answers = [
+            [{"ra": "R1", "scheme_key": "made_up", "premise_bindings": [{"role_id": "x", "premises": ["N9"]}]}],
+            [{"ra": "R1", "scheme_key": "made_up", "premise_bindings": [{"role_id": "x", "premises": ["N9"]}]}],
+            [{"ra": "R1", "scheme_key": "sign", "premise_bindings": [{"role_id": "specific", "premises": ["N1"]}],
+              "critical_question_responses": [{"question_id": "CQ9", "status": "satisfied"}], "alternatives": [{"scheme_key": "nope"}]}],
+            [],
+            [],
+        ]
+        splitter = Splitter(payload=Message(json.dumps({"judgment": "x", "scheme_catalog": [
+            {"schemeKey": "sign", "premiseRoles": [{"roleId": "specific"}], "criticalQuestions": [{"id": "CQ1"}]},
+            {"schemeKey": "issue_resolution", "premiseRoles": [{"roleId": "finding"}], "criticalQuestions": [{"id": "CQ1"}]},
+            {"schemeKey": "issue_aggregation", "premiseRoles": [{"roleId": "issueFinding"}], "criticalQuestions": [{"id": "CQ1"}]},
+        ]})))
+        seen_catalogs = []
 
         class Fake(Assigner):
             def call_model(self, messages):
-                return json.dumps({"assignments": bad[0]})
+                seen_catalogs.append(messages[-1]["content"])
+                index = min(len(seen_catalogs) - 1, len(answers) - 1)
+                return json.dumps({"assignments": answers[index]})
 
         out = json.loads(
             Fake(graph_json=Message(json.dumps(graph, ensure_ascii=False)), scheme_catalog=splitter.build_scheme_catalog(),
                  prompt_template="{scheme_catalog}{ra_items_json}", retries=1, **MODEL).assign().text
         )
+        # 쟁점 관계 scheme 은 모델에게 보이지 않는다 (고를 수 없도록).
+        self.assertTrue(seen_catalogs)
+        for prompt in seen_catalogs:
+            self.assertNotIn('"schemeKey": "issue_resolution"', prompt)
+            self.assertNotIn('"schemeKey": "issue_aggregation"', prompt)
+        # 실질 추론 RA(쟁점 노드에 닿지 않는 것)만 모델의 답을 받는다.
         ras = [n for n in out["AIF"]["nodes"] if n["type"] == "RA"]
-        first, second, third = ras[0]["schemeApplication"], ras[1]["schemeApplication"], ras[2]["schemeApplication"]
+        inferences = [n for n in ras if self._ra_role(out, n) == "ra_lower"]
+        self.assertEqual([self._ra_role(out, n) for n in ras].count("ra_lower"), 3)
+        first, second, third = (n["schemeApplication"] for n in inferences)
         self.assertEqual(first["schemeKey"], "unclassified")
         self.assertTrue(first["errors"])
         self.assertEqual(second["schemeKey"], "sign")

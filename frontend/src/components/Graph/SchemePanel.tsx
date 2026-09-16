@@ -4,6 +4,7 @@ import type { ArgumentNodeType } from '../../types/argument';
 import {
   CQ_STATUS_LABEL,
   CUSTOM,
+  ISSUE_RELATION_GROUP,
   SCHEME_STATUS_LABEL,
   UNCLASSIFIED,
   confirmScheme,
@@ -96,7 +97,8 @@ function SchemeView({ application, original, premises, conclusions, onEdit, onSa
   return (
     <>
       <section className="node-detail-section">
-        <h3>Walton scheme</h3>
+        {/* 쟁점 구조 관계는 Walton 논증 도식이 아니므로 제목을 나눈다. */}
+        <h3>{definition?.group === ISSUE_RELATION_GROUP ? '쟁점 구조 관계' : 'Walton scheme'}</h3>
         <div className="scheme-title">
           <strong>{schemeFullName(application, catalog)}</strong>
           {definition ? <span className="node-detail-muted"> {definition.name}</span> : null}

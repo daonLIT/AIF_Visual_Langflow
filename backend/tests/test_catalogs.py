@@ -135,9 +135,9 @@ class CatalogServiceTest(unittest.TestCase):
         self.assertEqual(len(self.issues.sha256), 64)
 
     def test_scheme_catalog_is_the_user_selected_ten(self):
-        names = [s["name"] for s in self.schemes.data["schemes"]]
+        walton = [s["name"] for s in self.schemes.data["schemes"] if s["group"] != "쟁점 구조"]
         self.assertEqual(
-            sorted(names),
+            sorted(walton),
             sorted([
                 "Argument from Witness Testimony", "Argument from Evidence to a Hypothesis", "Argument from Sign",
                 "Argument from Inconsistent Commitment", "Argument from Alternatives", "Argument from Effect to Cause",
@@ -149,6 +149,17 @@ class CatalogServiceTest(unittest.TestCase):
         for scheme in self.schemes.data["schemes"]:
             self.assertIn(scheme["verification"], self.schemes.data["verificationLabels"], scheme["schemeKey"])
             self.assertTrue(scheme["sourceNote"] and scheme["criticalQuestions"], scheme["schemeKey"])
+
+    def test_issue_relation_schemes_are_project_defined(self):
+        """쟁점 구조 관계 scheme 2개. Walton 목록이 아니므로 출처 대조 대상이 아니고, 외부 ID 도 없다."""
+        structural = {s["schemeKey"]: s for s in self.schemes.data["schemes"] if s["group"] == "쟁점 구조"}
+        self.assertEqual(set(structural), {"issue_resolution", "issue_aggregation"})
+        for key, scheme in structural.items():
+            self.assertEqual(scheme["verification"], "project-defined", key)
+            self.assertIsNone(scheme["aifdbSchemeId"], key)
+            self.assertTrue(scheme["premiseRoles"] and scheme["conclusionRole"], key)
+        self.assertEqual(self.schemes.roles("issue_resolution"), {"finding"})
+        self.assertEqual(self.schemes.roles("issue_aggregation"), {"issueFinding"})
 
     def test_scheme_migrations_cover_all_v2_keys(self):
         # 대응표는 카탈로그와 함께 읽히며 검사를 통과해야 한다 (load 에서 CatalogError 가 나지 않음).

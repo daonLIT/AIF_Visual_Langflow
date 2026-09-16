@@ -1,14 +1,14 @@
 {
   "schemeCatalogVersion": 3,
   "status": "draft",
-  "reviewNote": "사용자가 지정한 Walton scheme 10개. 형식·비판적 질문은 아래 출처에서 옮기거나 정리했으며 번역은 구현자가 했다. verification 이 needs-book-check 인 scheme 은 공개 자료에서 원문을 찾지 못해 원서(Walton, Reed & Macagno 2008) 대조가 필요하다.",
+  "reviewNote": "사용자가 지정한 Walton scheme 10개와 프로젝트에서 정의한 쟁점 구조 관계 2개. Walton scheme 의 형식·비판적 질문은 아래 출처에서 옮기거나 정리했으며 번역은 구현자가 했다. verification 이 needs-book-check 인 scheme 은 공개 자료에서 원문을 찾지 못해 원서(Walton, Reed & Macagno 2008) 대조가 필요하다. verification 이 project-defined 인 항목은 Walton 목록에 없으며 출처 대조 대상이 아니다.",
   "sources": [
     "Walton, D., Reed, C., & Macagno, F. (2008). Argumentation Schemes. Cambridge University Press.",
     "https://github.com/hitz-zentroa/critical_questions_generation (scripts/utils/walton_plus.jsonl)",
     "https://github.com/carneades/carneades-4 (examples/AGs/YAML/walton.yml)",
     "https://github.com/webis-de/argmining25-argument-classification (argu_schemes_definitions/ethix_def)"
   ],
-  "note": "scheme 은 RA(추론)가 전제에서 결론을 끌어내는 방식이다. 쟁점 카탈로그와 일대일로 고정하지 않는다. 적절한 scheme 이 없으면 'unclassified', 목록 밖의 직접 작성 scheme 은 'custom' 을 쓴다.",
+  "note": "scheme 은 RA(추론)가 전제에서 결론을 끌어내는 방식이다. 쟁점 카탈로그와 일대일로 고정하지 않는다. 적절한 scheme 이 없으면 'unclassified', 목록 밖의 직접 작성 scheme 은 'custom' 을 쓴다. group 이 '쟁점 구조' 인 항목은 실질 추론이 아니라 쟁점 그래프의 구조 관계이며, 모델이 고르지 않고 그래프 구조에 따라 고정 배정된다.",
   "reservedKeys": {
     "unclassified": "미분류(적절한 scheme 없음)",
     "custom": "직접 작성(비표준)"
@@ -16,7 +16,8 @@
   "aifdbMappingNote": "aifdbSchemeId 는 AIFdb 등 외부 scheme ID 와의 검증된 대응이 있을 때만 채운다. 값이 없으면 AIF schemefulfillments 를 만들지 않는다.",
   "verificationLabels": {
     "source-checked": "공개 자료의 형식·비판적 질문과 대조함",
-    "needs-book-check": "원서 기준으로 구현자가 정리함 — 원서 대조 필요"
+    "needs-book-check": "원서 기준으로 구현자가 정리함 — 원서 대조 필요",
+    "project-defined": "프로젝트에서 정의 — Walton 목록에 없는 쟁점 그래프 구조 관계"
   },
   "schemes": [
     {
@@ -441,6 +442,78 @@
       ],
       "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 19번. carneades-4 walton.yml (Gordon·Walton) established_rule(규칙의 유효성은 가정)과 일치.",
       "verification": "source-checked",
+      "aifdbSchemeId": null
+    },
+    {
+      "schemeKey": "issue_resolution",
+      "name": "Issue Resolution",
+      "nameKo": "쟁점 판단에 의한 연결",
+      "group": "쟁점 구조",
+      "description": "상위 명제가 해당 쟁점에 대한 판단을 이룬다는 구조 관계. 증거에서 결론을 끌어내는 실질 추론이 아니라, 쟁점 노드와 그 판단을 잇는 연결이다.",
+      "premiseRoles": [
+        {
+          "roleId": "finding",
+          "label": "판단",
+          "template": "명제 A 는 쟁점 Q 에 대하여 내려진 판단이다."
+        }
+      ],
+      "conclusionRole": {
+        "roleId": "issue",
+        "label": "쟁점",
+        "template": "쟁점 Q 는 A 와 같이 판단된다."
+      },
+      "criticalQuestions": [
+        {
+          "id": "CQ1",
+          "text": "판단 A 는 쟁점 Q 가 묻는 범위 안에 있는가?"
+        },
+        {
+          "id": "CQ2",
+          "text": "쟁점 Q 에 대한 판단으로서 A 에 빠진 부분이 있는가?"
+        },
+        {
+          "id": "CQ3",
+          "text": "A 가 쟁점 Q 의 문장을 되풀이한 것에 그치지 않는가?"
+        }
+      ],
+      "sourceNote": "프로젝트 정의. Walton 논증 도식이 아니라 쟁점 그래프의 구조 관계다. 쟁점을 결론으로 두는 연결에 Walton scheme 을 배정하면 아래 추론을 다시 서술하거나 미분류로 떨어지는 문제가 있어 따로 두었다.",
+      "verification": "project-defined",
+      "aifdbSchemeId": null
+    },
+    {
+      "schemeKey": "issue_aggregation",
+      "name": "Issue Aggregation",
+      "nameKo": "쟁점 종합에 의한 연결",
+      "group": "쟁점 구조",
+      "description": "쟁점별 판단을 종합하여 종국 판단에 이른다는 구조 관계. 판결문의 '다음과 같은 사정들을 종합하여 보면' 에 해당하며, 쟁점 하나하나가 독립적으로 결론을 지지한다는 뜻이 아니다.",
+      "premiseRoles": [
+        {
+          "roleId": "issueFinding",
+          "label": "쟁점별 판단",
+          "template": "쟁점 Q1 … Qn 이 각각 판단되었다."
+        }
+      ],
+      "conclusionRole": {
+        "roleId": "mainClaim",
+        "label": "종국 판단",
+        "template": "이를 종합하면 주 주장 C 가 인정(배척)된다."
+      },
+      "criticalQuestions": [
+        {
+          "id": "CQ1",
+          "text": "종합에 필요한 쟁점이 빠지지 않았는가?"
+        },
+        {
+          "id": "CQ2",
+          "text": "어느 한 쟁점의 판단이 달라지면 종국 판단도 달라지는가?"
+        },
+        {
+          "id": "CQ3",
+          "text": "종국 판단과 어긋나는 쟁점 판단이 있는가?"
+        }
+      ],
+      "sourceNote": "프로젝트 정의. Walton 논증 도식이 아니라 쟁점 그래프의 구조 관계다. 쟁점별 판단을 모아 종국 판단에 잇는 연결로, 수렴(convergent) 관계를 한 RA 로 표현한다.",
+      "verification": "project-defined",
       "aifdbSchemeId": null
     }
   ]
