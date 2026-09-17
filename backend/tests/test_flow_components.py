@@ -47,11 +47,11 @@ def item(issue_id, reason="이유", text="쟁점: x", quote=None):
 class SelectorTest(unittest.TestCase):
     def test_valid_selection_one_to_max(self):
         """쟁점 수는 고정이 아니다. 1개부터 상한까지 그대로 받는다."""
-        for count in range(1, 6):
+        for count in range(1, 4):
             selector, calls = make_selector([{"selected_issues": [item(f"ISS-00{i}") for i in range(1, count + 1)]}])
             out = json.loads(selector.select().text)
             self.assertEqual((out["status"], len(out["selected"]), out["attempts"]), ("ok", count, 1))
-            self.assertIn("5|결론|", calls[0][-1]["content"])
+            self.assertIn("3|결론|", calls[0][-1]["content"])
 
     def test_same_ground_split_across_issues_is_rejected(self):
         """두 쟁점이 같은 대목을 근거로 들면 수를 채우려 쪼갠 것으로 보고 다시 묻는다."""
@@ -74,13 +74,13 @@ class SelectorTest(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
     def test_violations_retry_with_feedback_then_succeed(self):
-        bad = {"selected_issues": [item(f"ISS-00{i}") for i in range(1, 7)] + [item("ISS-001"), item("ISS-999")]}
+        bad = {"selected_issues": [item(f"ISS-00{i}") for i in range(1, 5)] + [item("ISS-001"), item("ISS-999")]}
         good = {"selected_issues": [item("ISS-001"), item("ISS-002")]}
         selector, calls = make_selector([bad, good])
         out = json.loads(selector.select().text)
         self.assertEqual((out["status"], out["attempts"]), ("ok", 2))
         feedback = calls[1][-1]["content"]
-        self.assertIn("at most 5", feedback)
+        self.assertIn("at most 3", feedback)
         self.assertIn("not in the issue catalog", feedback)
         self.assertIn("more than once", feedback)
 
@@ -118,10 +118,10 @@ class ExtractorTest(unittest.TestCase):
 
     def test_rejects_more_than_the_cap(self):
         # 상한까지는 그대로 처리하고, 넘으면 거절한다.
-        out = self.run_extractor({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 6)]}, {})
-        self.assertEqual(out["summary"]["selected"], 5)
+        out = self.run_extractor({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 4)]}, {})
+        self.assertEqual(out["summary"]["selected"], 3)
         with self.assertRaises(ValueError):
-            self.run_extractor({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 7)]}, {})
+            self.run_extractor({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 5)]}, {})
 
     def test_branch_ok_failed_and_warnings(self):
         out = self.run_extractor(
@@ -155,8 +155,8 @@ class BuilderTest(unittest.TestCase):
     def test_invalid_selection_is_reported(self):
         out = self.build({"status": "invalid", "selected": [], "errors": ["bad"]})
         self.assertEqual((out["status"], out["errors"]), ("invalid", ["bad"]))
-        self.assertEqual(self.build({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 6)]})["status"], "ok")
-        out = self.build({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 7)]})
+        self.assertEqual(self.build({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 4)]})["status"], "ok")
+        out = self.build({"status": "ok", "selected": [item(f"ISS-00{i}") for i in range(1, 5)]})
         self.assertEqual(out["status"], "invalid")
 
     def test_graph_with_failed_branch_keeps_issue(self):

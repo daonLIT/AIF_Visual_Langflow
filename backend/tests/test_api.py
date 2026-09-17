@@ -117,7 +117,7 @@ class CatalogApiTest(unittest.TestCase):
             record = wait_terminal(client, submit(client).json()["runId"])
             self.assertEqual(record["catalogs"]["issueCatalogVersion"], 1)
             self.assertEqual(record["catalogs"]["schemeCatalogVersion"], 3)
-            self.assertEqual(record["constraints"]["maxSelectedIssues"], 5)
+            self.assertEqual(record["constraints"]["maxSelectedIssues"], 3)
             self.assertTrue(record["pipeline"]["mock"])
             selection = record["result"]["summary"]["issueSelection"]
             self.assertEqual([s["issueId"] for s in selection["selected"]], ["ISS-007", "ISS-009", "ISS-028"])

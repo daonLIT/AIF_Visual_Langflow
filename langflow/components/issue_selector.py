@@ -9,16 +9,17 @@ from lfx.io import BoolInput, DropdownInput, FloatInput, IntInput, MessageTextIn
 from lfx.schema.message import Message
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
-# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 여유를 두어 5개까지 받고, 몇 개를 고를지는 판결문이 정한다.
-MAX_SELECTED = 5
+# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 상한 5에서는 4·5번째 쟁점의 적중이 낮아(정답 13건 1/12) 3으로 둔다.
+# 몇 개를 고를지는 판결문이 정하고 이 값은 천장일 뿐이다.
+MAX_SELECTED = 3
 
 
 class IssueSelector(Component):
     display_name = "Issue Selector"
     description = (
-        "Reads the whole judgment and automatically selects the detailed issues the court actually decided (at most 5) from the 52-item "
+        "Reads the whole judgment and automatically selects the detailed issues the court actually decided (at most 3) from the 52-item "
         "issue catalog, each with a selection reason and a verbatim evidence quote. Validates the answer "
-        "(at most 5, catalog IDs only, no duplicates, no two issues grounded in the same quote) with limited retries. Zero is allowed with a reason."
+        "(at most 3, catalog IDs only, no duplicates, no two issues grounded in the same quote) with limited retries. Zero is allowed with a reason."
     )
     icon = "ListChecks"
     name = "IssueSelector"

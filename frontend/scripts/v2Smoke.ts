@@ -169,7 +169,9 @@ const overflow = { ...issues[0], id: '99_x', issueRef: { issueId: 'ISS-999' } };
 check('상한 초과 감지', issueSelectionProblems([...upToCap, overflow]).some((p) => p.includes(`최대 ${MAX_SELECTED_ISSUES}개`)));
 check('편집 선택지: 다른 확정 쟁점과 같은 ID 금지', issueOptionState(imported, [], issues[1].id, 'ISS-007').disabled);
 check('편집 선택지: 자기 자리 교체는 허용', !issueOptionState(imported, [], issues[1].id, 'ISS-001').disabled);
-check('상한 안에서는 쟁점 수락 허용', !issueAcceptProblem(imported, '99_x', { type: 'ISSUE', text: 't', issueRef: { issueId: 'ISS-999' } }));
+// 샘플은 쟁점 3개라 상한이 3이면 이미 차 있다. 하나를 뺀 그래프에서 한 자리가 남는지 본다.
+const belowCap = { ...imported, nodes: imported.nodes.filter((n) => n.id !== issues[2].id) };
+check('상한 안에서는 쟁점 수락 허용', !issueAcceptProblem(belowCap, '99_x',{ type: 'ISSUE', text: 't', issueRef: { issueId: 'ISS-999' } }));
 check('상한을 넘는 쟁점 수락 차단', !!issueAcceptProblem({ ...imported, nodes: upToCap }, '99_x', { type: 'ISSUE', text: 't', issueRef: { issueId: 'ISS-999' } }));
 const graphCodes = (c: ArgumentCase) => validateCase(c).results.map((r) => r.code);
 check('검증 RULE_14 (error)', graphCodes({ ...imported, nodes: dupNodes }).includes('RULE_14_ISSUE_SELECTION') && validateCase({ ...imported, nodes: dupNodes }).errorCount > 0);

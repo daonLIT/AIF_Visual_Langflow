@@ -8,14 +8,15 @@ from lfx.io import MessageTextInput, Output
 from lfx.schema.message import Message
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.I | re.S)
-# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 여유를 두어 5개까지 받고, 몇 개를 고를지는 판결문이 정한다.
-MAX_SELECTED = 5
+# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 상한 5에서는 4·5번째 쟁점의 적중이 낮아(정답 13건 1/12) 3으로 둔다.
+# 몇 개를 고를지는 판결문이 정하고 이 값은 천장일 뿐이다.
+MAX_SELECTED = 3
 
 
 class TopDownAIFGraphBuilder(Component):
     display_name = "Top-Down AIF Graph Builder (v11)"
     description = (
-        "Deterministically builds AIF/OVA JSON from the main claim, at most 5 automatically selected catalog "
+        "Deterministically builds AIF/OVA JSON from the main claim, at most 3 automatically selected catalog "
         "issues and their extracted branches. Assigns node IDs and issue references. If no issue was selected it "
         "returns status no_issues without a graph; an invalid selection returns status invalid with errors."
     )

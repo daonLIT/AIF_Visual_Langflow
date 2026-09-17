@@ -11,7 +11,7 @@ export type SchemeOrigin = 'ai' | 'human';
 export const UNCLASSIFIED = 'unclassified';
 export const CUSTOM = 'custom';
 /** 확정 그래프의 세부 쟁점 수 상한. 몇 개를 고를지는 판결문이 정하고 이 값은 천장일 뿐이다(정답 범위 1~4). */
-export const MAX_SELECTED_ISSUES = 5;
+export const MAX_SELECTED_ISSUES = 3;
 /** 카탈로그의 이 group 은 Walton 논증 도식이 아니라 쟁점 그래프의 구조 관계다(쟁점 판단·쟁점 종합). */
 export const ISSUE_RELATION_GROUP = '쟁점 구조';
 

@@ -117,7 +117,8 @@ from a fixed catalog of 52 detailed issues.
    way to the Main Claim. A separate ground is one the court argues on its own footing - typically its own
    numbered item or its own 판단 paragraph. Two statements about the same ground are ONE ground.
 3. The number of grounds you found decides how many items you select. It is NOT a target to fill.
-   - Most judgments have 2 or 3 separate grounds. Some have 1. Some have 4.
+   - Most judgments have 2 or 3 separate grounds. Some have 1.
+   - If you found more separate grounds than {max_issues}, keep only the {max_issues} most central to the court's conclusion.
    - {max_issues} is a hard ceiling, not a goal. Selecting fewer is the normal outcome, never a failure.
    - If you are about to select the ceiling number, re-check that each one really stands on its own footing.
 4. THEN map each ground to the single catalog item that best describes it.
@@ -492,9 +493,9 @@ def main() -> None:
     flow["data"]["edges"] = edges
     flow["id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, "aif-visual-langflow/v11-top3-issues"))
     flow["name"] = "TopDown_Judgment_to_AIF_v11_Top3Issues"
-    # 이름·ID 는 flow 의 uuid5 시드라 바꾸지 않는다 ("top3" 는 이제 최대 5개의 옛 이름이다).
+    # 이름·ID 는 flow 의 uuid5 시드라 바꾸지 않는다 ("top3" 는 상한 3개일 때 붙은 이름이다).
     flow["description"] = (
-        "v11: main claim → automatic selection of the detailed issues the court actually decided, at most 5, from the "
+        "v11: main claim → automatic selection of the detailed issues the court actually decided, at most 3, from the "
         "52-item catalog (reasons, evidence, validation) → per-issue I-node extraction → graph builder (issues converge "
         "into one aggregation RA) → I-node summary stage → RA scheme assignment stage (issue relations from structure, "
         "Walton schemes for substantive inferences) → result validation → final AIF JSON."

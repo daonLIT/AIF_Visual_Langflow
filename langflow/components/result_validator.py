@@ -8,8 +8,9 @@ from lfx.io import MessageTextInput, Output
 from lfx.schema.message import Message
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
-# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 여유를 두어 5개까지 받고, 몇 개를 고를지는 판결문이 정한다.
-MAX_SELECTED = 5
+# 정답 그래프의 쟁점 수는 1~4개(평균 2.65)다. 상한 5에서는 4·5번째 쟁점의 적중이 낮아(정답 13건 1/12) 3으로 둔다.
+# 몇 개를 고를지는 판결문이 정하고 이 값은 천장일 뿐이다.
+MAX_SELECTED = 3
 RESERVED = ("unclassified", "custom")
 
 
@@ -24,7 +25,7 @@ def text_hash(text: str) -> str:
 class ResultValidator(Component):
     display_name = "AIF Result Validator"
     description = (
-        "Validation stage before the final output: graph structure, at most 5 distinct catalog issues, issue IDs "
+        "Validation stage before the final output: graph structure, at most 3 distinct catalog issues, issue IDs "
         "in the catalog, scheme keys, premise/conclusion references of every scheme application and summary hashes. "
         "Structural or catalog violations set status to invalid with the reasons; nothing is silently repaired."
     )

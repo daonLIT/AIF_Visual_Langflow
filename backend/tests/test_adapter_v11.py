@@ -57,9 +57,10 @@ class OutcomeTest(unittest.TestCase):
             too_many["AIF"]["nodes"].append(
                 {"nodeID": f"9{i}_20260903190000", "text": f"쟁점: 추가 {i}", "type": "ISSUE", "issueRef": {"issueId": f"ISS-00{i + 4}"}}
             )
+        # 상한까지 채운 그래프는 통과한다.
         within_cap = copy.deepcopy(graph)
-        within_cap["AIF"]["nodes"].append({"nodeID": "98_20260903190000", "text": "쟁점: 넷째", "type": "ISSUE", "issueRef": {"issueId": "ISS-004"}})
-        # 3개를 넘어도 상한 안이면 통과한다.
+        for i in range(MAX_SELECTED_ISSUES - len(issues)):
+            within_cap["AIF"]["nodes"].append({"nodeID": f"8{i}_20260903190000", "text": f"쟁점: 채움 {i}", "type": "ISSUE", "issueRef": {"issueId": f"ISS-00{i + 4}"}})
         build(within_cap)
         for broken, needle in ((duplicate, "중복"), (unknown, "ISS-999"), (too_many, f"최대 {MAX_SELECTED_ISSUES}개")):
             with self.assertRaises(InvalidResultError) as ctx:
