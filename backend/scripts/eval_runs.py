@@ -4,6 +4,12 @@
 실행 (backend 폴더에서, 서버가 켜져 있어야 함):
     python scripts/eval_runs.py --label prod-2026-09-15
     python scripts/eval_runs.py --label test --flow-id <작업용 flow ID> --limit 2
+    python scripts/eval_runs.py --label all-2026-09-16 --set all
+    python scripts/eval_runs.py --label short100 --set all --max-length 5000 --limit 100
+
+평가 세트 (all): gold21 을 먼저 돌리고, judgment/ 의 나머지를 고정 시드로 섞은 순서로 이어서 돌린다.
+중간에 끊겨도 앞부분이 길이에 치우치지 않은 표본이 되게 하려는 것이다.
+--max-length 를 주면 그보다 긴 판결문은 두 세트 모두에서 뺀 뒤 --limit 을 적용한다.
 
 평가 세트 (gold21): eval/ 에 정답 그래프가 있는 사건 전부 + judgment/ 에서 가장 긴 판결문 1건(시간·컨텍스트 한계 확인용).
 사건 ID 목록은 저장소에 두지 않고 실행할 때 두 폴더에서 만든다 (둘 다 .gitignore 대상).
@@ -19,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import time
 from pathlib import Path
@@ -52,9 +59,38 @@ def gold21() -> list[dict]:
     return cases
 
 
+def all_cases() -> list[dict]:
+    cases = gold21()
+    seen = {c["id"] for c in cases}
+    rest = [load_case(p) for p in sorted(JUDGMENTS.glob("*.json"))]
+    rest = [c for c in rest if c["id"] not in seen]
+    random.Random(0).shuffle(rest)
+    return cases + rest
+
+
+def wait_reachable(url: str, what: str, interval: float = 60.0) -> None:
+    """밤새 돌릴 때 SSH 터널·중계 서버가 잠깐 끊겨도 실패를 쌓지 않고 돌아올 때까지 기다린다."""
+    announced = False
+    while True:
+        try:
+            httpx.get(url, timeout=10)
+            if announced:
+                print(f"{time.strftime('%H:%M:%S')} {what} 복구", flush=True)
+            return
+        except httpx.TransportError:
+            if not announced:
+                print(f"{time.strftime('%H:%M:%S')} {what} 응답 없음 — {interval:.0f}초 간격으로 기다림 ({url})", flush=True)
+                announced = True
+            time.sleep(interval)
+
+
 def wait_run(client: httpx.Client, run_id: str, poll: float) -> dict:
     while True:
-        record = client.get(f"/api/analysis-runs/{run_id}").json()
+        try:
+            record = client.get(f"/api/analysis-runs/{run_id}").json()
+        except httpx.TransportError:
+            wait_reachable(str(client.base_url) + "/api/pipelines", "중계 서버")
+            continue
         if record.get("status") not in ("queued", "running"):
             return record
         time.sleep(poll)
@@ -108,9 +144,16 @@ def main() -> None:
     parser.add_argument("--flow-id", default=None, help="생략하면 서버의 분석 flow")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--poll", type=float, default=20.0)
+    parser.add_argument("--set", choices=["gold21", "all"], default="gold21")
+    parser.add_argument("--max-length", type=int, default=None, help="이 글자 수보다 긴 판결문은 뺀다")
+    parser.add_argument("--ollama-url", default="http://localhost:11434", help="실행 전 응답을 확인할 Ollama 주소 (SSH 터널)")
+    parser.add_argument("--retries", type=int, default=2, help="실행 실패 직후 Ollama 가 끊겨 있었으면 복구 뒤 다시 시도하는 횟수")
     args = parser.parse_args()
 
-    cases = gold21()[: args.limit]
+    cases = all_cases() if args.set == "all" else gold21()
+    if args.max_length:
+        cases = [c for c in cases if len(c["judgment"]) <= args.max_length]
+    cases = cases[: args.limit]
     out = OUTPUT_ROOT / args.label
     (out / "runs").mkdir(parents=True, exist_ok=True)
     issue_catalog = json.loads((BACKEND / "catalog" / "issue_catalog.json").read_text(encoding="utf-8"))
@@ -120,19 +163,33 @@ def main() -> None:
 
     client = httpx.Client(base_url=args.base_url, timeout=60)
     flow_id = args.flow_id or client.get("/api/pipelines").json().get("analysisFlowId")
-    meta = {"label": args.label, "flowId": flow_id, "startedAt": time.strftime("%Y-%m-%d %H:%M:%S"), "set": "gold21", "caseCount": len(cases)}
+    meta = {"label": args.label, "flowId": flow_id, "startedAt": time.strftime("%Y-%m-%d %H:%M:%S"), "set": args.set, "caseCount": len(cases)}
     rows: list[dict] = []
     for index, case in enumerate(cases, start=1):
         path = out / "runs" / f"{case['id']}.json"
         record = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-        if record is None or record.get("status") != "succeeded":
-            response = client.post(
-                "/api/analysis-runs",
-                json={"text": case["judgment"], "documentId": case["id"], "documentVersion": 1, "flowId": flow_id, "purpose": "analysis"},
-            )
-            response.raise_for_status()
-            record = wait_run(client, response.json()["runId"], args.poll)
+        attempt = 0
+        while record is None or record.get("status") != "succeeded":
+            wait_reachable(args.ollama_url + "/api/version", "Ollama")
+            wait_reachable(args.base_url + "/api/pipelines", "중계 서버")
+            try:
+                response = client.post(
+                    "/api/analysis-runs",
+                    json={"text": case["judgment"], "documentId": case["id"], "documentVersion": 1, "flowId": flow_id, "purpose": "analysis"},
+                )
+                response.raise_for_status()
+                record = wait_run(client, response.json()["runId"], args.poll)
+            except httpx.TransportError:
+                continue
             path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            if record.get("status") == "succeeded" or attempt >= args.retries:
+                break
+            try:
+                httpx.get(args.ollama_url + "/api/version", timeout=10)
+                break  # Ollama 는 살아 있었다 → 연결 문제가 아닌 실패이므로 재시도하지 않는다
+            except httpx.TransportError:
+                attempt += 1
+                print(f"{time.strftime('%H:%M:%S')} {case['id']} 실패 중 Ollama 끊김 → 복구 뒤 재시도 {attempt}/{args.retries}", flush=True)
         row = graph_metrics(record, issue_labels, scheme_roles)
         gold_path = find_gold(GOLD, case["id"])
         if gold_path:

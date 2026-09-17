@@ -1372,6 +1372,7 @@
                 "info": "Refer to https://ollama.com/library for more models.",
                 "name": "model_name",
                 "options": [
+                  "gemma4:26b",
                   "qwen36-27b-q8-ctx32k",
                   "qwen36-27b-q8-ctx32k-np",
                   "gemma4-e4b-ctx32k",
@@ -1391,7 +1392,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": true,
                 "type": "str",
-                "value": "qwen36-27b-q8-ctx32k"
+                "value": "gemma4:26b"
               },
               "num_ctx": {
                 "_input_type": "IntInput",
@@ -2105,6 +2106,7 @@
                 "tool_mode": false,
                 "trace_as_metadata": true,
                 "options": [
+                  "gemma4:26b",
                   "qwen36-27b-q8-ctx32k",
                   "qwen36-27b-q8-ctx32k-np",
                   "gemma4-e4b-ctx32k",
@@ -2120,7 +2122,7 @@
                 "placeholder": "",
                 "show": true,
                 "name": "model_name",
-                "value": "qwen36-27b-q8-ctx32k",
+                "value": "gemma4:26b",
                 "display_name": "Model Name",
                 "advanced": false,
                 "api_editable": false,
@@ -2479,6 +2481,7 @@
                 "tool_mode": false,
                 "trace_as_metadata": true,
                 "options": [
+                  "gemma4:26b",
                   "qwen36-27b-q8-ctx32k",
                   "qwen36-27b-q8-ctx32k-np",
                   "gemma4-e4b-ctx32k",
@@ -2494,7 +2497,7 @@
                 "placeholder": "",
                 "show": true,
                 "name": "model_name",
-                "value": "qwen36-27b-q8-ctx32k",
+                "value": "gemma4:26b",
                 "display_name": "Model Name",
                 "advanced": false,
                 "api_editable": false,
@@ -3070,6 +3073,7 @@
                 "tool_mode": false,
                 "trace_as_metadata": true,
                 "options": [
+                  "gemma4:26b",
                   "qwen36-27b-q8-ctx32k",
                   "qwen36-27b-q8-ctx32k-np",
                   "gemma4-e4b-ctx32k",
@@ -3085,7 +3089,7 @@
                 "placeholder": "",
                 "show": true,
                 "name": "model_name",
-                "value": "qwen36-27b-q8-ctx32k",
+                "value": "gemma4:26b",
                 "display_name": "Model Name",
                 "advanced": false,
                 "api_editable": false,
@@ -3417,6 +3421,7 @@
                 "tool_mode": false,
                 "trace_as_metadata": true,
                 "options": [
+                  "gemma4:26b",
                   "qwen36-27b-q8-ctx32k",
                   "qwen36-27b-q8-ctx32k-np",
                   "gemma4-e4b-ctx32k",
@@ -3432,7 +3437,7 @@
                 "placeholder": "",
                 "show": true,
                 "name": "model_name",
-                "value": "qwen36-27b-q8-ctx32k",
+                "value": "gemma4:26b",
                 "display_name": "Model Name",
                 "advanced": false,
                 "api_editable": false,

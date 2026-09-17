@@ -383,9 +383,10 @@ PROMPTS = {"selector": SELECTOR_PROMPT, "extractor": BRANCH_PROMPT, "summarizer"
 #   ssh -N -L 11434:localhost:11434 litailab01@210.115.229.70
 # 터널을 쓰므로 base_url 은 localhost 그대로다(서버 Ollama 를 공용망에 열지 않는다).
 OLLAMA_BASE_URL = "http://localhost:11434"
-# 서버에 올라간 27.8B Q8_0 빌드. 원래 컨텍스트는 262144 이고 Modelfile 이 32768 로 잡아 두었다.
-# (-np 변형은 TEMPLATE 이 {{ .Prompt }} 인 raw 빌드라 /api/chat 에는 맞지 않는다.)
-MODEL_NAME = "qwen36-27b-q8-ctx32k"
+# 서버에 올라간 Gemma 4 26B (25.8B Q4_K_M). 원래 컨텍스트는 262144 이고 num_ctx 는 아래 단계별 값으로 넘긴다.
+# 이전 기본값은 qwen36-27b-q8-ctx32k (27.8B Q8_0) 였다.
+# (qwen -np 변형은 TEMPLATE 이 {{ .Prompt }} 인 raw 빌드라 /api/chat 에는 맞지 않는다.)
+MODEL_NAME = "gemma4:26b"
 TEMPERATURE = 0.1
 # 단계별 컨텍스트 창. 판결문 전문이 들어가는 단계는 32k 로 잡는다.
 # 16384 로는 최장 판결문(20,115자)의 쟁점 선택이 빈 응답으로 실패했다(prod-47991b91).
@@ -397,7 +398,7 @@ NUM_CTX = {"claim": 32768, "selector": 32768, "extractor": 32768, "summarizer": 
 # (Main Claim 은 Langflow 내장 Ollama 컴포넌트라 이 옵션이 없어 항상 켜진 채로 돈다.)
 THINK = {"selector": False, "extractor": False, "summarizer": False, "assigner": False}
 # 파이프라인 편집기 드롭다운에 함께 보일 후보 (combobox 라 직접 입력도 된다).
-MODEL_OPTIONS = [MODEL_NAME, "qwen36-27b-q8-ctx32k-np", "gemma4-e4b-ctx32k", "gemma4:e4b-it-qat", "qwen2.5:14b-instruct"]
+MODEL_OPTIONS = [MODEL_NAME, "qwen36-27b-q8-ctx32k", "qwen36-27b-q8-ctx32k-np", "gemma4-e4b-ctx32k", "gemma4:e4b-it-qat", "qwen2.5:14b-instruct"]
 
 
 def main() -> None:
