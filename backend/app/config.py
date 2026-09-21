@@ -12,7 +12,8 @@ PROJECT_ROOT = BACKEND_ROOT.parent
 # 먼저 읽은 파일이 우선한다(이미 설정된 값은 덮어쓰지 않음). 셸 환경변수가 가장 우선.
 ENV_FILE_CANDIDATES = (BACKEND_ROOT / ".env", PROJECT_ROOT / ".env")
 
-LANGFLOW_MODES = ("mock", "live")
+# off: Langflow 없이 운영하는 중앙 서버(Desktop 게시·검토·저장만). 사이트 분석·요약·파이프라인 경로를 열지 않는다.
+LANGFLOW_MODES = ("mock", "live", "off")
 # off: 로컬 개발(인증 없음, 모든 권한). token: /api 요청마다 Bearer 토큰과 권한(scope)을 확인한다.
 AUTH_MODES = ("off", "token")
 
@@ -125,6 +126,8 @@ class Settings:
     cookie_secure: str = field(default_factory=lambda: _env("AIF_COOKIE_SECURE", "auto").strip().lower())
     # 게시 응답의 viewerUrl 을 만들 공개 사이트 주소 (예: https://aif.example.org). 비우면 viewerUrl 은 null.
     public_site_url: str = field(default_factory=lambda: _env("AIF_PUBLIC_SITE_URL", "").rstrip("/"))
+    # 빌드한 웹(frontend/dist)을 같은 출처에서 제공한다(운영: 웹 + /api 한 주소). 비우면 API 만.
+    web_dist: Path | None = field(default_factory=lambda: Path(_env("AIF_WEB_DIST")) if _env("AIF_WEB_DIST") else None)
     # 외부 결과 게시 요청 본문 상한(바이트)
     max_publish_bytes: int = field(default_factory=lambda: _env_int("AIF_MAX_PUBLISH_BYTES", 6_000_000))
 
@@ -155,6 +158,7 @@ class Settings:
             "timeoutSeconds": self.langflow_timeout_seconds,
             "maxConcurrency": self.max_concurrency,
             "authMode": self.auth_mode,
+            "webDist": bool(self.web_dist),
             "envFiles": [
                 {"path": item["path"], "exists": item["exists"], "keys": item["keys"]} for item in self.env_files
             ],

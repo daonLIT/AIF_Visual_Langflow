@@ -48,6 +48,8 @@ cd frontend
 npm run dev        # http://localhost:5173  (/api 는 Vite proxy 로 127.0.0.1:8000 에 전달)
 ```
 
+운영 서버 배포·백업·Desktop 설치 파일은 `docs/deploy.md` 를 보세요.
+
 논증 검토 화면(원문·그래프·제안 검토)은 `packages/aif-workbench` 에 있고, 독립 웹(`frontend`)과 Langflow 포크가 같은 소스를 씁니다.
 `frontend` 에는 화면 탭과 파이프라인 편집기만 남아 있습니다. Langflow 쪽은 `integrations/langflow/README.md` 를 보세요.
 

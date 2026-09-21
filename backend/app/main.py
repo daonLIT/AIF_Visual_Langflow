@@ -14,9 +14,11 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
+from starlette.routing import Mount
+from starlette.staticfiles import StaticFiles
 
 from .auth import LoginLimiter, SessionManager, UserStore, make_auth_middleware
-from .config import Settings, load_settings
+from .config import ConfigError, Settings, load_settings
 from .i18n import parse_accept_language, reset_language, set_language
 from .routes.api import routes as api_routes
 from .routes.auth import routes as auth_routes
@@ -31,6 +33,28 @@ from .services.run_manager import RunManager
 from .storage import Database
 
 logger = logging.getLogger("annotation.main")
+
+
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    # 웹은 같은 출처의 스크립트·스타일·API 만 쓴다. 이미지·폰트는 data: 도 허용(React Flow·아이콘).
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+        "font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    ),
+}
+
+
+async def security_headers_middleware(request, call_next):
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    if request.url.path.startswith("/api/"):
+        # 원문·그래프가 담긴 응답은 공유 캐시에 남기지 않는다.
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 
 async def language_middleware(request, call_next):
@@ -96,10 +120,25 @@ def create_app(
         if owns_database:
             database.close()
 
+    if settings.langflow_mode == "off":
+        # 중앙 서버만 운영: 사이트에서 Langflow 를 부르는 경로(분석 시작·취소·요약·파이프라인)는 열지 않는다.
+        # 실행 기록 조회(GET)는 Desktop 이 게시한 실행을 보여 주므로 남긴다. mock 결과가 운영 데이터에 섞이지 않게 하려는 것이다.
+        closed = {("/api/analysis-runs", "POST"), ("/api/analysis-runs/{run_id}/cancel", "POST"), ("/api/summaries", "POST")}
+        kept = [route for route in api_routes if not any((route.path, method) in closed for method in (route.methods or []))]
+        routes = [*kept, *integration_routes, *auth_routes]
+    else:
+        routes = [*api_routes, *pipeline_routes, *integration_routes, *auth_routes]
+    if settings.web_dist is not None:
+        if not (settings.web_dist / "index.html").exists():
+            raise ConfigError(f"AIF_WEB_DIST 에 index.html 이 없습니다: {settings.web_dist}")
+        # /api 경로가 먼저 맞고, 나머지는 빌드한 웹(단일 페이지: / 와 ?projectId=)이다.
+        routes.append(Mount("/", app=StaticFiles(directory=settings.web_dist, html=True), name="web"))
+
     app = Starlette(
-        routes=[*api_routes, *pipeline_routes, *integration_routes, *auth_routes],
+        routes=routes,
         lifespan=lifespan,
         middleware=[
+            Middleware(BaseHTTPMiddleware, dispatch=security_headers_middleware),
             # 개발 중 Vite dev 서버(다른 포트)에서 호출할 수 있게 허용. 배포 시엔 같은 출처를 권장.
             Middleware(
                 CORSMiddleware,

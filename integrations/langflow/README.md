@@ -8,7 +8,8 @@ integrations/langflow/
   build-fork.ps1       고정 태그 체크아웃 → 패치 적용 → npm ci → 빌드
   start-langflow-p0.ps1 포크 빌드를 화면으로 제공하는 Langflow 서버 (별도 포트·설정·DB)
   start-central-dev.ps1 로컬 통합 테스트용 중앙 AIF 서버 (토큰 인증, .profile/central 의 DB·토큰)
-  desktop-shell/       전용 Desktop 셸 (Electron, 별도 앱 ID·데이터 경로, 연결 설정·중계·outbox)
+  desktop-shell/       전용 Desktop 셸 (Electron, 별도 앱 ID·데이터 경로, 연결 설정·중계·outbox, 설치형 런타임·설치 파일)
+  runtime/             설치본이 처음 실행 때 설치하는 Langflow 1.11.0 환경 잠금 파일(해시 고정)
   .profile/            실험용 Langflow 설정·DB·로그 (git 제외)
 vendor/langflow-fork/  포크 체크아웃 (git 제외, build-fork.ps1 이 만든다)
 ```
@@ -194,6 +195,71 @@ Electron 셸 창 (Langflow 포크 화면)
 - 사람이 직접 하는 드래그·줌·키보드 undo/redo 는 자동 점검에 넣지 않았다(점검은 버튼·선택 범위를 스크립트로 조작).
 - 로그인 잠금은 서버 프로세스 메모리 기준이다. 여러 프로세스로 운영하면 공유 저장소가 필요하다.
 
+## P4 결과 (2026-09-21): 배포와 회귀 검증
+
+운영·설치 절차는 `docs/deploy.md` 에 모았다.
+
+### 중앙 서버
+
+- **같은 출처 제공:** `AIF_WEB_DIST` 를 주면 백엔드가 빌드한 웹을 함께 제공한다(웹 + `/api` 한 주소).
+- **보안 헤더:** 모든 응답에 CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` 를 붙이고, `/api` 응답에는 `Cache-Control: no-store` 를 붙인다.
+- **`LANGFLOW_MODE=off`:** Langflow 없는 중앙 서버. 사이트 분석·요약·파이프라인 경로를 열지 않아, mock 결과가 운영 데이터에 섞이지 않는다. 로컬 통합용 `start-central-dev.ps1` 도 이 모드로 바꿨다.
+- **컨테이너:**
+  - `deploy/Dockerfile`: 웹 빌드 → Python 런타임. `backend/requirements.lock.txt` 는 로컬 테스트 환경과 같은 버전으로 해시를 고정했다. 비루트 실행, healthcheck 포함.
+  - `deploy/docker-compose.yml`: Caddy 가 HTTPS 인증서를 자동으로 받는다. 데이터는 `aif-data` 볼륨, 백업은 호스트 폴더에 둔다.
+  - `deploy/Caddyfile`, `deploy/.env.example`
+- **백업:** `backend/scripts/backup_db.py` — 서버를 켠 채 sqlite 일관 사본, 토큰·계정 파일, manifest(sha256·프로젝트 수), `--keep`, `--verify`.
+- **점검:** `deploy/smoke_check.py` — 배포 주소에 14개 항목.
+
+검증:
+
+- 백엔드 145개 통과. `tests/test_deploy.py` 가 같은 출처 웹·보안 헤더, `index.html` 없음 시작 오류, off 모드, 백업·보관 개수·검증·복구·손상 감지를 본다.
+- Docker(Desktop 29.4.3)로 실제 이미지 빌드 → compose(`AIF_DOMAIN=localhost`, 8080/8443).
+  - aif healthy. Caddy HTTPS 200, HTTP → HTTPS 308, HSTS·CSP 적용.
+  - `smoke_check.py` 14/14 통과: 세션 쿠키 `HttpOnly; Secure; SameSite=strict`, CSRF 없는 저장 403, 게시 201·재전송 200, 저장 revision +1 등.
+  - 컨테이너 안 백업·검증 통과.
+  - 이미지 업데이트(`p4` → `p4b` 태그로 재빌드)해도 프로젝트 유지.
+  - DB 를 지운 뒤 백업으로 복구 → 프로젝트 복원, health 200.
+- 배포 웹을 실제 브라우저 창(Electron, 로컬 CA 만 예외)으로 열어 봤다. CSP 아래에서 다음이 콘솔 오류 없이 동작했다.
+  1. 로그인 → 목록 → `?projectId=` 프로젝트(노드 24)
+  2. 예제 열기(노드 37) → 자동 정렬(elkjs)로 위치 변경
+
+### Desktop 설치 파일
+
+- **설치형 런타임 (`desktop-shell/runtime.js`):**
+  - 설치본(또는 `AIF_RUNTIME=managed`)은 처음 실행 때 "처음 실행 준비" 창을 띄운다.
+  - uv 로 Python 3.13 과 Langflow 1.11.0 환경(`runtime/requirements.lock.txt`, 566개, 해시 고정)을 `%LOCALAPPDATA%\com.aif.LangflowDesktop` 에 설치한다. 설치 로그는 `logs/runtime-setup.log`.
+  - Langflow 는 17870 포트로 띄운다. 포크 화면(`resources/langflow-frontend`)을 쓰고, Flow·설정은 `%APPDATA%\com.aif.LangflowDesktop\langflow` 에 둔다.
+  - 잠금 파일이 바뀐 업데이트만 실행 환경을 다시 만든다.
+- **설치 파일 만들기:** `npm run dist`
+  1. `prepare-resources.js`: uv 0.11.29 를 받아 sha256 을 확인하고, 잠금 파일·포크 빌드를 모은다.
+  2. `electron-builder`: NSIS, 사용자 단위 설치, 설치 폴더 선택 가능, 제거해도 사용자 데이터 유지. 앱 ID `com.aif.LangflowDesktop`.
+  - 설치 파일은 117MB 이고 서명하지 않았다(`NotSigned`, 인증서 없음).
+- **시작 실패 대화상자:** 설치본은 시작에 실패하면 오류 대화상자를 띄운다(개발 모드는 콘솔).
+- **점검용 옵션:**
+  - `AIF_USER_DATA`·`AIF_DESKTOP_HOME`: 깨끗한 프로필로 점검할 때 데이터·런타임 폴더를 바꾼다.
+  - `AIF_SHELL_PROBE=p4`: 설치본 점검.
+
+검증 (이 PC, 공식 Desktop 이 켜진 상태에서):
+
+1. **개발 모드 런타임:** 빈 폴더에서 설치 152초, 첫 기동 포함 452초. Langflow 17870 에 포크 화면이 떴다.
+2. **설치와 첫 실행:** `Setup-0.1.0.exe /S` 로 설치(HKCU 등록, 시작 메뉴 바로가기). 새 빈 프로필로 첫 실행하자 런타임 설치 166초를 포함해 406초 만에 `packaged: true` 로 떴다. P4 점검 통과: 포크 화면 표식, AIF 화면, 점검용 Flow 업로드.
+3. **업데이트 0.1.1:** 덮어 설치 → 42초 만에 떴다. 런타임은 다시 설치하지 않았다(설치 시각 그대로). 점검용 Flow 는 같은 ID 로 남아 있었다.
+4. **업데이트 0.1.2:** 덮어 설치 → 셸 중계로 로컬 중앙 서버의 사건 목록 10건을 불러왔다.
+5. **제거:** `/S` 로 제거. 앱 폴더·등록 정보·바로가기는 사라지고, 사용자 데이터·런타임은 남았다.
+6. **공식 Desktop 영향 없음:** 공식 Desktop DB(`%APPDATA%\com.LangflowDesktop\data\database.db`) 의 sha256·수정 시각이 전후 같았고, 공식 Desktop(7860)은 내내 정상 응답했다.
+
+점검 결과 JSON 은 `.profile/p4-evidence/` 에 있다. 시험용 설치·런타임 폴더(`%LOCALAPPDATA%\aifp4`)는 점검 뒤 지웠다.
+
+### 확인하지 않은 것 / 운영 전에 필요한 것
+
+- 실제 공개 도메인·서버 배포와 Let's Encrypt 인증서 발급. 계정·도메인이 없어서 localhost(Caddy 내부 CA)로만 시험했다.
+- 코드 서명 인증서와 서명된 설치 파일(SmartScreen 경고 없애기). 자동 업데이트(서명·배포 서버 필요)는 넣지 않았다.
+- 설치본을 HTTPS 공개 서버에 연결한 Desktop↔서버 E2E. 로컬 CA 인증서는 Electron 이 거부하므로 로컬 http 중앙 서버로만 확인했다. 게시·검토 E2E 는 P2·P3 에서 같은 코드로 확인했다.
+- 다른 PC(공식 Desktop·Ollama 가 없는 PC)에서의 설치. 이 PC 에서 빈 프로필·빈 런타임 폴더로 대신했다.
+- 기존 공식 Desktop 의 Flow 를 이 앱으로 옮기는 기능은 만들지 않았다. Langflow 의 Flow 내보내기·가져오기(JSON)를 쓴다.
+- `AIF_SHELL_PROBE=p1` 은 P1 당시 화면 구조(헤더 AIF → 검토 화면)에 맞춘 점검이다. P2 이후 헤더가 사건 목록으로 가므로 지금은 일부 단계가 맞지 않는다. 설치본 점검은 p4 를 쓴다.
+
 ## 실행 방법
 
 ```powershell
@@ -236,5 +302,5 @@ npx electron .
 $env:AIF_SHELL_PROBE = 'p2'; npx electron .
 ```
 
-셸이 띄우는 Langflow 는 공식 Desktop 의 venv 를 빌려 쓴다. 전용 Desktop 패키지로 배포할 때는 `C:\Program Files\Langflow
-esources` 의 wheel 과 `constraints.txt` 로 별도 venv 를 만들어야 한다(P4).
+개발 모드(`npx electron .`)에서 `start-langflow-p0.ps1` 이 띄우는 Langflow 는 공식 Desktop 의 venv 를 빌려 쓴다.
+설치본은 자체 실행 환경을 쓴다(`AIF_RUNTIME=managed` 로 개발 중에도 같은 방식을 쓸 수 있다). 설치 파일 만들기·사용자 설치는 `docs/deploy.md` 2장.

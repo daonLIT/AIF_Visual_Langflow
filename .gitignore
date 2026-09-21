@@ -35,3 +35,7 @@ WORK_LOG/
 # Langflow 포크 체크아웃과 전용 Desktop 실험 데이터 (integrations/langflow/README.md 참고)
 vendor/
 integrations/langflow/.profile/
+
+# 배포 설정·백업(비밀값·원문 포함)
+deploy/.env
+deploy/backups/

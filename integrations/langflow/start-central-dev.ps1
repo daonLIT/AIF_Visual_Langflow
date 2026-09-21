@@ -6,7 +6,7 @@ $central = Join-Path $PSScriptRoot '.profile\central'
 New-Item -ItemType Directory -Force $central | Out-Null
 
 $env:AIF_SKIP_DOTENV = '1'          # 개발자 .env(live Langflow 설정)를 읽지 않는다. 중앙 서버는 Langflow 없이 동작한다.
-$env:LANGFLOW_MODE = 'mock'
+$env:LANGFLOW_MODE = 'off'          # 운영과 같이 Langflow 없이(사이트 분석·파이프라인 경로 닫힘)
 $env:AIF_AUTH_MODE = 'token'
 $env:DATABASE_PATH = Join-Path $central 'aif-central.sqlite3'
 $env:AIF_API_TOKENS_FILE = Join-Path $central 'api_tokens.json'

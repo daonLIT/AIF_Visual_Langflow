@@ -1,0 +1,18 @@
+# 이미지에 넣지 않는다: 의존성·빌드 결과·로컬 데이터·비밀값·실험 폴더
+**/node_modules
+**/dist
+**/.tmp-smoke
+**/__pycache__
+.git
+.env
+**/.env
+deploy/.env
+deploy/backups
+backend/data
+backend/fixtures
+judgment
+test_outputs
+vendor
+integrations
+langflow
+docs

@@ -1,14 +1,69 @@
 {
   "name": "aif-langflow-desktop",
   "private": true,
-  "version": "0.0.1",
-  "description": "AIF 전용 Langflow Desktop 셸 (P0 실험). 공식 Langflow Desktop 과 별도 앱 ID·데이터 경로를 쓴다.",
+  "version": "0.1.2",
+  "description": "AIF 전용 Langflow Desktop. 공식 Langflow Desktop 과 별도 앱 ID·데이터 경로를 쓰고, Langflow 1.11.0 포크 화면에 AIF 검토 화면이 들어 있다.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test \"test/**/*.test.js\"",
+    "prepare-resources": "node prepare-resources.js",
+    "dist": "npm run prepare-resources && electron-builder --win nsis --publish never"
   },
   "devDependencies": {
-    "electron": "38.2.0"
+    "electron": "38.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "author": "AIF",
+  "build": {
+    "appId": "com.aif.LangflowDesktop",
+    "productName": "AIF Langflow Desktop",
+    "directories": {
+      "output": "dist-installer"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "config.js",
+      "bridge.js",
+      "bridge-rules.js",
+      "outbox.js",
+      "runtime.js",
+      "probe-p3.js",
+      "settings.html",
+      "settings.js",
+      "settings-preload.js",
+      "setup.html",
+      "setup.js",
+      "setup-preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build-resources/langflow-frontend",
+        "to": "langflow-frontend"
+      },
+      {
+        "from": "build-resources/uv",
+        "to": "uv"
+      },
+      {
+        "from": "build-resources/runtime",
+        "to": "runtime"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": "nsis",
+      "artifactName": "AIF-Langflow-Desktop-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "AIF Langflow Desktop",
+      "artifactName": "AIF-Langflow-Desktop-Setup-${version}.${ext}"
+    }
   }
 }

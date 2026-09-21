@@ -22,13 +22,19 @@ const path = require("node:path");
 app.setName("AIF Langflow Desktop");
 // 자동 점검 캡처가 창 가림·GPU 상태에 따라 비지 않도록 점검 때만 소프트웨어 렌더링을 쓴다.
 if (process.env.AIF_SHELL_PROBE) app.disableHardwareAcceleration();
-app.setPath("userData", path.join(app.getPath("appData"), "com.aif.LangflowDesktop"));
+// AIF_USER_DATA: 깨끗한 프로필로 설치·실행을 점검할 때 쓰는 별도 데이터 폴더
+app.setPath("userData", process.env.AIF_USER_DATA || path.join(app.getPath("appData"), "com.aif.LangflowDesktop"));
 
 const config = require("./config");
 const { installBridge } = require("./bridge");
 const { flushOutbox } = require("./outbox");
 
-const LANGFLOW_URL = process.env.AIF_LANGFLOW_URL || "http://127.0.0.1:7870";
+const runtime = require("./runtime");
+
+// 설치본(또는 AIF_RUNTIME=managed)은 자체 Langflow 실행 환경을 쓴다. 개발 중에는 AIF_LANGFLOW_START 스크립트.
+const MANAGED = app.isPackaged || process.env.AIF_RUNTIME === "managed";
+const MANAGED_PORT = Number(process.env.AIF_LANGFLOW_PORT || 17870);
+const LANGFLOW_URL = process.env.AIF_LANGFLOW_URL || (MANAGED ? `http://127.0.0.1:${MANAGED_PORT}` : "http://127.0.0.1:7870");
 const APP_ORIGIN = new URL(LANGFLOW_URL).origin;
 const START_SCRIPT = process.env.AIF_LANGFLOW_START || "";
 const OUTBOX_DIR = path.join(app.getPath("userData"), "outbox");
@@ -56,7 +62,7 @@ function startPath() {
   }
   return "/flows";
 }
-const PROBE = { 1: "p0", p0: "p0", p1: "p1", p2: "p2", p2b: "p2b", p3: "p3", p3r: "p3r" }[process.env.AIF_SHELL_PROBE] ?? null;
+const PROBE = { 1: "p0", p0: "p0", p1: "p1", p2: "p2", p2b: "p2b", p3: "p3", p3r: "p3r", p4: "p4" }[process.env.AIF_SHELL_PROBE] ?? null;
 
 let backend = null;
 
@@ -71,7 +77,52 @@ async function isHealthy() {
   }
 }
 
+function openSetupWindow() {
+  const win = new BrowserWindow({
+    width: 720,
+    height: 480,
+    title: "AIF Langflow Desktop 준비",
+    webPreferences: { preload: path.join(__dirname, "setup-preload.js"), contextIsolation: true, sandbox: true },
+  });
+  win.setMenu(null);
+  win.loadFile(path.join(__dirname, "setup.html"));
+  return win;
+}
+
+async function ensureManagedBackend() {
+  if (await isHealthy()) return "attached";
+  let setup = null;
+  if (!runtime.runtimeReady()) {
+    setup = openSetupWindow();
+    await new Promise((resolve) => setup.webContents.once("did-finish-load", resolve));
+    const send = (stage, line) => {
+      if (setup && !setup.isDestroyed()) setup.webContents.send("aif-setup:progress", { stage, line: String(line).slice(0, 500) });
+    };
+    try {
+      const result = await runtime.ensureRuntime(send);
+      send("done", `설치 완료 (${result.seconds ?? 0}초)`);
+    } catch (error) {
+      send("error", error.message);
+      throw error;
+    }
+  }
+  const { apiBase, publishToken } = config.load();
+  fs.mkdirSync(OUTBOX_DIR, { recursive: true });
+  backend = await runtime.startLangflow(MANAGED_PORT, { AIF_API_BASE: apiBase, AIF_PUBLISH_TOKEN: publishToken, AIF_OUTBOX_DIR: OUTBOX_DIR });
+  // 첫 기동은 컴포넌트 목록을 만드느라 오래 걸린다.
+  for (let i = 0; i < 600; i += 1) {
+    if (await isHealthy()) {
+      if (setup && !setup.isDestroyed()) setup.close();
+      return "started";
+    }
+    if (backend.exitCode !== null) throw new Error(`Langflow 가 종료되었습니다(코드 ${backend.exitCode}). 로그: ${path.join(runtime.paths().logs, "langflow.log")}`);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error("Langflow 서버 시작 대기 시간 초과");
+}
+
 async function ensureBackend() {
+  if (MANAGED) return ensureManagedBackend();
   if (await isHealthy()) return "attached";
   if (!START_SCRIPT) throw new Error(`Langflow 가 ${LANGFLOW_URL} 에서 응답하지 않고 AIF_LANGFLOW_START 가 없습니다.`);
   const { apiBase, publishToken } = config.load();
@@ -502,6 +553,50 @@ function runP3(kind, win, mode) {
   return kind === "p3" ? probeP3(ctx, win, mode) : probeP3Restore(ctx, win, mode);
 }
 
+// P4: 설치본 점검. Langflow 화면·AIF 화면이 뜨는지, 점검용 Flow 를 올려 두고 다시 켜거나 업데이트한 뒤에도 남는지.
+// AIF_P4_FLOW_FILE: 올릴 Flow JSON(없으면 Flow 목록만 기록). 같은 이름의 Flow 가 이미 있으면 새로 올리지 않는다.
+async function probeP4(win, mode) {
+  const { js, waitFor, steps, step } = probeTools(win);
+  const name = "P4 persistence check";
+  const api = async (apiPath, init = {}) => {
+    const login = await (await fetch(new URL("/api/v1/auto_login", LANGFLOW_URL))).json();
+    const response = await fetch(new URL(apiPath, LANGFLOW_URL), {
+      ...init,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${login.access_token}`, ...(init.headers || {}) },
+    });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  };
+  await step("Langflow 화면(포크 빌드)", async () => {
+    if (!(await waitFor('[data-testid="aif-menu-button"]', 60000))) throw new Error("AIF 메뉴 없음");
+    const mark = await (await fetch(new URL("/aif-build-mark.txt", LANGFLOW_URL))).text();
+    return { path: await js("location.pathname"), buildMark: mark.trim(), runtime: runtime.paths().home, packaged: app.isPackaged, version: app.getVersion() };
+  });
+  await step("AIF 화면", async () => {
+    await js(`document.querySelector('[data-testid="aif-menu-button"]').click()`);
+    if (!(await waitFor('[data-testid="aif-project-list"]', 20000))) throw new Error("사건 목록 화면 없음");
+    // 목록 결과(표·빈 목록·오류 안내) 중 하나가 나올 때까지 기다린다.
+    for (let i = 0; i < 40; i++) {
+      const settled = await js(`!!document.querySelector('.aif-root .project-table') || [...document.querySelectorAll('.aif-root .project-list-note')].some((n) => !n.textContent.includes('…'))`);
+      if (settled) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return await js(`({ rows: document.querySelectorAll('.aif-root .project-table tbody tr').length, note: [...document.querySelectorAll('.aif-root .project-list-note')].map((n) => n.textContent).join(' / ') })`);
+  });
+  await step("점검용 Flow 확인·올리기", async () => {
+    const listed = await api("/api/v1/flows/?header_flows=true");
+    const flows = Array.isArray(listed.body) ? listed.body : [];
+    const existing = flows.find((flow) => flow.name === name);
+    if (existing) return { existed: true, id: existing.id, total: flows.length };
+    const file = process.env.AIF_P4_FLOW_FILE;
+    if (!file) return { existed: false, total: flows.length };
+    const flow = JSON.parse(fs.readFileSync(file, "utf8"));
+    const created = await api("/api/v1/flows/", { method: "POST", body: JSON.stringify({ name, description: flow.description, data: flow.data }) });
+    if (created.status >= 300) throw new Error(`업로드 HTTP ${created.status}`);
+    return { existed: false, created: created.body.id, total: flows.length + 1 };
+  });
+  writeProbe("p4", mode, steps);
+}
+
 async function probe(win, mode) {
   const wc = win.webContents;
   const js = (code) => wc.executeJavaScript(code, true);
@@ -599,6 +694,7 @@ app.whenReady().then(async () => {
     mode = await ensureBackend();
   } catch (e) {
     console.error(String(e));
+    if (!PROBE) dialog.showErrorBox("AIF Langflow Desktop 을 시작하지 못했습니다", String(e.message || e));
     app.exit(1);
     return;
   }
@@ -608,7 +704,7 @@ app.whenReady().then(async () => {
   setInterval(() => void flushNow(), 5 * 60 * 1000);
   if (!PROBE && !config.isComplete()) openSettings(win);
   if (PROBE) {
-    await (PROBE === "p3" || PROBE === "p3r" ? runP3(PROBE, win, mode) : PROBE === "p2b" ? probeP2b(win, mode) : PROBE === "p2" ? probeP2(win, mode) : PROBE === "p1" ? probeP1(win, mode) : probe(win, mode));
+    await (PROBE === "p4" ? probeP4(win, mode) : PROBE === "p3" || PROBE === "p3r" ? runP3(PROBE, win, mode) : PROBE === "p2b" ? probeP2b(win, mode) : PROBE === "p2" ? probeP2(win, mode) : PROBE === "p1" ? probeP1(win, mode) : probe(win, mode));
     app.quit();
   }
 });

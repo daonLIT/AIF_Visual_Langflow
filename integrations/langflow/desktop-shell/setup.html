@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self'" />
+    <title>AIF Langflow Desktop 준비</title>
+    <style>
+      body { font: 14px 'Malgun Gothic', system-ui, sans-serif; margin: 24px; color: #1b1f27; background: #f5f6f8; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      #step { font-weight: 600; margin: 12px 0 8px; }
+      #log { height: 260px; overflow: auto; background: #fff; border: 1px solid #d8dce3; border-radius: 6px; padding: 8px; font: 12px Consolas, monospace; white-space: pre-wrap; }
+      .error { color: #c0392b; }
+    </style>
+  </head>
+  <body>
+    <h1>처음 실행 준비</h1>
+    <p>Langflow 1.11.0 실행 환경을 이 PC 사용자 폴더에 설치합니다. 인터넷 연결이 필요하고, 처음 한 번만 몇 분 걸립니다.</p>
+    <div id="step" data-testid="setup-step">준비 중…</div>
+    <div id="log"></div>
+    <script src="setup.js"></script>
+  </body>
+</html>

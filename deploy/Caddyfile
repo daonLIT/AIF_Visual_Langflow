@@ -1,0 +1,14 @@
+# 공개 도메인이면 Let's Encrypt 인증서를 자동으로 받는다. localhost 로 띄우면 Caddy 내부 CA 로 로컬 HTTPS.
+# 인증서 만료 알림 이메일을 받으려면 맨 위에 전역 블록을 추가한다:  { email you@example.org }
+{$AIF_DOMAIN} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	# 게시 요청 상한(AIF_MAX_PUBLISH_BYTES)보다 조금 크게
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy aif:8000
+}
