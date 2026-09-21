@@ -207,4 +207,3 @@ AIF.schemefulfillments 는 scheme 카탈로그에 검증된 외부 schemeID(aifd
 - 서버 재시작 시 진행 중이던 실행은 `interrupted` 로 표시됩니다.
 - 원문 교체를 undo 하면 텍스트와 근거는 되돌아가지만 문서 버전 번호는 유지됩니다.
 - 로그인·협업·외부 배포는 범위 밖입니다. CORS 는 `localhost:5173` 만 허용합니다.
-- live 검증 기록은 `docs/verification.md` 에 있습니다.
