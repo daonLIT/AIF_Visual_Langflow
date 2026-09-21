@@ -16,19 +16,25 @@
       "node"
     ],
     "outDir": ".tmp-smoke",
-    "rootDir": "."
+    "rootDir": "..",
+    "paths": {
+      "@aif/workbench/*": [
+        "../packages/aif-workbench/src/*"
+      ]
+    }
   },
   "include": [
     "scripts/smokeTest.ts",
     "scripts/annotationSmoke.ts",
     "scripts/storeSmoke.ts",
-    "src/io/**/*",
-    "src/layout/**/*",
-    "src/validation/**/*",
-    "src/utils/**/*",
-    "src/types/**/*",
+    "../packages/aif-workbench/src/io/**/*",
+    "../packages/aif-workbench/src/layout/**/*",
+    "../packages/aif-workbench/src/validation/**/*",
+    "../packages/aif-workbench/src/utils/**/*",
+    "../packages/aif-workbench/src/types/**/*",
+    "../packages/aif-workbench/src/store/**/*",
     "src/store/**/*",
-    "src/api/**/*",
+    "../packages/aif-workbench/src/api/**/*",
     "scripts/v2Smoke.ts",
     "src/pipeline/**/*"
   ]

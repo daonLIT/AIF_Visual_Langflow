@@ -1,0 +1,355 @@
+diff --git a/src/frontend/src/App.css b/src/frontend/src/App.css
+index dcc772c..c9f3f4d 100644
+--- a/src/frontend/src/App.css
++++ b/src/frontend/src/App.css
+@@ -1,3 +1,4 @@
++/* AIF: Langflow 의 React Flow 전역 규칙은 AIF 화면(.aif-root) 안에는 적용하지 않는다. :where() 라 우선순위는 그대로. */
+ @import "./style/custom-ace-overrides.css";
+ @tailwind base;
+ @tailwind components;
+@@ -29,7 +30,7 @@ body {
+   }
+ }
+ 
+-.react-flow__node {
++.react-flow__node:where(:not(.aif-root *)) {
+   height: auto;
+   border-radius: auto;
+   min-width: inherit;
+@@ -166,47 +167,48 @@ body {
+   outline: none !important;
+ }
+ 
+-.react-flow__edge.selected .react-flow__edge-path {
++.react-flow__edge.selected .react-flow__edge-path:where(:not(.aif-root *)) {
+   stroke: var(--selected) !important;
+   stroke-width: 2px !important;
+ }
+-.react-flow__controls-button svg {
++.react-flow__controls-button svg:where(:not(.aif-root *)) {
+   fill: none !important;
+ }
+-.react-flow__controls,
+-.react-flow__panel.bottom-center-panel {
++.react-flow__controls:where(:not(.aif-root *)),
++.react-flow__panel.bottom-center-panel:where(:not(.aif-root *)) {
+   overflow: visible !important;
+ }
+ 
+ /* Reset grab cursor on canvas when a Radix dropdown/popover is open */
+-body:has([data-radix-popper-content-wrapper]) .react-flow__pane {
++body:has([data-radix-popper-content-wrapper])
++.react-flow__pane:where(:not(.aif-root *)) {
+   cursor: default !important;
+ }
+ 
+-.react-flow__edge .react-flow__edge-path {
++.react-flow__edge .react-flow__edge-path:where(:not(.aif-root *)) {
+   transition: color;
+   stroke: var(--connection) !important;
+   transition-duration: 150ms;
+   stroke-width: 2px !important;
+ }
+-.react-flow__connection path {
++.react-flow__connection path:where(:not(.aif-root *)) {
+   transition: color;
+   stroke: var(--connection) !important;
+   transition-duration: 150ms;
+   stroke-width: 2px !important;
+ }
+ 
+-.react-flow__edge.running .react-flow__edge-path {
++.react-flow__edge.running .react-flow__edge-path:where(:not(.aif-root *)) {
+   stroke: hsl(var(--foreground)) !important;
+   stroke-width: 2px !important;
+ }
+ 
+-.react-flow__edge.not-running .react-flow__edge-path {
++.react-flow__edge.not-running .react-flow__edge-path:where(:not(.aif-root *)) {
+   stroke: hsl(var(--foreground)) !important;
+   stroke-width: 1px !important;
+ }
+ 
+-.react-flow__edge.ran .react-flow__edge-path {
++.react-flow__edge.ran .react-flow__edge-path:where(:not(.aif-root *)) {
+   stroke: hsl(var(--foreground)) !important;
+   stroke-width: 2px !important;
+ }
+@@ -216,7 +218,7 @@ body:has([data-radix-popper-content-wrapper]) .react-flow__pane {
+   height: 100%;
+ }
+ 
+-.react-flow__resize-control.handle {
++.react-flow__resize-control.handle:where(:not(.aif-root *)) {
+   width: 0.75rem !important;
+   height: 0.75rem !important;
+   background-color: white !important;
+diff --git a/src/frontend/src/aif/AifIntegrationCheckPage.tsx b/src/frontend/src/aif/AifIntegrationCheckPage.tsx
+new file mode 100644
+index 0000000..e8c0eef
+--- /dev/null
++++ b/src/frontend/src/aif/AifIntegrationCheckPage.tsx
+@@ -0,0 +1,63 @@
++import { useEffect, useState } from "react";
++import { useLocation } from "react-router-dom";
++import { Button } from "@/components/ui/button";
++import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
++
++// P0 검증용 페이지: 포크한 프런트엔드가 실제 Desktop 창에 로드됐는지 확인한다.
++// 빌드 표식은 vite define 이 아니라 빌드 스크립트가 쓰는 env 로 주입한다.
++const BUILD_MARK = import.meta.env.VITE_AIF_BUILD_MARK ?? "dev";
++
++type HostInfo = { kind: string; version?: string };
++
++declare global {
++  interface Window {
++    aifHost?: HostInfo;
++  }
++}
++
++export default function AifIntegrationCheckPage(): JSX.Element {
++  const navigate = useCustomNavigate();
++  const location = useLocation();
++  const [visits, setVisits] = useState<number | null>(null);
++
++  useEffect(() => {
++    // 새로고침·앱 재시작 후에도 같은 페이지로 돌아왔는지 세기 위한 표식
++    try {
++      const next = Number(localStorage.getItem("aif-check-visits") ?? "0") + 1;
++      localStorage.setItem("aif-check-visits", String(next));
++      setVisits(next);
++    } catch {
++      setVisits(null);
++    }
++  }, []);
++
++  const host = window.aifHost;
++
++  return (
++    <div
++      className="flex h-full w-full flex-col gap-4 overflow-auto p-8"
++      data-testid="aif-integration-check"
++    >
++      <h1 className="text-2xl font-semibold">AIF Integration Check</h1>
++      <dl className="grid max-w-2xl grid-cols-[10rem_1fr] gap-x-4 gap-y-2 text-sm">
++        <dt className="text-muted-foreground">Build</dt>
++        <dd data-testid="aif-build-mark">{BUILD_MARK}</dd>
++        <dt className="text-muted-foreground">Path</dt>
++        <dd>{location.pathname}</dd>
++        <dt className="text-muted-foreground">Origin</dt>
++        <dd>{window.location.origin}</dd>
++        <dt className="text-muted-foreground">Host</dt>
++        <dd data-testid="aif-host">
++          {host ? `${host.kind} ${host.version ?? ""}` : "browser"}
++        </dd>
++        <dt className="text-muted-foreground">Visits</dt>
++        <dd>{visits ?? "storage unavailable"}</dd>
++      </dl>
++      <div>
++        <Button onClick={() => navigate("/flows")} data-testid="aif-back">
++          Flow 목록으로
++        </Button>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/frontend/src/aif/AifWorkbenchPage.tsx b/src/frontend/src/aif/AifWorkbenchPage.tsx
+new file mode 100644
+index 0000000..5a8d29a
+--- /dev/null
++++ b/src/frontend/src/aif/AifWorkbenchPage.tsx
+@@ -0,0 +1,32 @@
++import {
++  AifWorkbench,
++  configureWorkbench,
++  LanguageToggle,
++} from "@aif/workbench";
++import "./aif-host.css";
++
++// 중앙 AIF API 주소는 빌드 때 정한다. 비어 있으면 Langflow 와 같은 출처의 /api 를 쓰는데,
++// 그 경로는 Langflow 가 쓰므로 P2 에서 중앙 서버 연결 방식을 정하기 전까지는 카탈로그·서버 저장이 동작하지 않는다.
++configureWorkbench({
++  apiBase: import.meta.env.VITE_AIF_API_BASE ?? "",
++  // 분석은 Langflow 에서 Flow 를 실행해 만든다. 사이트용 분석 버튼은 숨긴다.
++  analysis: false,
++});
++
++export default function AifWorkbenchPage(): JSX.Element {
++  return (
++    <div
++      className="aif-root aif-langflow-host"
++      data-testid="aif-workbench-page"
++    >
++      <AifWorkbench
++        topBar={
++          <div className="top-bar">
++            <span className="top-bar-title">AIF</span>
++            <LanguageToggle />
++          </div>
++        }
++      />
++    </div>
++  );
++}
+diff --git a/src/frontend/src/aif/aif-host.css b/src/frontend/src/aif/aif-host.css
+new file mode 100644
+index 0000000..0162449
+--- /dev/null
++++ b/src/frontend/src/aif/aif-host.css
+@@ -0,0 +1,11 @@
++/* Langflow 안에서 AIF 화면을 감싸는 틀. 화면 자체 스타일은 @aif/workbench 의 workbench.css 에 있다. */
++.aif-langflow-host {
++  flex: 1;
++  min-width: 0;
++  height: 100%;
++  background: #f5f6f8;
++}
++
++.aif-langflow-host .top-bar-title {
++  font-weight: 600;
++}
+diff --git a/src/frontend/src/components/core/appHeaderComponent/index.tsx b/src/frontend/src/components/core/appHeaderComponent/index.tsx
+index ff4a46f..78f5f23 100644
+--- a/src/frontend/src/components/core/appHeaderComponent/index.tsx
++++ b/src/frontend/src/components/core/appHeaderComponent/index.tsx
+@@ -85,6 +85,15 @@ export default function AppHeader(): JSX.Element {
+         <div className="hidden pr-2 whitespace-nowrap lg:inline-flex lg:items-center">
+           <CustomLangflowCounts />
+         </div>
++        <Button
++          unstyled
++          ignoreTitleCase
++          onClick={() => navigate("/aif")}
++          className="hit-area-hover rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-primary"
++          data-testid="aif-menu-button"
++        >
++          AIF
++        </Button>
+         <AlertDropdown
+           notificationRef={notificationContentRef}
+           onClose={() => setActiveState(null)}
+diff --git a/src/frontend/src/customization/utils/custom-routes-store-pages.tsx b/src/frontend/src/customization/utils/custom-routes-store-pages.tsx
+index 61bc427..c8aacd9 100644
+--- a/src/frontend/src/customization/utils/custom-routes-store-pages.tsx
++++ b/src/frontend/src/customization/utils/custom-routes-store-pages.tsx
+@@ -1,11 +1,25 @@
++import { lazy, Suspense } from "react";
+ import { Route } from "react-router-dom";
++import AifIntegrationCheckPage from "@/aif/AifIntegrationCheckPage";
+ import { StoreGuard } from "@/components/authorization/storeGuard";
+ import StoreApiKeyPage from "@/pages/SettingsPage/pages/StoreApiKeyPage";
+ import StorePage from "@/pages/StorePage";
+ 
++// AIF 화면은 들어갈 때만 불러온다(스타일·React Flow 설정이 Flow 화면에 먼저 섞이지 않게).
++const AifWorkbenchPage = lazy(() => import("@/aif/AifWorkbenchPage"));
++
+ export const CustomRoutesStorePages = () => {
+   return (
+     <>
++      <Route path="aif/check" element={<AifIntegrationCheckPage />} />
++      <Route
++        path="aif"
++        element={
++          <Suspense fallback={null}>
++            <AifWorkbenchPage />
++          </Suspense>
++        }
++      />
+       <Route
+         path="store"
+         element={
+diff --git a/src/frontend/src/style/classes.css b/src/frontend/src/style/classes.css
+index 3c1d54a..0dc45af 100644
+--- a/src/frontend/src/style/classes.css
++++ b/src/frontend/src/style/classes.css
+@@ -1,3 +1,4 @@
++/* AIF: Langflow 의 React Flow 전역 규칙은 AIF 화면(.aif-root) 안에는 적용하지 않는다. :where() 라 우선순위는 그대로. */
+ body {
+   margin: 0;
+   font-family:
+@@ -16,7 +17,7 @@ pre {
+   font-family: inherit;
+ }
+ 
+-.react-flow__pane {
++.react-flow__pane:where(:not(.aif-root *)) {
+   pointer-events: all;
+   cursor: default;
+ }
+@@ -178,27 +179,29 @@ textarea[class^="ag-"]:focus {
+   background-color: #141924 !important;
+ }
+ 
+-.react-flow__node.dragging * {
++.react-flow__node.dragging *:where(:not(.aif-root *)) {
+   cursor: grabbing !important;
+ }
+ 
+-.react-flow__handle-right {
++.react-flow__handle-right:where(:not(.aif-root *)) {
+   right: 0 !important;
+   transform: translate(50%, -50%) !important;
+ }
+ 
+-.react-flow__handle-left {
++.react-flow__handle-left:where(:not(.aif-root *)) {
+   left: 0 !important;
+   transform: translate(-50%, -50%) !important;
+ }
+ 
+-.react-flow__node-noteNode:not(.selected) {
++.react-flow__node-noteNode:not(.selected):where(:not(.aif-root *)) {
+   z-index: -1 !important;
+ }
+ 
+ /* A node awaiting human input paints above its neighbors (selected nodes sit at 1000),
+    so the inline decision card is never occluded by an overlapping node. */
+-.react-flow__node:has([data-testid="human-input-node-badge"]) {
++.react-flow__node:has([data-testid="human-input-node-badge"]):where(
++    :not(.aif-root *)
++  ) {
+   z-index: 1001 !important;
+ }
+ 
+@@ -280,7 +283,7 @@ input[type="search"]::-webkit-search-cancel-button {
+   background-image: none;
+   cursor: pointer;
+ }
+-.react-flow__background pattern circle {
++.react-flow__background pattern circle:where(:not(.aif-root *)) {
+   fill: hsl(var(--canvas-dot)) !important;
+ }
+ 
+diff --git a/src/frontend/vite.config.mts b/src/frontend/vite.config.mts
+index 69ce569..a664d0e 100644
+--- a/src/frontend/vite.config.mts
++++ b/src/frontend/vite.config.mts
+@@ -38,8 +38,28 @@ export default defineConfig(({ mode }) => {
+     return proxyObj;
+   }, {});
+ 
++  // AIF 공유 화면(@aif/workbench)은 AIF 저장소의 소스를 그대로 빌드한다.
++  // React·React Flow 는 Langflow 것 하나만 쓰고(dedupe), zustand·elkjs 는 AIF 저장소 것을 쓴다.
++  const aifWorkbenchSrc = path.resolve(
++    env.AIF_WORKBENCH_SRC ||
++      path.resolve(__dirname, "../../../../packages/aif-workbench/src"),
++  );
++
+   return {
+     base: BASENAME || "",
++    resolve: {
++      alias: [
++        {
++          find: /^@aif\/workbench$/,
++          replacement: `${aifWorkbenchSrc}/index.ts`,
++        },
++        {
++          find: /^@aif\/workbench\/(.*)$/,
++          replacement: `${aifWorkbenchSrc}/$1`,
++        },
++      ],
++      dedupe: ["react", "react-dom", "@xyflow/react"],
++    },
+     build: {
+       outDir: "build",
+     },

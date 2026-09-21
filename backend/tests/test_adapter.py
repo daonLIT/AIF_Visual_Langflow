@@ -9,7 +9,7 @@ from app.services.langflow_client import LangflowError, RunInput, build_run_payl
 FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "langflow_run_response.sample.json"
 # v9 flow(근거 인용·요약·스킴 없음) 응답: 이전 형식도 계속 받아들이는지 확인한다.
 FIXTURE_V9 = Path(__file__).resolve().parent.parent / "fixtures" / "langflow_run_response.v9.sample.json"
-SAMPLE = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "sample" / "sample-case.json"
+SAMPLE = Path(__file__).resolve().parent.parent.parent / "packages" / "aif-workbench" / "fixtures" / "sample-case.json"
 
 
 def load_graph(fixture: Path = FIXTURE_V9) -> dict:

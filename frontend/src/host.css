@@ -1,0 +1,11 @@
+/* 독립 웹 호스트의 문서 전역 스타일. 화면 스타일은 @aif/workbench 의 workbench.css(.aif-root 아래)에 있다. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #f5f6f8;
+}

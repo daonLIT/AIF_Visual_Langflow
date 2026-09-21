@@ -362,7 +362,7 @@ class PipelineApiTest(unittest.TestCase):
     def test_routes_round_trip_in_mock_mode(self):
         flow_id = flow_file()["id"]
         settings = Settings(langflow_mode="mock", mock_fixture_path=FIXTURE, mock_delay_seconds=0, mock_flow_files=(V11,), langflow_flow_id=flow_id)
-        text = json.loads((PROJECT / "frontend" / "public" / "sample" / "sample-case.json").read_text(encoding="utf-8"))["text"]
+        text = json.loads((PROJECT / "packages" / "aif-workbench" / "fixtures" / "sample-case.json").read_text(encoding="utf-8"))["text"]
         with TestClient(create_app(settings, db=Database(":memory:"))) as client:
             self.assertEqual(client.get("/api/pipelines").json()["productionFlowId"], flow_id)
             view = client.get(f"/api/pipelines/{flow_id}").json()

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { usePipelineStore } from '../../store/pipelineStore';
-import type { ComponentKind, ComponentTemplate } from '../../types/pipeline';
-import { KIND_KEY } from '../../types/pipeline';
-import { useT } from '../../i18n';
+import type { ComponentKind, ComponentTemplate } from '@aif/workbench/types/pipeline';
+import { KIND_KEY } from '@aif/workbench/types/pipeline';
+import { useT } from '@aif/workbench/i18n';
 import { PALETTE_MIME } from './PipelineCanvas';
 
 const KIND_ORDER: ComponentKind[] = ['prompt', 'llm', 'custom', 'input', 'output', 'generic'];

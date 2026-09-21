@@ -4,13 +4,13 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { importAifOva } from '../src/io/importAifOva';
-import { exportAifOva } from '../src/io/exportAifOva';
-import { validateCase } from '../src/validation/graphValidator';
-import { generateNodeId } from '../src/utils/generateNodeId';
-import { generateEdgeId } from '../src/utils/generateEdgeId';
-import { layoutCase } from '../src/layout/elkLayout';
-import type { ArgumentCase } from '../src/types/argument';
+import { importAifOva } from '@aif/workbench/io/importAifOva';
+import { exportAifOva } from '@aif/workbench/io/exportAifOva';
+import { validateCase } from '@aif/workbench/validation/graphValidator';
+import { generateNodeId } from '@aif/workbench/utils/generateNodeId';
+import { generateEdgeId } from '@aif/workbench/utils/generateEdgeId';
+import { layoutCase } from '@aif/workbench/layout/elkLayout';
+import type { ArgumentCase } from '@aif/workbench/types/argument';
 
 let failures = 0;
 
@@ -23,7 +23,7 @@ function check(label: string, condition: boolean, detail = ''): void {
   }
 }
 
-const samplePath = resolve(process.cwd(), 'public/sample/sample-case.json');
+const samplePath = resolve(process.cwd(), '../packages/aif-workbench/fixtures/sample-case.json');
 const raw = JSON.parse(readFileSync(samplePath, 'utf8'));
 
 console.log('1) import');

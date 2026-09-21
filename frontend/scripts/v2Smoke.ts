@@ -15,12 +15,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { importAifOva } from '../src/io/importAifOva';
-import { exportAifOva } from '../src/io/exportAifOva';
-import { validateCase } from '../src/validation/graphValidator';
-import type { Annotation, NodeAnnotation, ProjectFile } from '../src/types/annotation';
-import { migrateProjectFile } from '../src/types/annotation';
-import { applyNodePatch, summaryStateOf, type ArgumentCase } from '../src/types/argument';
+import { importAifOva } from '@aif/workbench/io/importAifOva';
+import { exportAifOva } from '@aif/workbench/io/exportAifOva';
+import { validateCase } from '@aif/workbench/validation/graphValidator';
+import type { Annotation, NodeAnnotation, ProjectFile } from '@aif/workbench/types/annotation';
+import { migrateProjectFile } from '@aif/workbench/types/annotation';
+import { applyNodePatch, summaryStateOf, type ArgumentCase } from '@aif/workbench/types/argument';
 import {
   MAX_SELECTED_ISSUES,
   confirmScheme,
@@ -30,9 +30,9 @@ import {
   shortKoreanName,
   type SchemeApplication,
   type SchemeCatalog,
-} from '../src/types/scheme';
-import { textHash } from '../src/utils/textHash';
-import { acceptAnnotation, importProposals, isContentModified, setDraftValue, type ReviewSnapshot } from '../src/store/reviewLogic';
+} from '@aif/workbench/types/scheme';
+import { textHash } from '@aif/workbench/utils/textHash';
+import { acceptAnnotation, importProposals, isContentModified, setDraftValue, type ReviewSnapshot } from '@aif/workbench/store/reviewLogic';
 import {
   applyGeneratedSummaries,
   expectationFor,
@@ -40,8 +40,8 @@ import {
   issueAcceptProblem,
   issueOptionState,
   issueSelectionProblems,
-} from '../src/store/graphRules';
-import { useGraphStore } from '../src/store/graphStore';
+} from '@aif/workbench/store/graphRules';
+import { useGraphStore } from '@aif/workbench/store/graphStore';
 import {
   canConnect,
   diffFlowData,
@@ -53,8 +53,8 @@ import {
   syncPromptFields,
   validateLocal,
 } from '../src/pipeline/flowUtils';
-import type { ComponentTemplate, FlowView, LfFlowData, LfNode } from '../src/types/pipeline';
-import { SECRET_SENTINEL } from '../src/types/pipeline';
+import type { ComponentTemplate, FlowView, LfFlowData, LfNode } from '@aif/workbench/types/pipeline';
+import { SECRET_SENTINEL } from '@aif/workbench/types/pipeline';
 import { usePipelineStore } from '../src/store/pipelineStore';
 
 let failures = 0;

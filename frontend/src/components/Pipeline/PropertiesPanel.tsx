@@ -9,10 +9,10 @@ import {
   parseHandle,
   promptVariables,
 } from '../../pipeline/flowUtils';
-import type { LfFieldSpec, LfNode, LfSourceHandle, PipelineIssue } from '../../types/pipeline';
-import { KIND_KEY } from '../../types/pipeline';
+import type { LfFieldSpec, LfNode, LfSourceHandle, PipelineIssue } from '@aif/workbench/types/pipeline';
+import { KIND_KEY } from '@aif/workbench/types/pipeline';
 import { FieldEditor } from './FieldEditor';
-import { useT } from '../../i18n';
+import { useT } from '@aif/workbench/i18n';
 
 /** 언어 모델 컴포넌트에서 먼저 보여줄 설정 */
 const LLM_PRIMARY = ['model_name', 'base_url', 'temperature', 'timeout', 'num_ctx', 'system_message', 'format'];

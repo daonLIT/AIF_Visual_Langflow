@@ -16,9 +16,9 @@ import type {
   LfSourceHandle,
   LfTargetHandle,
   PipelineIssue,
-} from '../types/pipeline';
-import { SECRET_SENTINEL } from '../types/pipeline';
-import { t } from '../i18n';
+} from '@aif/workbench/types/pipeline';
+import { SECRET_SENTINEL } from '@aif/workbench/types/pipeline';
+import { t } from '@aif/workbench/i18n';
 
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;

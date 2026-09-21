@@ -1,0 +1,17 @@
+{
+  "name": "@aif/workbench",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AIF 검토 화면(원문·논증 그래프·제안 검토). 독립 웹(frontend)과 Langflow 포크가 소스 그대로 함께 쓴다.",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@xyflow/react": "^12.11.6",
+    "elkjs": "^0.12.0",
+    "zustand": "^5.0.15"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

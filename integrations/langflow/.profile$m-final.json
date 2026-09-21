@@ -1,0 +1,54 @@
+{
+  "at": "2026-09-21T09:00:26.105Z",
+  "probe": "p1",
+  "electron": "38.2.0",
+  "url": "http://127.0.0.1:7870",
+  "backend": "started",
+  "userData": "C:\\Users\\tldkw\\AppData\\Roaming\\com.aif.LangflowDesktop",
+  "steps": [
+    {
+      "name": "flows 화면 로드",
+      "ok": true,
+      "detail": "/flows"
+    },
+    {
+      "name": "헤더 AIF → 검토 화면",
+      "ok": true,
+      "detail": "/aif"
+    },
+    {
+      "name": "예제 열기 → 원문·그래프",
+      "ok": true,
+      "detail": {
+        "nodes": 37,
+        "textLen": 1574
+      }
+    },
+    {
+      "name": "노드 클릭 → 상세 패널",
+      "ok": true,
+      "detail": "진술 (I)✕"
+    },
+    {
+      "name": "Flow 목록 복귀 → 스타일 비교",
+      "ok": true,
+      "detail": {
+        "diffPixels": 29,
+        "total": 1155640
+      }
+    },
+    {
+      "name": "다시 AIF → 편집 상태 유지",
+      "ok": true,
+      "detail": {
+        "nodes": 37
+      }
+    },
+    {
+      "name": "AIF 화면 새로고침",
+      "ok": true,
+      "detail": "/aif"
+    }
+  ],
+  "consoleErrors": []
+}

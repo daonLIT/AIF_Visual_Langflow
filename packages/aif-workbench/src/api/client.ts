@@ -1,5 +1,6 @@
 /**
  * 중계 서버(/api) 호출. 개발 중에는 Vite proxy 가 backend 로 전달한다.
+ * 다른 출처의 서버를 부를 때는 호스트가 configureWorkbench({ apiBase }) 로 주소를 준다.
  * 브라우저는 Langflow 주소·API 키를 알지 못한다.
  */
 import type { AnalysisRunRecord, Annotation, ProjectFile, RunSummary } from '../types/annotation';
@@ -17,6 +18,7 @@ import type {
 import type { RawCaseJson } from '../types/rawJson';
 import type { IssueCatalog, SchemeCatalog } from '../types/scheme';
 import { currentLang, t } from '../i18n';
+import { workbenchHost } from '../host';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -73,8 +75,10 @@ export interface SummariesResponse {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, {
+    const host = workbenchHost();
+    response = await fetch(`${host.apiBase}${path}`, {
       ...init,
+      credentials: init?.credentials ?? host.credentials,
       // 서버 오류·경고 문구를 지금 화면 언어로 받는다.
       headers: { 'Content-Type': 'application/json', 'Accept-Language': currentLang(), ...(init?.headers ?? {}) },
     });

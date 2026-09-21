@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { isSecretField } from '../../pipeline/flowUtils';
-import type { LfFieldSpec } from '../../types/pipeline';
-import { SECRET_SENTINEL } from '../../types/pipeline';
-import { useT } from '../../i18n';
+import type { LfFieldSpec } from '@aif/workbench/types/pipeline';
+import { SECRET_SENTINEL } from '@aif/workbench/types/pipeline';
+import { useT } from '@aif/workbench/i18n';
 
 interface Props {
   name: string;

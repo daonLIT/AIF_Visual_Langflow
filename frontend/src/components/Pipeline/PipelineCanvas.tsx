@@ -14,9 +14,9 @@ import {
 } from '@xyflow/react';
 import { usePipelineStore } from '../../store/pipelineStore';
 import { canConnect, connectedFields, parseHandle } from '../../pipeline/flowUtils';
-import type { LfSourceHandle, LfTargetHandle, PipelineIssue } from '../../types/pipeline';
+import type { LfSourceHandle, LfTargetHandle, PipelineIssue } from '@aif/workbench/types/pipeline';
 import { LfNodeView, type LfFlowNode } from './LfNodeView';
-import { t, useT } from '../../i18n';
+import { t, useT } from '@aif/workbench/i18n';
 
 const nodeTypes = { lf: LfNodeView };
 

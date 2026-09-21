@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { usePipelineStore } from '../../store/pipelineStore';
-import { useGraphStore } from '../../store/graphStore';
+import { useGraphStore } from '@aif/workbench/store/graphStore';
 import { describeDiff } from '../../pipeline/flowUtils';
-import { useT } from '../../i18n';
+import { useT } from '@aif/workbench/i18n';
 
 /**
  * Langflow 적용 확인: 적용 메모 + (선택) 적용이 확인되면 바로 테스트 실행.

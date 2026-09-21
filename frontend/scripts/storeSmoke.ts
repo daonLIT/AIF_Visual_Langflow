@@ -5,10 +5,10 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { useGraphStore } from '../src/store/graphStore';
-import { useAnnotationStore } from '../src/store/annotationStore';
-import type { Annotation, EdgeAnnotation, NodeAnnotation } from '../src/types/annotation';
-import { DocumentMatcher } from '../src/utils/evidence';
+import { useGraphStore } from '@aif/workbench/store/graphStore';
+import { useAnnotationStore } from '@aif/workbench/store/annotationStore';
+import type { Annotation, EdgeAnnotation, NodeAnnotation } from '@aif/workbench/types/annotation';
+import { DocumentMatcher } from '@aif/workbench/utils/evidence';
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = ''): void {
@@ -20,7 +20,7 @@ function check(label: string, condition: boolean, detail = ''): void {
 }
 
 async function main() {
-  const text: string = JSON.parse(readFileSync(resolve(process.cwd(), 'public/sample/sample-case.json'), 'utf8')).text;
+  const text: string = JSON.parse(readFileSync(resolve(process.cwd(), '../packages/aif-workbench/fixtures/sample-case.json'), 'utf8')).text;
   const envelope = JSON.parse(readFileSync(resolve(process.cwd(), '../backend/fixtures/langflow_run_response.v9.sample.json'), 'utf8'));
   const graph = JSON.parse(envelope.outputs[0].outputs[0].results.message.text);
 

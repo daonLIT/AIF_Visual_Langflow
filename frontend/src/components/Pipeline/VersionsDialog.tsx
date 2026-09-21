@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { usePipelineStore } from '../../store/pipelineStore';
-import { useLang, useT, type MessageKey } from '../../i18n';
+import { useLang, useT, type MessageKey } from '@aif/workbench/i18n';
 
 const VERSION_KIND_KEY: Record<string, MessageKey> = {
   backup: 'lf.versions.backup',

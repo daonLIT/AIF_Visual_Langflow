@@ -1,5 +1,5 @@
 // 인수 테스트용 예제 JSON 생성기 (가상의 판결문 기반).
-// 결과: public/sample/sample-case.json — 노드 37, 엣지 39, ISSUE 4
+// 결과: packages/aif-workbench/fixtures/sample-case.json — 노드 37, 엣지 39, ISSUE 4
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,7 +163,7 @@ const output = {
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const target = resolve(here, '../public/sample/sample-case.json');
+const target = resolve(here, '../../packages/aif-workbench/fixtures/sample-case.json');
 mkdirSync(dirname(target), { recursive: true });
 writeFileSync(target, JSON.stringify(output, null, 2), 'utf8');
 

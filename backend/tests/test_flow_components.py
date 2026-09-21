@@ -16,7 +16,7 @@ Splitter, _ = load_component("judgment_splitter.py", "JudgmentSplitter")
 
 import pathlib  # noqa: E402
 
-SAMPLE_TEXT = json.loads((pathlib.Path(__file__).resolve().parents[2] / "frontend" / "public" / "sample" / "sample-case.json").read_text(encoding="utf-8"))["text"]
+SAMPLE_TEXT = json.loads((pathlib.Path(__file__).resolve().parents[2] / "packages" / "aif-workbench" / "fixtures" / "sample-case.json").read_text(encoding="utf-8"))["text"]
 CATALOG_LINES = "\n".join(json.dumps({"issue_id": f"ISS-00{i}"}) for i in range(1, 10))
 MODEL = dict(base_url="http://x", model_name="m", temperature=0.1, num_ctx=4096, timeout=0, system_message="")
 

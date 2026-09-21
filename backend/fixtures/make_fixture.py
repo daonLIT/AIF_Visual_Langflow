@@ -1,7 +1,7 @@
 """
 mock fixture 생성기.
 
-Langflow 의 Top-Down AIF Graph Builder(v8) 와 같은 규칙으로 샘플 판결문(frontend/public/sample/sample-case.json 의 text)
+Langflow 의 Top-Down AIF Graph Builder(v8) 와 같은 규칙으로 샘플 판결문(packages/aif-workbench/fixtures/sample-case.json 의 text)
 에 대한 AIF/OVA 그래프를 만들고, Langflow v1 run 응답 envelope 로 감싼다.
 실행: python fixtures/make_fixture.py  (backend 폴더에서)
 
@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SAMPLE = ROOT.parent.parent / "frontend" / "public" / "sample" / "sample-case.json"
+SAMPLE = ROOT.parent.parent / "packages" / "aif-workbench" / "fixtures" / "sample-case.json"
 
 MAIN_CLAIM = "피고인에 대한 강간의 공소사실은 합리적 의심의 여지 없이 증명되었다."
 

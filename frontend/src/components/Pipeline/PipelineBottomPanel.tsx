@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { usePipelineStore } from '../../store/pipelineStore';
-import { useGraphStore } from '../../store/graphStore';
-import { IssueSelectionReport } from '../Annotation/IssueSelectionReport';
-import type { AnalysisRunRecord } from '../../types/annotation';
-import type { PipelineIssue } from '../../types/pipeline';
-import { useT, type MessageKey } from '../../i18n';
+import { useGraphStore } from '@aif/workbench/store/graphStore';
+import { IssueSelectionReport } from '@aif/workbench/components/Annotation/IssueSelectionReport';
+import type { AnalysisRunRecord } from '@aif/workbench/types/annotation';
+import type { PipelineIssue } from '@aif/workbench/types/pipeline';
+import { useT, type MessageKey } from '@aif/workbench/i18n';
 
 const LEVEL_KEY = {
   error: 'lf.level.error',

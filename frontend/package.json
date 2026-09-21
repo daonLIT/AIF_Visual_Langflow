@@ -6,16 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . ../packages/aif-workbench",
     "preview": "vite preview",
     "sample": "node scripts/makeSample.mjs",
-    "smoke": "tsc -p tsconfig.smoke.json && node -e \"require('fs').writeFileSync('.tmp-smoke/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-smoke/scripts/smokeTest.js",
-    "smoke:annotation": "tsc -p tsconfig.smoke.json && node -e \"require('fs').writeFileSync('.tmp-smoke/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-smoke/scripts/annotationSmoke.js",
+    "smoke": "tsc -p tsconfig.smoke.json && node scripts/prepareSmoke.cjs && node .tmp-smoke/frontend/scripts/smokeTest.js",
+    "smoke:annotation": "tsc -p tsconfig.smoke.json && node scripts/prepareSmoke.cjs && node .tmp-smoke/frontend/scripts/annotationSmoke.js",
     "check": "npm run build && npm run lint && npm run smoke && npm run smoke:annotation && npm run smoke:store && npm run smoke:v2",
-    "smoke:store": "tsc -p tsconfig.smoke.json && node -e \"require('fs').writeFileSync('.tmp-smoke/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-smoke/scripts/storeSmoke.js",
-    "smoke:v2": "tsc -p tsconfig.smoke.json && node -e \"require('fs').writeFileSync('.tmp-smoke/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-smoke/scripts/v2Smoke.js"
+    "smoke:store": "tsc -p tsconfig.smoke.json && node scripts/prepareSmoke.cjs && node .tmp-smoke/frontend/scripts/storeSmoke.js",
+    "smoke:v2": "tsc -p tsconfig.smoke.json && node scripts/prepareSmoke.cjs && node .tmp-smoke/frontend/scripts/v2Smoke.js"
   },
   "dependencies": {
+    "@aif/workbench": "*",
     "@xyflow/react": "^12.11.6",
     "elkjs": "^0.12.0",
     "react": "^19.2.8",

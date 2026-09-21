@@ -9,9 +9,9 @@ import {
   outputsOf,
   promptVariables,
 } from '../../pipeline/flowUtils';
-import type { LfNode, SupportInfo } from '../../types/pipeline';
-import { KIND_KEY } from '../../types/pipeline';
-import { useT } from '../../i18n';
+import type { LfNode, SupportInfo } from '@aif/workbench/types/pipeline';
+import { KIND_KEY } from '@aif/workbench/types/pipeline';
+import { useT } from '@aif/workbench/i18n';
 
 export interface LfNodeData extends Record<string, unknown> {
   lfNode: LfNode;

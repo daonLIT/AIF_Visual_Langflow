@@ -17,7 +17,7 @@ from app.services.run_manager import document_hash
 from app.storage import Database
 
 FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "langflow_run_response.sample.json"
-SAMPLE = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "sample" / "sample-case.json"
+SAMPLE = Path(__file__).resolve().parent.parent.parent / "packages" / "aif-workbench" / "fixtures" / "sample-case.json"
 TEXT = json.loads(SAMPLE.read_text(encoding="utf-8"))["text"]
 
 

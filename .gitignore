@@ -30,3 +30,6 @@ test_outputs/
 judgment/
 eval/
 WORK_LOG/
+# Langflow 포크 체크아웃과 전용 Desktop 실험 데이터 (integrations/langflow/README.md 참고)
+vendor/
+integrations/langflow/.profile/

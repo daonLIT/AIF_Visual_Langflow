@@ -8,7 +8,7 @@ import { PipelineBottomPanel } from './PipelineBottomPanel';
 import { VersionsDialog } from './VersionsDialog';
 import { ApplyDialog } from './ApplyDialog';
 import { describeDiff } from '../../pipeline/flowUtils';
-import { useLang, useT } from '../../i18n';
+import { useLang, useT } from '@aif/workbench/i18n';
 
 /**
  * 파이프라인 탭: 사이트 안에서 실제 Langflow flow data 를 편집하고 저장한다.

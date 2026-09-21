@@ -7,6 +7,8 @@ import { JudgmentInputDialog } from '../Analysis/JudgmentInputDialog';
 import { AnalysisStatus } from '../Analysis/AnalysisStatus';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
+import { workbenchHost } from '../../host';
+import sampleCaseUrl from '../../../fixtures/sample-case.json?url';
 
 function downloadJson(name: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -181,7 +183,8 @@ export function Toolbar() {
   };
 
   const loadSample = async () => {
-    const response = await fetch(`${import.meta.env.BASE_URL}sample/sample-case.json`);
+    // Langflow 는 전역 fetch 를 가로채 config.headers 에 값을 넣으므로 옵션 객체를 항상 넘긴다.
+    const response = await fetch(workbenchHost().sampleUrl ?? sampleCaseUrl, { headers: {} });
     await loadJson(await response.text(), 'sample-case.json');
   };
 
@@ -196,7 +199,7 @@ export function Toolbar() {
         <button type="button" className="is-primary" onClick={() => setInputOpen(true)}>
           {t('toolbar.judgmentInput')}
         </button>
-        <AnalysisStatus />
+        {workbenchHost().analysis ? <AnalysisStatus /> : null}
 
         <span className="toolbar-divider" />
 

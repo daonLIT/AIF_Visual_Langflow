@@ -43,10 +43,13 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 ### 2. 프런트엔드 (Node 22)
 
 ```bash
+npm install        # 저장소 루트에서 한 번 (npm workspaces: frontend + packages/aif-workbench)
 cd frontend
-npm install
 npm run dev        # http://localhost:5173  (/api 는 Vite proxy 로 127.0.0.1:8000 에 전달)
 ```
+
+논증 검토 화면(원문·그래프·제안 검토)은 `packages/aif-workbench` 에 있고, 독립 웹(`frontend`)과 Langflow 포크가 같은 소스를 씁니다.
+`frontend` 에는 화면 탭과 파이프라인 편집기만 남아 있습니다. Langflow 쪽은 `integrations/langflow/README.md` 를 보세요.
 
 백엔드 포트를 바꿨다면 `VITE_API_TARGET=http://127.0.0.1:포트 npm run dev` 로 지정합니다.
 

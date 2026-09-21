@@ -9,16 +9,21 @@ JSON 불러오기 → AIF/OVA 파싱 → 판결문 + 논증 그래프 렌더 →
 ## 실행
 
 ```bash
-npm install
+npm install        # 저장소 루트에서 (npm workspaces)
+cd frontend
 npm run dev        # http://localhost:5173
 ```
+
+화면 코드는 공유 패키지 `packages/aif-workbench/src` 에 있다(`@aif/workbench` 로 import). 이 폴더에는 호스트 셸(`src/App.tsx`: 화면 탭),
+파이프라인 편집기(`src/components/Pipeline`, `src/store/pipelineStore.ts`, `src/pipeline/`)와 스모크 테스트만 남아 있다.
+아래 구조도의 `src/` 는 파이프라인 관련을 빼면 `packages/aif-workbench/src/` 를 가리킨다.
 
 | 스크립트 | 설명 |
 | --- | --- |
 | `npm run dev` | 개발 서버 |
 | `npm run build` | 타입 체크 + 프로덕션 빌드 |
 | `npm run lint` | ESLint |
-| `npm run sample` | 예제 판결문 JSON 재생성 (`public/sample/sample-case.json`) |
+| `npm run sample` | 예제 판결문 JSON 재생성 (`packages/aif-workbench/fixtures/sample-case.json`) |
 | `npm run smoke` | import → 편집 → 검증 → export → 재import 왕복 테스트 |
 
 ## 사용법
@@ -78,7 +83,7 @@ src/
 
 상단 탭 줄 오른쪽 끝의 **文 English / 한국어** 버튼으로 전환한다. 고른 언어는 `localStorage['aif.lang']` 에 남고, 값이 없으면 한국어로 시작한다.
 
-- 화면 문구는 `src/i18n/ko.ts` 가 키의 기준이고 `en.ts` 는 같은 키를 모두 채워야 한다(빠지면 타입 오류).
+- 화면 문구는 `packages/aif-workbench/src/i18n/ko.ts` 가 키의 기준이고 `en.ts` 는 같은 키를 모두 채워야 한다(빠지면 타입 오류).
 - 컴포넌트는 `useT()`, 스토어·검증기처럼 리액트 밖에서는 `t()` 를 쓴다. `t()` 는 부르는 시점의 언어를 읽으므로, 만들어 저장되는 문구(검토 이력 detail, scheme 재검토 사유 등)는 그때의 언어로 남는다.
 - 카탈로그는 데이터에 영어 필드를 함께 두고 `schemeName` / `issueLabel` 같은 헬퍼로 고른다: `walton_schemes.json` 의 `name`·`groupEn`·`descriptionEn`·`labelEn`·`templateEn`·`textEn`, `issue_catalog.json` 의 `categoryNameEn`·`labelEn`·`criteriaEn`.
 - 판결문 원문·AI 가 만든 노드 본문·요약처럼 사건 데이터는 번역하지 않는다.

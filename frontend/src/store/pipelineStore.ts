@@ -5,7 +5,7 @@
  * 편집은 Langflow 원본 노드 객체를 복사해 필요한 경로만 바꾸며, 서버 검증을 통과해야 적용된다.
  */
 import { create } from 'zustand';
-import { api, ApiError, pipelineApi, type ServerRunRecord, type TestRunPayload } from '../api/client';
+import { api, ApiError, pipelineApi, type ServerRunRecord, type TestRunPayload } from '@aif/workbench/api/client';
 import {
   canConnect,
   clone,
@@ -28,9 +28,9 @@ import type {
   LfNodeInfo,
   PipelineIssue,
   PipelineVersion,
-} from '../types/pipeline';
-import { useAnnotationStore, sha256Hex } from './annotationStore';
-import { t } from '../i18n';
+} from '@aif/workbench/types/pipeline';
+import { useAnnotationStore, sha256Hex } from '@aif/workbench/store/annotationStore';
+import { t } from '@aif/workbench/i18n';
 
 const HISTORY_LIMIT = 50;
 const TEST_POLL_MS = 2000;

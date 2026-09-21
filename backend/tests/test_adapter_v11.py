@@ -11,7 +11,7 @@ from app.services.langflow_client import extract_output_text
 
 BACKEND = Path(__file__).resolve().parent.parent
 FIXTURE = BACKEND / "fixtures" / "langflow_run_response.sample.json"
-SAMPLE = BACKEND.parent / "frontend" / "public" / "sample" / "sample-case.json"
+SAMPLE = BACKEND.parent / "packages" / "aif-workbench" / "fixtures" / "sample-case.json"
 ISSUES = IssueCatalog.load(BACKEND / "catalog" / "issue_catalog.json")
 SCHEMES = SchemeCatalog.load(BACKEND / "catalog" / "walton_schemes.json")
 TEXT = json.loads(SAMPLE.read_text(encoding="utf-8"))["text"]

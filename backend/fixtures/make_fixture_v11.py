@@ -3,7 +3,7 @@ v11 mock fixture 생성기.
 
 v11 flow 의 실제 컴포넌트 코드(Splitter → Issue Selector → Branch Extractor → Graph Builder → Summarizer →
 Scheme Assigner → Result Validator)를 lfx 스텁으로 실행하고, 모델 호출만 사람이 작성한 가상 응답으로 바꿔
-샘플 판결문(frontend/public/sample/sample-case.json)에 대한 출력을 만든다.
+샘플 판결문(packages/aif-workbench/fixtures/sample-case.json)에 대한 출력을 만든다.
 
 실행 (backend 폴더에서): python fixtures/make_fixture_v11.py
 출력: fixtures/langflow_run_response.sample.json
@@ -23,7 +23,7 @@ from app.services.catalogs import IssueCatalog, SchemeCatalog  # noqa: E402
 from fixtures.make_fixture import wrap_envelope  # noqa: E402
 from tests.lfx_stub import Message, load_component  # noqa: E402
 
-SAMPLE = ROOT.parent.parent / "frontend" / "public" / "sample" / "sample-case.json"
+SAMPLE = ROOT.parent.parent / "packages" / "aif-workbench" / "fixtures" / "sample-case.json"
 ISSUES = IssueCatalog.load(ROOT.parent / "catalog" / "issue_catalog.json")
 SCHEMES = SchemeCatalog.load(ROOT.parent / "catalog" / "walton_schemes.json")
 

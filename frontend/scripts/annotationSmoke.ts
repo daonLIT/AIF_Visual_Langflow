@@ -6,11 +6,11 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { importAifOva } from '../src/io/importAifOva';
-import { exportAifOva } from '../src/io/exportAifOva';
-import { validateCase } from '../src/validation/graphValidator';
-import type { Annotation, EdgeAnnotation, EvidenceSpan, NodeAnnotation } from '../src/types/annotation';
-import { DocumentMatcher, buildSegments, rematchEvidence } from '../src/utils/evidence';
+import { importAifOva } from '@aif/workbench/io/importAifOva';
+import { exportAifOva } from '@aif/workbench/io/exportAifOva';
+import { validateCase } from '@aif/workbench/validation/graphValidator';
+import type { Annotation, EdgeAnnotation, EvidenceSpan, NodeAnnotation } from '@aif/workbench/types/annotation';
+import { DocumentMatcher, buildSegments, rematchEvidence } from '@aif/workbench/utils/evidence';
 import {
   acceptAnnotation,
   edgeDependency,
@@ -20,7 +20,7 @@ import {
   resetAnnotation,
   setDraftText,
   type ReviewSnapshot,
-} from '../src/store/reviewLogic';
+} from '@aif/workbench/store/reviewLogic';
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = ''): void {
@@ -32,7 +32,7 @@ function check(label: string, condition: boolean, detail = ''): void {
 }
 
 // ---- 1) 서버 adapter 결과와 동일한 형태의 제안 만들기 (fixture + 간단 변환) ----
-const samplePath = resolve(process.cwd(), 'public/sample/sample-case.json');
+const samplePath = resolve(process.cwd(), '../packages/aif-workbench/fixtures/sample-case.json');
 const fixturePath = resolve(process.cwd(), '../backend/fixtures/langflow_run_response.v9.sample.json');
 const text: string = JSON.parse(readFileSync(samplePath, 'utf8')).text;
 const envelope = JSON.parse(readFileSync(fixturePath, 'utf8'));
