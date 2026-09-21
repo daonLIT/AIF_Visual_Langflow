@@ -5,7 +5,8 @@
   "description": "AIF 전용 Langflow Desktop 셸 (P0 실험). 공식 Langflow Desktop 과 별도 앱 ID·데이터 경로를 쓴다.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "devDependencies": {
     "electron": "38.2.0"

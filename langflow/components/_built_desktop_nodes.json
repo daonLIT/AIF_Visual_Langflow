@@ -1,0 +1,390 @@
+{
+ "fingerprint": "2f736736b90a08580d76e927176e623384969dba403fd4e0a3ceafe27631b7ad",
+ "result": {
+  "components": {
+   "context": {
+    "template": {
+     "_type": "Component",
+     "api_base": {
+      "tool_mode": false,
+      "trace_as_metadata": true,
+      "load_from_db": false,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": false,
+      "placeholder": "",
+      "show": true,
+      "name": "api_base",
+      "value": "",
+      "display_name": "AIF API base URL",
+      "advanced": true,
+      "api_editable": false,
+      "dynamic": false,
+      "info": "중앙 AIF 서버 주소 (예: https://aif.example.org). 비우면 환경변수 AIF_API_BASE.",
+      "title_case": false,
+      "track_in_telemetry": false,
+      "type": "str",
+      "_input_type": "StrInput"
+     },
+     "case_id": {
+      "tool_mode": false,
+      "trace_as_metadata": true,
+      "load_from_db": false,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": false,
+      "placeholder": "",
+      "show": true,
+      "name": "case_id",
+      "value": "",
+      "display_name": "Case ID",
+      "advanced": false,
+      "api_editable": false,
+      "dynamic": false,
+      "info": "",
+      "title_case": false,
+      "track_in_telemetry": false,
+      "type": "str",
+      "_input_type": "StrInput"
+     },
+     "code": {
+      "type": "code",
+      "required": true,
+      "placeholder": "",
+      "list": false,
+      "show": true,
+      "multiline": true,
+      "value": "from __future__ import annotations\n\nimport json\nimport os\nimport uuid\nfrom datetime import datetime, timezone\n\nimport httpx\nfrom lfx.custom import Component\nfrom lfx.io import IntInput, MessageTextInput, Output, StrInput\nfrom lfx.schema.message import Message\n\n\nclass AIFRunContext(Component):\n    display_name = \"AIF Run Context\"\n    description = (\n        \"Starts a Desktop analysis run: reads the issue and scheme catalogues from the central AIF server, pins their \"\n        \"versions and hashes, and creates the external run ID that the publish step sends. Fails loudly when the \"\n        \"catalogues cannot be read (it never analyses with empty catalogues). The access token is read from the \"\n        \"AIF_PUBLISH_TOKEN environment variable and is never written into the flow or its outputs.\"\n    )\n    icon = \"PlayCircle\"\n    name = \"AIFRunContext\"\n\n    inputs = [\n        MessageTextInput(name=\"judgment\", display_name=\"Judgment\", info=\"판결문 원문. 공백·줄바꿈을 그대로 보존한다.\", required=True),\n        StrInput(name=\"case_id\", display_name=\"Case ID\", value=\"\", advanced=False),\n        StrInput(name=\"title\", display_name=\"Title\", value=\"\", advanced=False),\n        StrInput(\n            name=\"api_base\",\n            display_name=\"AIF API base URL\",\n            value=\"\",\n            info=\"중앙 AIF 서버 주소 (예: https://aif.example.org). 비우면 환경변수 AIF_API_BASE.\",\n            advanced=True,\n        ),\n        IntInput(name=\"timeout\", display_name=\"Timeout (s)\", value=30, advanced=True),\n    ]\n\n    outputs = [\n        Output(display_name=\"Splitter Input\", name=\"payload\", method=\"build_payload\", group_outputs=True),\n        Output(display_name=\"Run Context\", name=\"context\", method=\"build_context\", group_outputs=True),\n    ]\n\n    @staticmethod\n    def _text(value) -> str:\n        text = getattr(value, \"text\", None)\n        return str(text if text is not None else (value or \"\"))\n\n    def resolved_base(self) -> str:\n        # 입력값은 Langflow 가 같은 이름의 속성(self.api_base)으로 넣는다.\n        return (self._text(getattr(self, \"api_base\", \"\")) or os.environ.get(\"AIF_API_BASE\", \"\")).strip().rstrip(\"/\")\n\n    def fetch_context(self, base: str) -> dict:\n        token = os.environ.get(\"AIF_PUBLISH_TOKEN\", \"\")\n        headers = {\"Accept\": \"application/json\"}\n        if token:\n            headers[\"Authorization\"] = f\"Bearer {token}\"\n        try:\n            response = httpx.get(f\"{base}/api/integrations/langflow/context\", headers=headers, timeout=float(self.timeout or 30))\n        except httpx.HTTPError as error:\n            raise ValueError(f\"AIF 서버에서 카탈로그를 읽지 못했습니다 ({base}): {error.__class__.__name__}\") from error\n        if response.status_code != 200:\n            try:\n                message = response.json().get(\"error\", {}).get(\"message\", \"\")\n            except ValueError:\n                message = \"\"\n            raise ValueError(f\"AIF 서버가 카탈로그 요청을 거절했습니다: HTTP {response.status_code} {message}\".strip())\n        context = response.json()\n        if not context.get(\"issueCatalog\") or not context.get(\"schemeCatalog\"):\n            raise ValueError(\"AIF 서버가 빈 카탈로그를 돌려주었습니다. 빈 카탈로그로는 분석하지 않습니다.\")\n        return context\n\n    def _run(self) -> dict:\n        # 두 출력이 같은 실행 ID·카탈로그를 쓰도록 한 번만 만든다.\n        cached = getattr(self, \"_aif_run\", None)\n        if cached is not None:\n            return cached\n        judgment = self._text(self.judgment)\n        if not judgment.strip():\n            raise ValueError(\"판결문 원문이 비어 있습니다.\")\n        base = self.resolved_base()\n        if not base:\n            raise ValueError(\"AIF 서버 주소가 없습니다. 'AIF API base URL' 또는 환경변수 AIF_API_BASE 를 설정하세요.\")\n        context = self.fetch_context(base)\n        run = {\n            \"externalRunId\": f\"lfd-{uuid.uuid4().hex}\",\n            \"createdAt\": datetime.now(timezone.utc).isoformat(timespec=\"milliseconds\").replace(\"+00:00\", \"Z\"),\n            \"apiBase\": base,\n            \"document\": {\n                \"text\": judgment,\n                \"caseId\": self._text(self.case_id).strip() or None,\n                \"title\": self._text(self.title).strip() or None,\n            },\n            \"catalogs\": {\n                \"issueCatalogVersion\": context[\"issueCatalogVersion\"],\n                \"issueCatalogSha256\": context[\"issueCatalogSha256\"],\n                \"schemeCatalogVersion\": context[\"schemeCatalogVersion\"],\n                \"schemeCatalogSha256\": context[\"schemeCatalogSha256\"],\n            },\n            \"splitter\": {\n                \"case_id\": self._text(self.case_id).strip(),\n                \"judgment\": judgment,\n                \"issue_catalog\": context[\"issueCatalog\"],\n                \"issue_catalog_version\": context[\"issueCatalogVersion\"],\n                \"scheme_catalog\": context[\"schemeCatalog\"],\n                \"scheme_catalog_version\": context[\"schemeCatalogVersion\"],\n            },\n        }\n        self._aif_run = run\n        self.status = f\"run {run['externalRunId']} · issue catalog v{context['issueCatalogVersion']} · scheme v{context['schemeCatalogVersion']}\"\n        return run\n\n    def build_payload(self) -> Message:\n        return Message(text=json.dumps(self._run()[\"splitter\"], ensure_ascii=False))\n\n    def build_context(self) -> Message:\n        run = self._run()\n        return Message(text=json.dumps({k: v for k, v in run.items() if k != \"splitter\"}, ensure_ascii=False))\n",
+      "fileTypes": [],
+      "file_path": "",
+      "password": false,
+      "name": "code",
+      "advanced": true,
+      "api_editable": false,
+      "dynamic": true,
+      "info": "",
+      "load_from_db": false,
+      "title_case": false
+     },
+     "judgment": {
+      "tool_mode": false,
+      "trace_as_input": true,
+      "trace_as_metadata": true,
+      "load_from_db": false,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": true,
+      "placeholder": "",
+      "show": true,
+      "name": "judgment",
+      "value": "",
+      "display_name": "Judgment",
+      "advanced": false,
+      "api_editable": false,
+      "input_types": [
+       "Message"
+      ],
+      "dynamic": false,
+      "info": "판결문 원문. 공백·줄바꿈을 그대로 보존한다.",
+      "title_case": false,
+      "track_in_telemetry": false,
+      "type": "str",
+      "_input_type": "MessageTextInput"
+     },
+     "timeout": {
+      "tool_mode": false,
+      "trace_as_metadata": true,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": false,
+      "placeholder": "",
+      "show": true,
+      "name": "timeout",
+      "value": 30,
+      "display_name": "Timeout (s)",
+      "advanced": true,
+      "api_editable": false,
+      "dynamic": false,
+      "info": "",
+      "title_case": false,
+      "track_in_telemetry": true,
+      "type": "int",
+      "_input_type": "IntInput"
+     },
+     "title": {
+      "tool_mode": false,
+      "trace_as_metadata": true,
+      "load_from_db": false,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": false,
+      "placeholder": "",
+      "show": true,
+      "name": "title",
+      "value": "",
+      "display_name": "Title",
+      "advanced": false,
+      "api_editable": false,
+      "dynamic": false,
+      "info": "",
+      "title_case": false,
+      "track_in_telemetry": false,
+      "type": "str",
+      "_input_type": "StrInput"
+     }
+    },
+    "description": "Starts a Desktop analysis run: reads the issue and scheme catalogues from the central AIF server, pins their versions and hashes, and creates the external run ID that the publish step sends. Fails loudly when the catalogues cannot be read (it never analyses with empty catalogues). The access token is read from the AIF_PUBLISH_TOKEN environment variable and is never written into the flow or its outputs.",
+    "icon": "PlayCircle",
+    "base_classes": [
+     "Message"
+    ],
+    "display_name": "AIF Run Context",
+    "documentation": "",
+    "minimized": false,
+    "custom_fields": {},
+    "output_types": [],
+    "pinned": false,
+    "conditional_paths": [],
+    "frozen": false,
+    "outputs": [
+     {
+      "types": [
+       "Message"
+      ],
+      "selected": "Message",
+      "name": "payload",
+      "display_name": "Splitter Input",
+      "method": "build_payload",
+      "value": "__UNDEFINED__",
+      "cache": true,
+      "allows_loop": false,
+      "group_outputs": true,
+      "tool_mode": true
+     },
+     {
+      "types": [
+       "Message"
+      ],
+      "selected": "Message",
+      "name": "context",
+      "display_name": "Run Context",
+      "method": "build_context",
+      "value": "__UNDEFINED__",
+      "cache": true,
+      "allows_loop": false,
+      "group_outputs": true,
+      "tool_mode": true
+     }
+    ],
+    "field_order": [
+     "judgment",
+     "case_id",
+     "title",
+     "api_base",
+     "timeout"
+    ],
+    "beta": false,
+    "legacy": false,
+    "edited": false,
+    "metadata": {
+     "module": "custom_components.aif_run_context",
+     "code_hash": "8d16552d76a1",
+     "dependencies": {
+      "total_dependencies": 2,
+      "dependencies": [
+       {
+        "name": "httpx",
+        "version": "0.28.1"
+       },
+       {
+        "name": "lfx",
+        "version": "1.11.0"
+       }
+      ]
+     }
+    },
+    "tool_mode": false
+   },
+   "publish": {
+    "template": {
+     "_type": "Component",
+     "code": {
+      "type": "code",
+      "required": true,
+      "placeholder": "",
+      "list": false,
+      "show": true,
+      "multiline": true,
+      "value": "from __future__ import annotations\n\nimport json\nimport os\nimport re\nimport time\nfrom pathlib import Path\n\nimport httpx\nfrom lfx.custom import Component\nfrom lfx.io import IntInput, MessageTextInput, Output\nfrom lfx.schema.message import Message\n\n_FENCE = re.compile(r\"^\\s*```(?:json)?\\s*(.*?)\\s*```\\s*$\", re.I | re.S)\nCOMPONENT_VERSION = \"aif-publish/1\"\n# 4xx 중 인증 문제는 토큰을 고친 뒤 다시 보낼 수 있으므로 outbox 에 남기고, 내용 문제는 failed/ 로 옮긴다.\nKEEP_PENDING = (401, 403)\n\n\ndef outbox_dir() -> Path:\n    configured = os.environ.get(\"AIF_OUTBOX_DIR\", \"\").strip()\n    return Path(configured) if configured else Path.home() / \".aif-langflow\" / \"outbox\"\n\n\nclass AIFPublish(Component):\n    display_name = \"AIF Publish\"\n    description = (\n        \"Sends the final AIF JSON, the original judgment and the run context to the central AIF server and outputs \"\n        \"the saved project. Analysis status and publish status are reported separately. Before sending, the request \"\n        \"is written to a local outbox (without the token) so it can be re-sent after a network failure or an app \"\n        \"restart; it is removed once the server confirms. Temporary failures are retried a limited number of times; \"\n        \"authentication, validation and conflict errors are not retried.\"\n    )\n    icon = \"UploadCloud\"\n    name = \"AIFPublish\"\n\n    inputs = [\n        MessageTextInput(name=\"final_graph\", display_name=\"Final AIF JSON\", required=True),\n        MessageTextInput(name=\"run_context\", display_name=\"Run Context\", required=True),\n        IntInput(name=\"retries\", display_name=\"Retries\", value=3, advanced=True),\n        IntInput(name=\"timeout\", display_name=\"Timeout (s)\", value=60, advanced=True),\n    ]\n\n    outputs = [Output(display_name=\"Publish Result\", name=\"publish_result\", method=\"publish\")]\n\n    retry_delays = (1.0, 3.0, 9.0)\n\n    @staticmethod\n    def _text(value) -> str:\n        text = getattr(value, \"text\", None)\n        return str(text if text is not None else (value or \"\"))\n\n    def _flow_source(self) -> dict:\n        \"\"\"Langflow 가 알려 주는 Flow ID·이름만 담는다. 알 수 없으면 비운다.\"\"\"\n        graph = getattr(self, \"graph\", None)\n        flow_id = getattr(graph, \"flow_id\", None) or getattr(self, \"flow_id\", None)\n        flow_name = getattr(graph, \"flow_name\", None) or getattr(self, \"flow_name\", None)\n        source = {\"kind\": \"langflow-desktop\", \"componentVersion\": COMPONENT_VERSION}\n        if flow_id:\n            source[\"flowId\"] = str(flow_id)\n        if flow_name:\n            source[\"flowName\"] = str(flow_name)\n        return source\n\n    def post(self, url: str, body: dict, token: str) -> httpx.Response:\n        headers = {\"Content-Type\": \"application/json\", \"Accept\": \"application/json\"}\n        if token:\n            headers[\"Authorization\"] = f\"Bearer {token}\"\n        return httpx.post(url, json=body, headers=headers, timeout=float(self.timeout or 60))\n\n    def sleep(self, seconds: float) -> None:\n        time.sleep(seconds)\n\n    def send(self, url: str, body: dict) -> tuple[int | None, dict | None, str | None]:\n        \"\"\"(HTTP 상태, 응답 JSON, 오류 설명). 일시적 오류만 제한된 횟수로 다시 보낸다.\"\"\"\n        token = os.environ.get(\"AIF_PUBLISH_TOKEN\", \"\")\n        attempts = max(1, int(self.retries or 0) + 1)\n        last_error = None\n        for attempt in range(attempts):\n            try:\n                response = self.post(url, body, token)\n            except httpx.HTTPError as error:\n                last_error = f\"{error.__class__.__name__}\"\n                status, data = None, None\n            else:\n                try:\n                    data = response.json()\n                except ValueError:\n                    data = None\n                status = response.status_code\n                if status < 500 and status != 429:\n                    return status, data, None\n                last_error = f\"HTTP {status}\"\n            if attempt + 1 < attempts:\n                self.sleep(self.retry_delays[min(attempt, len(self.retry_delays) - 1)])\n        return None, None, last_error\n\n    def publish(self) -> Message:\n        graph_text = self._text(self.final_graph).strip()\n        match = _FENCE.match(graph_text)\n        result = json.loads(match.group(1) if match else graph_text, strict=False)\n        context = json.loads(self._text(self.run_context), strict=False)\n        run_id = context[\"externalRunId\"]\n        analysis_status = result.get(\"status\") or \"ok\"\n\n        if analysis_status not in (\"ok\", \"no_issues\"):\n            errors = result.get(\"errors\") or []\n            self.status = f\"analysis {analysis_status}: not published\"\n            return Message(text=self.render({\"analysisStatus\": analysis_status, \"publishStatus\": \"skipped\", \"externalRunId\": run_id, \"errors\": errors[:10]}))\n\n        body = {\n            \"schemaVersion\": 1,\n            \"externalRunId\": run_id,\n            \"source\": self._flow_source(),\n            \"document\": context[\"document\"],\n            \"catalogs\": context[\"catalogs\"],\n            \"result\": result,\n        }\n        url = f\"{context['apiBase']}/api/integrations/langflow/results\"\n        pending = outbox_dir() / f\"{run_id}.json\"\n        pending.parent.mkdir(parents=True, exist_ok=True)\n        # 토큰은 넣지 않는다. 같은 실행 ID 의 재전송은 같은 본문이어야 서버가 같은 결과로 인정한다.\n        if not pending.exists():\n            pending.write_text(json.dumps({\"url\": url, \"body\": body}, ensure_ascii=False), encoding=\"utf-8\")\n\n        status, data, error = self.send(url, body)\n        summary = {\"analysisStatus\": analysis_status, \"externalRunId\": run_id}\n        if status in (200, 201):\n            pending.unlink(missing_ok=True)\n            summary.update(\n                publishStatus=\"saved\",\n                duplicate=bool((data or {}).get(\"duplicate\")),\n                projectId=(data or {}).get(\"projectId\"),\n                runId=(data or {}).get(\"runId\"),\n                outcome=(data or {}).get(\"outcome\"),\n                viewerUrl=(data or {}).get(\"viewerUrl\"),\n            )\n            self.status = f\"saved: {summary['projectId']}\"\n        elif status is not None:\n            message = ((data or {}).get(\"error\") or {}).get(\"message\") or f\"HTTP {status}\"\n            code = ((data or {}).get(\"error\") or {}).get(\"code\")\n            if status not in KEEP_PENDING:\n                failed = pending.parent / \"failed\"\n                failed.mkdir(exist_ok=True)\n                if pending.exists():\n                    pending.replace(failed / pending.name)\n            summary.update(publishStatus=\"failed\", httpStatus=status, code=code, error=message, retryable=status in KEEP_PENDING)\n            self.status = f\"publish failed: HTTP {status}\"\n        else:\n            summary.update(publishStatus=\"failed\", error=error, retryable=True, outbox=str(pending))\n            self.status = f\"publish failed: {error}\"\n        return Message(text=self.render(summary))\n\n    @staticmethod\n    def render(summary: dict) -> str:\n        \"\"\"사람이 읽는 요약 + 기계가 읽는 JSON. 링크는 이 실행의 프로젝트만 가리킨다.\"\"\"\n        lines = []\n        state = summary.get(\"publishStatus\")\n        if state == \"saved\":\n            label = \"이미 저장된 결과\" if summary.get(\"duplicate\") else \"저장됨\"\n            lines.append(f\"**AIF 게시: {label}** (분석: {summary['analysisStatus']})\")\n            lines.append(f\"[AIF 검토 화면에서 열기](/aif/projects/{summary['projectId']})\")\n        elif state == \"skipped\":\n            lines.append(f\"**AIF 게시 안 함**: 분석 결과가 {summary['analysisStatus']} 입니다.\")\n            lines.extend(f\"- {error}\" for error in summary.get(\"errors\") or [])\n        else:\n            lines.append(f\"**AIF 게시 실패** (분석: {summary['analysisStatus']}): {summary.get('error')}\")\n            if summary.get(\"retryable\"):\n                lines.append(\"분석 결과는 로컬 outbox 에 보관했습니다. 셸이 다음 시작 때 다시 보냅니다.\")\n        lines.append(\"\")\n        lines.append(\"```json\")\n        lines.append(json.dumps(summary, ensure_ascii=False, indent=2))\n        lines.append(\"```\")\n        return \"\\n\".join(lines)\n",
+      "fileTypes": [],
+      "file_path": "",
+      "password": false,
+      "name": "code",
+      "advanced": true,
+      "api_editable": false,
+      "dynamic": true,
+      "info": "",
+      "load_from_db": false,
+      "title_case": false
+     },
+     "final_graph": {
+      "tool_mode": false,
+      "trace_as_input": true,
+      "trace_as_metadata": true,
+      "load_from_db": false,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": true,
+      "placeholder": "",
+      "show": true,
+      "name": "final_graph",
+      "value": "",
+      "display_name": "Final AIF JSON",
+      "advanced": false,
+      "api_editable": false,
+      "input_types": [
+       "Message"
+      ],
+      "dynamic": false,
+      "info": "",
+      "title_case": false,
+      "track_in_telemetry": false,
+      "type": "str",
+      "_input_type": "MessageTextInput"
+     },
+     "retries": {
+      "tool_mode": false,
+      "trace_as_metadata": true,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": false,
+      "placeholder": "",
+      "show": true,
+      "name": "retries",
+      "value": 3,
+      "display_name": "Retries",
+      "advanced": true,
+      "api_editable": false,
+      "dynamic": false,
+      "info": "",
+      "title_case": false,
+      "track_in_telemetry": true,
+      "type": "int",
+      "_input_type": "IntInput"
+     },
+     "run_context": {
+      "tool_mode": false,
+      "trace_as_input": true,
+      "trace_as_metadata": true,
+      "load_from_db": false,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": true,
+      "placeholder": "",
+      "show": true,
+      "name": "run_context",
+      "value": "",
+      "display_name": "Run Context",
+      "advanced": false,
+      "api_editable": false,
+      "input_types": [
+       "Message"
+      ],
+      "dynamic": false,
+      "info": "",
+      "title_case": false,
+      "track_in_telemetry": false,
+      "type": "str",
+      "_input_type": "MessageTextInput"
+     },
+     "timeout": {
+      "tool_mode": false,
+      "trace_as_metadata": true,
+      "list": false,
+      "list_add_label": "Add More",
+      "override_skip": false,
+      "required": false,
+      "placeholder": "",
+      "show": true,
+      "name": "timeout",
+      "value": 60,
+      "display_name": "Timeout (s)",
+      "advanced": true,
+      "api_editable": false,
+      "dynamic": false,
+      "info": "",
+      "title_case": false,
+      "track_in_telemetry": true,
+      "type": "int",
+      "_input_type": "IntInput"
+     }
+    },
+    "description": "Sends the final AIF JSON, the original judgment and the run context to the central AIF server and outputs the saved project. Analysis status and publish status are reported separately. Before sending, the request is written to a local outbox (without the token) so it can be re-sent after a network failure or an app restart; it is removed once the server confirms. Temporary failures are retried a limited number of times; authentication, validation and conflict errors are not retried.",
+    "icon": "UploadCloud",
+    "base_classes": [
+     "Message"
+    ],
+    "display_name": "AIF Publish",
+    "documentation": "",
+    "minimized": false,
+    "custom_fields": {},
+    "output_types": [],
+    "pinned": false,
+    "conditional_paths": [],
+    "frozen": false,
+    "outputs": [
+     {
+      "types": [
+       "Message"
+      ],
+      "selected": "Message",
+      "name": "publish_result",
+      "display_name": "Publish Result",
+      "method": "publish",
+      "value": "__UNDEFINED__",
+      "cache": true,
+      "allows_loop": false,
+      "group_outputs": false,
+      "tool_mode": true
+     }
+    ],
+    "field_order": [
+     "final_graph",
+     "run_context",
+     "retries",
+     "timeout"
+    ],
+    "beta": false,
+    "legacy": false,
+    "edited": false,
+    "metadata": {
+     "module": "custom_components.aif_publish",
+     "code_hash": "adbf4ec23d8c",
+     "dependencies": {
+      "total_dependencies": 2,
+      "dependencies": [
+       {
+        "name": "httpx",
+        "version": "0.28.1"
+       },
+       {
+        "name": "lfx",
+        "version": "1.11.0"
+       }
+      ]
+     }
+    },
+    "tool_mode": false
+   }
+  },
+  "prompts": {}
+ }
+}

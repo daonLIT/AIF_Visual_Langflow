@@ -60,6 +60,11 @@ export async function sha256Hex(text: string): Promise<string> {
   return '';
 }
 
+export type ServerLoadResult = { ok: true } | { ok: false; stale: true } | { ok: false; stale?: false; error: unknown };
+
+// 서버 불러오기 요청 번호. 늦게 도착한 이전 응답이 새 프로젝트 화면을 덮어쓰지 않게 한다.
+let serverLoadSeq = 0;
+
 function randomId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -162,8 +167,9 @@ interface AnnotationActions {
   // 저장
   buildProjectFile: () => ProjectFile | null;
   saveToServer: () => Promise<void>;
-  loadFromServer: (projectId: string) => Promise<void>;
-  loadProjectFile: (project: ProjectFile, fileName?: string) => Promise<void>;
+  /** 서버 프로젝트를 연다. 나중에 시작한 불러오기가 있으면 이 응답은 버린다(stale). */
+  loadFromServer: (projectId: string) => Promise<ServerLoadResult>;
+  loadProjectFile: (project: ProjectFile, fileName?: string, options?: { isCurrent?: () => boolean }) => Promise<void>;
   resetProject: () => void;
 }
 
@@ -684,16 +690,23 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
     },
 
     async loadFromServer(projectId) {
+      const seq = ++serverLoadSeq;
+      const isCurrent = () => seq === serverLoadSeq;
       try {
         const project = await api.loadProject(projectId);
-        await get().loadProjectFile(project);
+        if (!isCurrent()) return { ok: false, stale: true };
+        await get().loadProjectFile(project, undefined, { isCurrent });
+        return isCurrent() ? { ok: true } : { ok: false, stale: true };
       } catch (error) {
+        if (!isCurrent()) return { ok: false, stale: true };
         const message = error instanceof ApiError ? `${error.message} (${error.code})` : (error as Error).message;
         useGraphStore.getState().setErrorMessage(t('annotation.error.loadFailed', { message }));
+        return { ok: false, error };
       }
     },
 
-    async loadProjectFile(source, fileName) {
+    async loadProjectFile(source, fileName, options) {
+      const isCurrent = options?.isCurrent ?? (() => true);
       let project: ProjectFile;
       // 이전 카탈로그 scheme 전환에 대응표가 필요하다. 아직 못 읽었으면 먼저 읽고, 그래도 없으면 전환하지 않는다.
       if (!useCatalogStore.getState().schemes) await useCatalogStore.getState().load();
@@ -705,6 +718,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         useGraphStore.getState().setErrorMessage((error as Error).message);
         return;
       }
+      if (!isCurrent()) return;
       stopPolling();
       const imported = importAifOva({ ...project.acceptedGraph, text: project.document.text }, fileName, { schemeCatalog, migratedAt });
       const annotationsMigrated = project.annotations.some(
@@ -716,6 +730,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       graph.loadSnapshot({ caseData: imported.case, annotations: project.annotations }, fileName ?? project.title ?? null);
       if (imported.warnings.length > 0) useGraphStore.setState({ importWarnings: imported.warnings });
       const hash = await sha256Hex(project.document.text);
+      if (!isCurrent()) return;
       set({
         ...initialState,
         projectId: project.projectId,

@@ -101,3 +101,60 @@ class SummaryItem(BaseModel):
 class SummariesRequest(BaseModel):
     items: list[SummaryItem] = Field(..., min_length=1, max_length=40)
     flowId: str | None = Field(None, max_length=128)
+
+
+# ---- 외부 결과 게시 (Langflow Desktop → 중앙 서버) ----
+EXTERNAL_RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$"
+MAX_RESULT_NODES = 2_000
+MAX_RESULT_EDGES = 4_000
+
+
+class PublishSource(BaseModel):
+    kind: Literal["langflow-desktop"]
+    flowId: str | None = Field(None, max_length=128)
+    flowName: str | None = Field(None, max_length=256)
+    # 게시 컴포넌트가 실제로 알 수 있는 값만. 모르는 값은 비워 둔다(서버가 채워 넣지 않음).
+    componentVersion: str | None = Field(None, max_length=64)
+    models: list[str] = Field(default_factory=list, max_length=20)
+
+
+class PublishDocument(BaseModel):
+    text: str
+    caseId: str | None = Field(None, max_length=128)
+    title: str | None = Field(None, max_length=256)
+
+    @field_validator("text")
+    @classmethod
+    def _text_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(t("schema.document_empty"))
+        if len(value) > MAX_DOCUMENT_CHARS:
+            raise ValueError(t("schema.document_too_long", max=f"{MAX_DOCUMENT_CHARS:,}"))
+        return value
+
+
+class PublishCatalogs(BaseModel):
+    issueCatalogVersion: int | str
+    issueCatalogSha256: str = Field(..., min_length=64, max_length=64)
+    schemeCatalogVersion: int | str
+    schemeCatalogSha256: str = Field(..., min_length=64, max_length=64)
+
+
+class LangflowResultPublish(BaseModel):
+    schemaVersion: Literal[1]
+    externalRunId: str = Field(..., pattern=EXTERNAL_RUN_ID_PATTERN)
+    source: PublishSource
+    document: PublishDocument
+    catalogs: PublishCatalogs
+    # Result Validator 가 낸 최종 AIF JSON 그대로 ({status, AIF, OVA, meta, errors, reason ...})
+    result: dict[str, Any]
+
+    @field_validator("result")
+    @classmethod
+    def _result_size(cls, value: dict[str, Any]) -> dict[str, Any]:
+        aif = value.get("AIF") if isinstance(value.get("AIF"), dict) else {}
+        nodes = aif.get("nodes") if isinstance(aif.get("nodes"), list) else []
+        edges = aif.get("edges") if isinstance(aif.get("edges"), list) else []
+        if len(nodes) > MAX_RESULT_NODES or len(edges) > MAX_RESULT_EDGES:
+            raise ValueError(t("schema.result_too_large", nodes=MAX_RESULT_NODES, edges=MAX_RESULT_EDGES))
+        return value

@@ -44,6 +44,9 @@ async def _json_body(request: Request):
 
 async def health(request: Request) -> Response:
     settings = request.app.state.settings
+    if settings.auth_mode != "off" and getattr(request.state, "principal", None) is None:
+        # 인증 없이 보는 상태 확인은 살아 있는지만 알린다(설정·카탈로그 정보는 숨김).
+        return JSONResponse({"status": "ok", "time": datetime.now(timezone.utc).isoformat(), "authMode": settings.auth_mode})
     catalog = request.app.state.issue_catalog
     return JSONResponse(
         {

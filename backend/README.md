@@ -40,6 +40,68 @@ tests/                         unittest (pytest 호환)
 | `GET /api/projects` / `GET /api/projects/{id}` | 저장된 프로젝트 목록 / 불러오기 |
 | `PUT /api/projects/{id}` | 프로젝트 저장. 본문 `revision` 이 서버와 다르면 `409` |
 | `POST /api/evidence/verify` | 수동 범위/인용문 재검증 |
+| `GET /api/integrations/langflow/context` | Desktop Flow 실행 시작 때 읽는 쟁점·스킴 카탈로그(Flow 입력 형식)와 버전·sha256 |
+| `POST /api/integrations/langflow/results` | Desktop Flow 결과 게시. 아래 "외부 결과 게시" 참고 |
 
 오류 응답: `{"error": {"code", "message", "details": []}}`. 실행 실패 코드: `AUTH`, `CONNECTION`, `TIMEOUT`, `FLOW_NOT_FOUND`, `HTTP`,
 `BAD_ENVELOPE`, `OUTPUT_COMPONENT_NOT_FOUND`, `INVALID_RESULT`, `INTERRUPTED`, `CANCELLED`, `NOT_CONFIGURED`.
+
+
+## 인증 (`AIF_AUTH_MODE`)
+
+- `off`(기본): 로컬 개발용. 모든 요청을 `local-dev` 주체로 보고 모든 권한을 준다.
+- `token`: `/api/health` 를 뺀 모든 `/api` 요청에 `Authorization: Bearer <토큰>` 이 필요하다. 없거나 틀리면 `401 AUTH_REQUIRED`, 권한이 없으면 `403 FORBIDDEN`.
+  인증 없이 보는 `/api/health` 는 `{status, time, authMode}` 만 돌려준다.
+- 토큰 파일(`AIF_API_TOKENS_FILE`)에는 sha256 만 둔다. 파일을 고치면 서버 재시작 없이 다음 요청부터 반영된다.
+
+| 권한 | 경로 |
+| --- | --- |
+| `catalog:read` | `GET /api/catalogs/*`, `GET /api/integrations/langflow/context` |
+| `results:publish` | `POST /api/integrations/langflow/results` |
+| `projects:read` | `GET /api/projects`, `GET /api/projects/{id}`, `POST /api/evidence/verify` |
+| `projects:write` | `PUT /api/projects/{id}` |
+| `analysis:run` | `/api/analysis-runs*`, `POST /api/summaries` |
+| `pipeline:admin` | `/api/pipelines*`, `/api/pipeline-*`, `/api/connections*` |
+| `admin` | 모든 경로. 표에 없는 `/api` 경로는 `admin` 만 (기본 거부) |
+
+```bash
+python scripts/manage_tokens.py create --id desktop-publish --principal langflow-desktop --preset publish   # Flow 게시용
+python scripts/manage_tokens.py create --id desktop-review  --principal owner            --preset review    # Desktop 검토 화면용
+python scripts/manage_tokens.py list
+python scripts/manage_tokens.py disable --id desktop-publish
+```
+
+토큰 원문은 만들 때 한 번만 출력된다. 키 교체는 같은 `principal` 로 새 토큰을 만들고 Desktop 셸 설정을 바꾼 뒤 옛 토큰을 `disable` 한다.
+`principal` 이 같으면 교체 전후의 게시 재전송도 같은 결과로 묶인다. 브라우저 로그인(세션 쿠키)은 아직 없다(P3).
+
+## 외부 결과 게시 (Langflow Desktop → 중앙 서버)
+
+`POST /api/integrations/langflow/results` (권한 `results:publish`)
+
+```json
+{
+  "schemaVersion": 1,
+  "externalRunId": "lfd-<uuid>",
+  "source": {"kind": "langflow-desktop", "flowId": "…", "flowName": "…", "componentVersion": "aif-publish/1"},
+  "document": {"text": "판결문 원문", "caseId": "선택", "title": "선택"},
+  "catalogs": {"issueCatalogVersion": 1, "issueCatalogSha256": "…", "schemeCatalogVersion": 3, "schemeCatalogSha256": "…"},
+  "result": {"status": "ok | no_issues", "AIF": {"…": "Result Validator 의 최종 AIF JSON 그대로"}}
+}
+```
+
+| 응답 | 조건 |
+| --- | --- |
+| `201` `{projectId, runId, revision: 1, status: "saved", outcome, viewerUrl, duplicate: false, externalRunId}` | 새로 저장 |
+| `200` (같은 모양, `duplicate: true`, 지금 revision) | 같은 주체·같은 `externalRunId`·같은 내용의 재전송. 프로젝트는 건드리지 않는다(사람이 고친 내용 보존) |
+| `409 EXTERNAL_RUN_CONFLICT` | 같은 `externalRunId` 로 다른 내용 |
+| `409 CATALOG_MISMATCH` | 실행 때 카탈로그 버전·해시가 서버 현재 카탈로그와 다름(과거 카탈로그 스냅샷은 보관하지 않는다) |
+| `413 TOO_LARGE` | 본문이 `AIF_MAX_PUBLISH_BYTES` 초과 |
+| `422` | 요청 형식·빈 원문·그래프 규모(노드 2000/엣지 4000) 초과, `invalid` 결과, 잘못된 그래프 참조, 쟁점 제약 위반. 저장하지 않는다 |
+| `401` / `403` | 인증 없음 / 권한 없음 |
+
+- 분석은 Desktop 에서 끝났다. 서버는 Langflow 를 다시 부르지 않고 기존 어댑터로 검증·ID namespace·원문 근거 매칭·미검토 annotation 을 만든다.
+- AI 제안은 `acceptedGraph` 에 넣지 않는다(빈 그래프 + 미검토 annotation). `no_issues` 는 빈 그래프와 사유로 저장한다.
+- 중복 판정: (토큰의 `principal`, `externalRunId`) 에 DB 기본 키, 정규화한 요청(sha256)을 보관한다. 동시에 같은 요청이 와도 프로젝트는 하나다.
+- 실행 기록·프로젝트·게시 매핑은 한 트랜잭션(`BEGIN IMMEDIATE`)으로 저장한다. 중간에 실패하면 아무것도 남지 않는다.
+- 실행 기록에는 받은 출처 정보(`source`)만 남긴다. 알 수 없는 Flow 해시·모델 설정은 채워 넣지 않는다.
+- DB 마이그레이션 v4 가 `external_publications` 표를 만든다(기존 DB 는 먼저 백업).

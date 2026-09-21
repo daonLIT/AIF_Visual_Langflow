@@ -4,3 +4,6 @@ import './workbench.css';
 export { AifWorkbench, ErrorToast, type AifWorkbenchProps } from './AifWorkbench';
 export { configureWorkbench, workbenchHost, type WorkbenchHost } from './host';
 export { LanguageToggle } from './components/Layout/LanguageToggle';
+export { ProjectList, type ProjectListProps } from './components/Projects/ProjectList';
+export { describeApiError } from './api/errors';
+export { useAnnotationStore, type ServerLoadResult } from './store/annotationStore';

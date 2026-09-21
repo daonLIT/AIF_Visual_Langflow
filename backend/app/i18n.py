@@ -924,4 +924,49 @@ MESSAGES: dict[str, dict[str, str]] = {
         'ko': '실행 버전 고정용 스냅샷. 원본 {flowId}, 실행 해시 {hash}. 수정하지 마세요.',
         'en': 'Snapshot that pins the version for a run. Source {flowId}, execution hash {hash}. Do not edit.',
     },
+    # ---- auth / 외부 결과 게시 ----
+    'auth.required': {
+        'ko': '인증이 필요합니다. 연동 토큰 또는 로그인 정보를 확인하세요.',
+        'en': 'Authentication is required. Check the integration token or sign-in.',
+    },
+    'auth.forbidden': {
+        'ko': '이 작업을 할 권한이 없습니다.',
+        'en': 'You do not have permission for this action.',
+    },
+    'config.bad_auth_mode': {
+        'ko': 'AIF_AUTH_MODE 값 {value} 은(는) 지원하지 않습니다. 사용할 수 있는 값: {allowed}',
+        'en': 'AIF_AUTH_MODE {value} is not supported. Allowed values: {allowed}',
+    },
+    'schema.result_too_large': {
+        'ko': '결과 그래프가 너무 큽니다(노드 {nodes}개·엣지 {edges}개 이하).',
+        'en': 'The result graph is too large (at most {nodes} nodes and {edges} edges).',
+    },
+    'publish.too_large': {
+        'ko': '요청 본문이 너무 큽니다(최대 {max} 바이트).',
+        'en': 'The request body is too large (at most {max} bytes).',
+    },
+    'publish.run_conflict': {
+        'ko': '같은 실행 ID 로 다른 내용이 이미 게시되었습니다. 새 분석이면 새 실행 ID 를 쓰세요.',
+        'en': 'Different content was already published with this run ID. Use a new run ID for a new analysis.',
+    },
+    'publish.catalog_mismatch': {
+        'ko': '실행에 쓴 카탈로그가 서버의 현재 카탈로그와 다릅니다. 서버 카탈로그로 다시 분석하세요.',
+        'en': "The catalogues used for this run differ from the server's current catalogues. Run the analysis again with the server catalogues.",
+    },
+    'publish.catalog_issue': {
+        'ko': '쟁점 카탈로그: 실행 {got} / 서버 {expected} (버전 또는 해시가 다름)',
+        'en': 'Issue catalogue: run {got} / server {expected} (version or hash differs)',
+    },
+    'publish.catalog_scheme': {
+        'ko': '스킴 카탈로그: 실행 {got} / 서버 {expected} (버전 또는 해시가 다름)',
+        'en': 'Scheme catalogue: run {got} / server {expected} (version or hash differs)',
+    },
+    'publish.event_imported': {
+        'ko': 'Langflow Desktop 에서 게시된 제안 {count}개',
+        'en': '{count} proposals published from Langflow Desktop',
+    },
+    'publish.project_invalid': {
+        'ko': '결과로 프로젝트를 만들 수 없습니다.',
+        'en': 'A project could not be created from the result.',
+    },
 }

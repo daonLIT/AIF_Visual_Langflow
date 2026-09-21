@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self'" />
+    <title>AIF 연결 설정</title>
+    <style>
+      body { font: 14px 'Malgun Gothic', system-ui, sans-serif; margin: 24px; color: #1b1f27; background: #f5f6f8; }
+      h1 { font-size: 18px; margin: 0 0 16px; }
+      label { display: block; margin: 14px 0 4px; font-weight: 600; }
+      input { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid #b6bcc7; border-radius: 6px; font: inherit; }
+      .hint { color: #5f6674; font-size: 12px; margin-top: 4px; }
+      .row { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+      button { padding: 7px 14px; border-radius: 6px; border: 1px solid #b6bcc7; background: #fff; font: inherit; cursor: pointer; }
+      button.primary { background: #2f5bd8; border-color: #2f5bd8; color: #fff; }
+      #status { margin-top: 12px; min-height: 1.4em; }
+      .error { color: #c0392b; }
+      .ok { color: #1f7a5a; }
+    </style>
+  </head>
+  <body>
+    <h1>AIF 연결 설정</h1>
+    <form id="form">
+      <label for="apiBase">AIF 서버 주소</label>
+      <input id="apiBase" required placeholder="https://aif.example.org" />
+      <div class="hint">Flow 게시와 검토 화면이 같은 서버를 씁니다. 개발용으로 http://127.0.0.1:8000 도 됩니다.</div>
+
+      <label for="siteUrl">웹사이트 주소 (웹에서 열기)</label>
+      <input id="siteUrl" placeholder="https://aif.example.org" />
+
+      <label for="reviewToken">검토용 토큰</label>
+      <input id="reviewToken" type="password" autocomplete="off" />
+      <div class="hint" id="reviewHint"></div>
+
+      <label for="publishToken">게시용 토큰 (Flow)</label>
+      <input id="publishToken" type="password" autocomplete="off" />
+      <div class="hint" id="publishHint"></div>
+
+      <div id="status"></div>
+      <div class="row">
+        <button type="button" id="close">닫기</button>
+        <button type="submit" class="primary">저장</button>
+      </div>
+    </form>
+    <script src="settings.js"></script>
+  </body>
+</html>

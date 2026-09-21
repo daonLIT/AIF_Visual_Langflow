@@ -86,26 +86,19 @@ index dcc772c..c9f3f4d 100644
    background-color: white !important;
 diff --git a/src/frontend/src/aif/AifIntegrationCheckPage.tsx b/src/frontend/src/aif/AifIntegrationCheckPage.tsx
 new file mode 100644
-index 0000000..e8c0eef
+index 0000000..8c2ca22
 --- /dev/null
 +++ b/src/frontend/src/aif/AifIntegrationCheckPage.tsx
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,56 @@
 +import { useEffect, useState } from "react";
 +import { useLocation } from "react-router-dom";
 +import { Button } from "@/components/ui/button";
 +import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
++import { aifHost } from "./aifHostBridge";
 +
 +// P0 검증용 페이지: 포크한 프런트엔드가 실제 Desktop 창에 로드됐는지 확인한다.
 +// 빌드 표식은 vite define 이 아니라 빌드 스크립트가 쓰는 env 로 주입한다.
 +const BUILD_MARK = import.meta.env.VITE_AIF_BUILD_MARK ?? "dev";
-+
-+type HostInfo = { kind: string; version?: string };
-+
-+declare global {
-+  interface Window {
-+    aifHost?: HostInfo;
-+  }
-+}
 +
 +export default function AifIntegrationCheckPage(): JSX.Element {
 +  const navigate = useCustomNavigate();
@@ -123,7 +116,7 @@ index 0000000..e8c0eef
 +    }
 +  }, []);
 +
-+  const host = window.aifHost;
++  const host = aifHost;
 +
 +  return (
 +    <div
@@ -153,44 +146,369 @@ index 0000000..e8c0eef
 +    </div>
 +  );
 +}
-diff --git a/src/frontend/src/aif/AifWorkbenchPage.tsx b/src/frontend/src/aif/AifWorkbenchPage.tsx
+diff --git a/src/frontend/src/aif/AifProjectPage.tsx b/src/frontend/src/aif/AifProjectPage.tsx
 new file mode 100644
-index 0000000..5a8d29a
+index 0000000..9f83a25
 --- /dev/null
-+++ b/src/frontend/src/aif/AifWorkbenchPage.tsx
-@@ -0,0 +1,32 @@
++++ b/src/frontend/src/aif/AifProjectPage.tsx
+@@ -0,0 +1,131 @@
 +import {
 +  AifWorkbench,
-+  configureWorkbench,
++  describeApiError,
 +  LanguageToggle,
++  useAnnotationStore,
 +} from "@aif/workbench";
-+import "./aif-host.css";
++import { useT } from "@aif/workbench/i18n";
++import { useEffect, useState } from "react";
++import { useParams } from "react-router-dom";
++import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
++import { aifHost } from "./aifHost";
 +
-+// 중앙 AIF API 주소는 빌드 때 정한다. 비어 있으면 Langflow 와 같은 출처의 /api 를 쓰는데,
-+// 그 경로는 Langflow 가 쓰므로 P2 에서 중앙 서버 연결 방식을 정하기 전까지는 카탈로그·서버 저장이 동작하지 않는다.
-+configureWorkbench({
-+  apiBase: import.meta.env.VITE_AIF_API_BASE ?? "",
-+  // 분석은 Langflow 에서 Flow 를 실행해 만든다. 사이트용 분석 버튼은 숨긴다.
-+  analysis: false,
-+});
++type LoadState =
++  | { kind: "loading" }
++  | { kind: "ready" }
++  | { kind: "error"; message: string };
 +
-+export default function AifWorkbenchPage(): JSX.Element {
++export default function AifProjectPage(): JSX.Element {
++  const { projectId = "" } = useParams();
++  const navigate = useCustomNavigate();
++  const t = useT();
++  const [state, setState] = useState<LoadState>({ kind: "loading" });
++  const [notice, setNotice] = useState<string | null>(null);
++  const loadedId = useAnnotationStore((s) => s.projectId);
++
++  useEffect(() => {
++    // 같은 프로젝트를 이미 편집 중이면(목록에 다녀온 경우 등) 다시 불러오지 않아 편집을 잃지 않는다.
++    const store = useAnnotationStore.getState();
++    if (store.projectId === projectId && store.document) {
++      setState({ kind: "ready" });
++      return;
++    }
++    // 다른 프로젝트에 저장 안 한 편집이 남아 있으면 버릴지 묻는다(목록을 거쳐 와도 store 에 남아 있다).
++    const editing = store.document ? store.projectId : null;
++    if (
++      store.dirty &&
++      editing &&
++      !window.confirm(t("projects.discardConfirm"))
++    ) {
++      navigate(`/aif/projects/${encodeURIComponent(editing)}`, {
++        replace: true,
++      });
++      return;
++    }
++    setState({ kind: "loading" });
++    let cancelled = false;
++    void store.loadFromServer(projectId).then((result) => {
++      if (cancelled || ("stale" in result && result.stale)) return;
++      if (result.ok) {
++        setState({ kind: "ready" });
++      } else {
++        setState({
++          kind: "error",
++          message: describeApiError(
++            t,
++            "error" in result ? result.error : null,
++            projectId,
++          ),
++        });
++      }
++    });
++    return () => {
++      cancelled = true;
++    };
++    // t 는 언어가 바뀔 때만 바뀐다. 언어 전환으로 다시 불러오지 않는다.
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [projectId]);
++
++  const backToList = () => {
++    // 목록으로 가도 편집 상태는 남는다(같은 프로젝트를 다시 열면 그대로). 다른 프로젝트를 열 때 확인한다.
++    navigate("/aif/projects");
++  };
++
++  const openWeb = async () => {
++    if (!aifHost?.openWeb) return;
++    const result = await aifHost.openWeb(projectId);
++    setNotice(result.ok ? null : t("projects.openWeb.unset"));
++  };
++
++  const bar = (
++    <div className="top-bar project-bar">
++      <button type="button" onClick={backToList} data-testid="aif-back-to-list">
++        {t("projects.back")}
++      </button>
++      <span className="top-bar-title">{projectId}</span>
++      {state.kind === "loading" ? (
++        <span className="project-list-note">{t("projects.opening")}</span>
++      ) : null}
++      {notice ? (
++        <span className="project-list-note is-error">{notice}</span>
++      ) : null}
++      <span className="status-spacer" />
++      {aifHost?.openWeb && state.kind === "ready" ? (
++        <button
++          type="button"
++          onClick={() => void openWeb()}
++          data-testid="aif-open-web"
++        >
++          {t("projects.openWeb")}
++        </button>
++      ) : null}
++      <LanguageToggle />
++    </div>
++  );
++
++  if (state.kind === "error") {
++    return (
++      <div
++        className="aif-root aif-langflow-host"
++        data-testid="aif-project-page"
++      >
++        <div className="app-shell">
++          {bar}
++          <p className="project-list-note is-error aif-load-error" role="alert">
++            {state.message}
++          </p>
++        </div>
++      </div>
++    );
++  }
++
 +  return (
 +    <div
 +      className="aif-root aif-langflow-host"
-+      data-testid="aif-workbench-page"
++      data-testid="aif-project-page"
++      data-loaded-project={state.kind === "ready" ? loadedId : ""}
 +    >
-+      <AifWorkbench
-+        topBar={
-+          <div className="top-bar">
-+            <span className="top-bar-title">AIF</span>
++      <AifWorkbench topBar={bar} />
++    </div>
++  );
++}
+diff --git a/src/frontend/src/aif/AifProjectsPage.tsx b/src/frontend/src/aif/AifProjectsPage.tsx
+new file mode 100644
+index 0000000..6bf95ea
+--- /dev/null
++++ b/src/frontend/src/aif/AifProjectsPage.tsx
+@@ -0,0 +1,31 @@
++import { LanguageToggle, ProjectList } from "@aif/workbench";
++import { useT } from "@aif/workbench/i18n";
++import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
++import { aifHost } from "./aifHost";
++
++export default function AifProjectsPage(): JSX.Element {
++  const navigate = useCustomNavigate();
++  const t = useT();
++  return (
++    <div className="aif-root aif-langflow-host" data-testid="aif-projects-page">
++      <ProjectList
++        onOpen={(projectId) =>
++          navigate(`/aif/projects/${encodeURIComponent(projectId)}`)
++        }
++        actions={
++          <>
++            {aifHost?.openSettings ? (
++              <button
++                type="button"
++                onClick={() => void aifHost.openSettings?.()}
++              >
++                {t("projects.settings")}
++              </button>
++            ) : null}
 +            <LanguageToggle />
-+          </div>
++          </>
 +        }
 +      />
 +    </div>
 +  );
 +}
+diff --git a/src/frontend/src/aif/AifPublishPanel.tsx b/src/frontend/src/aif/AifPublishPanel.tsx
+new file mode 100644
+index 0000000..ddc69a2
+--- /dev/null
++++ b/src/frontend/src/aif/AifPublishPanel.tsx
+@@ -0,0 +1,147 @@
++import { useMemo, useState } from "react";
++import { Button } from "@/components/ui/button";
++import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
++import useFlowStore from "@/stores/flowStore";
++import { aifHost } from "./aifHostBridge";
++
++// Flow 화면에서 AIF Publish 노드의 "이번 실행" 결과를 보여 주고, 저장된 프로젝트를 같은 창의 검토 화면으로 연다.
++// - 노드는 출력 이름 publish_result 로 찾는다(노드 ID·표시 이름은 사용자가 바꿀 수 있다).
++// - Flow 가 실행 중이면 숨긴다. 이전 실행의 링크를 새 실행 결과로 보이지 않게 하기 위해서다.
++// - 링크는 이 실행의 출력에 들어 있는 projectId 만 쓴다(전역 '마지막 결과'를 쓰지 않는다).
++
++type PublishSummary = {
++  analysisStatus?: string;
++  publishStatus?: "saved" | "failed" | "skipped";
++  duplicate?: boolean;
++  projectId?: string;
++  externalRunId?: string;
++  error?: string;
++  retryable?: boolean;
++  errors?: string[];
++};
++
++function messageText(message: unknown): string {
++  if (typeof message === "string") return message;
++  if (message && typeof message === "object") {
++    const value = message as { text?: unknown; data?: { text?: unknown } };
++    if (typeof value.text === "string") return value.text;
++    if (typeof value.data?.text === "string") return value.data.text;
++  }
++  return "";
++}
++
++export function parsePublishSummary(text: string): PublishSummary | null {
++  const match = text.match(/```json\s*([\s\S]*?)\s*```/);
++  if (!match) return null;
++  try {
++    const value = JSON.parse(match[1]);
++    return value && typeof value === "object" && "publishStatus" in value
++      ? value
++      : null;
++  } catch {
++    return null;
++  }
++}
++
++export default function AifPublishPanel(): JSX.Element | null {
++  const navigate = useCustomNavigate();
++  const nodes = useFlowStore((state) => state.nodes);
++  const flowPool = useFlowStore((state) => state.flowPool);
++  const isBuilding = useFlowStore((state) => state.isBuilding);
++  const [retryNote, setRetryNote] = useState<string | null>(null);
++
++  const summary = useMemo(() => {
++    const publishNode = nodes.find((node) =>
++      // biome-ignore lint/suspicious/noExplicitAny: Langflow 노드 데이터는 느슨한 타입이다
++      ((node.data as any)?.node?.outputs ?? []).some(
++        (output: { name?: string }) => output?.name === "publish_result",
++      ),
++    );
++    if (!publishNode) return null;
++    const entries = flowPool[publishNode.id] ?? [];
++    const latest = entries[entries.length - 1];
++    const output = latest?.data?.outputs?.publish_result;
++    return output ? parsePublishSummary(messageText(output.message)) : null;
++  }, [nodes, flowPool]);
++
++  if (isBuilding || !summary) return null;
++
++  // 게시만 다시 보낸다(같은 실행 ID). 노드를 다시 실행하면 Langflow 가 앞 단계까지 다시 돌려 새 분석이 된다.
++  const retry = async () => {
++    if (!aifHost?.retryOutbox) return;
++    setRetryNote("다시 보내는 중…");
++    const report = await aifHost.retryOutbox();
++    const name = `${summary.externalRunId}.json`;
++    setRetryNote(
++      report.sent.includes(name)
++        ? "다시 보냄: 저장됐습니다. 사건 목록에서 여세요."
++        : report.failed.includes(name)
++          ? "서버가 거절했습니다(내용 문제). outbox/failed 에 옮겼습니다."
++          : "아직 보내지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
++    );
++  };
++
++  const saved = summary.publishStatus === "saved" && summary.projectId;
++  return (
++    <div
++      className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border bg-background p-3 text-sm shadow-lg"
++      data-testid="aif-publish-panel"
++      data-publish-status={summary.publishStatus}
++      data-project-id={summary.projectId ?? ""}
++      data-external-run-id={summary.externalRunId ?? ""}
++    >
++      <div className="font-semibold">
++        {saved
++          ? summary.duplicate
++            ? "AIF 게시: 이미 저장된 결과"
++            : "AIF 게시: 저장됨"
++          : summary.publishStatus === "skipped"
++            ? `AIF 게시 안 함 (분석 ${summary.analysisStatus})`
++            : "AIF 게시 실패"}
++      </div>
++      {summary.publishStatus === "failed" ? (
++        <div className="mt-1 text-destructive">
++          {summary.error}
++          {summary.retryable
++            ? " · 로컬 outbox 에 보관했습니다(셸이 다시 보냅니다)."
++            : ""}
++        </div>
++      ) : null}
++      {summary.publishStatus === "failed" &&
++      summary.retryable &&
++      aifHost?.retryOutbox ? (
++        <Button
++          className="mt-2"
++          size="sm"
++          variant="outline"
++          ignoreTitleCase
++          data-testid="aif-retry-publish"
++          onClick={() => void retry()}
++        >
++          다시 보내기
++        </Button>
++      ) : null}
++      {retryNote ? <div className="mt-1">{retryNote}</div> : null}
++      {summary.errors?.length ? (
++        <ul className="mt-1 list-disc pl-4 text-muted-foreground">
++          {summary.errors.slice(0, 3).map((error) => (
++            <li key={error}>{error}</li>
++          ))}
++        </ul>
++      ) : null}
++      {saved ? (
++        <Button
++          className="mt-2"
++          size="sm"
++          ignoreTitleCase
++          data-testid="aif-open-result"
++          onClick={() =>
++            navigate(`/aif/projects/${encodeURIComponent(summary.projectId!)}`)
++          }
++        >
++          이 결과 보기
++        </Button>
++      ) : null}
++    </div>
++  );
++}
+diff --git a/src/frontend/src/aif/__tests__/aifPublishPanel.test.ts b/src/frontend/src/aif/__tests__/aifPublishPanel.test.ts
+new file mode 100644
+index 0000000..31baf65
+--- /dev/null
++++ b/src/frontend/src/aif/__tests__/aifPublishPanel.test.ts
+@@ -0,0 +1,30 @@
++import { parsePublishSummary } from "../AifPublishPanel";
++
++describe("parsePublishSummary", () => {
++  it("reads the machine-readable block of the AIF Publish output", () => {
++    const text = [
++      "**AIF 게시: 저장됨** (분석: ok)",
++      "[AIF 검토 화면에서 열기](/aif/projects/project-1)",
++      "",
++      "```json",
++      JSON.stringify({
++        analysisStatus: "ok",
++        publishStatus: "saved",
++        projectId: "project-1",
++        externalRunId: "lfd-1",
++      }),
++      "```",
++    ].join("\n");
++    expect(parsePublishSummary(text)).toMatchObject({
++      publishStatus: "saved",
++      projectId: "project-1",
++      externalRunId: "lfd-1",
++    });
++  });
++
++  it("ignores other messages", () => {
++    expect(parsePublishSummary("plain text")).toBeNull();
++    expect(parsePublishSummary('```json\n{"status": "ok"}\n```')).toBeNull();
++    expect(parsePublishSummary("```json\n{broken\n```")).toBeNull();
++  });
++});
 diff --git a/src/frontend/src/aif/aif-host.css b/src/frontend/src/aif/aif-host.css
 new file mode 100644
 index 0000000..0162449
@@ -208,8 +526,56 @@ index 0000000..0162449
 +.aif-langflow-host .top-bar-title {
 +  font-weight: 600;
 +}
+diff --git a/src/frontend/src/aif/aifHost.ts b/src/frontend/src/aif/aifHost.ts
+new file mode 100644
+index 0000000..6b94e6c
+--- /dev/null
++++ b/src/frontend/src/aif/aifHost.ts
+@@ -0,0 +1,13 @@
++import { configureWorkbench } from "@aif/workbench";
++import { aifHost } from "./aifHostBridge";
++import "./aif-host.css";
++
++export { aifHost };
++
++// Desktop 셸 안에서는 같은 출처의 /aif-bridge 로 보내고 셸이 중앙 서버로 넘긴다(토큰은 셸만 안다).
++// 셸 밖(개발용 브라우저)에서는 빌드 때 정한 VITE_AIF_API_BASE.
++configureWorkbench({
++  apiBase: aifHost?.apiBase ?? import.meta.env.VITE_AIF_API_BASE ?? "",
++  // 분석은 Langflow 에서 Flow 를 실행해 만든다. 사이트용 분석 버튼은 숨긴다.
++  analysis: false,
++});
+diff --git a/src/frontend/src/aif/aifHostBridge.ts b/src/frontend/src/aif/aifHostBridge.ts
+new file mode 100644
+index 0000000..1e5a0a1
+--- /dev/null
++++ b/src/frontend/src/aif/aifHostBridge.ts
+@@ -0,0 +1,23 @@
++// Desktop 셸(preload)이 알려 주는 호스트 정보와 동작. 셸 밖(브라우저)에서는 undefined.
++// AIF 화면 코드(@aif/workbench)를 끌어오지 않으므로 메인 번들에서 써도 된다.
++export type AifHostBridge = {
++  kind: string;
++  version?: string;
++  apiBase?: string;
++  openWeb?: (projectId: string) => Promise<{ ok: boolean; reason?: string }>;
++  openSettings?: () => Promise<void>;
++  retryOutbox?: () => Promise<{
++    sent: string[];
++    kept: string[];
++    failed: string[];
++  }>;
++};
++
++declare global {
++  interface Window {
++    aifHost?: AifHostBridge;
++  }
++}
++
++export const aifHost: AifHostBridge | undefined =
++  typeof window !== "undefined" ? window.aifHost : undefined;
 diff --git a/src/frontend/src/components/core/appHeaderComponent/index.tsx b/src/frontend/src/components/core/appHeaderComponent/index.tsx
-index ff4a46f..78f5f23 100644
+index ff4a46f..7450afc 100644
 --- a/src/frontend/src/components/core/appHeaderComponent/index.tsx
 +++ b/src/frontend/src/components/core/appHeaderComponent/index.tsx
 @@ -85,6 +85,15 @@ export default function AppHeader(): JSX.Element {
@@ -219,7 +585,7 @@ index ff4a46f..78f5f23 100644
 +        <Button
 +          unstyled
 +          ignoreTitleCase
-+          onClick={() => navigate("/aif")}
++          onClick={() => navigate("/aif/projects")}
 +          className="hit-area-hover rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-primary"
 +          data-testid="aif-menu-button"
 +        >
@@ -229,19 +595,21 @@ index ff4a46f..78f5f23 100644
            notificationRef={notificationContentRef}
            onClose={() => setActiveState(null)}
 diff --git a/src/frontend/src/customization/utils/custom-routes-store-pages.tsx b/src/frontend/src/customization/utils/custom-routes-store-pages.tsx
-index 61bc427..c8aacd9 100644
+index 61bc427..c7c0434 100644
 --- a/src/frontend/src/customization/utils/custom-routes-store-pages.tsx
 +++ b/src/frontend/src/customization/utils/custom-routes-store-pages.tsx
-@@ -1,11 +1,25 @@
+@@ -1,11 +1,39 @@
 +import { lazy, Suspense } from "react";
  import { Route } from "react-router-dom";
 +import AifIntegrationCheckPage from "@/aif/AifIntegrationCheckPage";
  import { StoreGuard } from "@/components/authorization/storeGuard";
++import { CustomNavigate } from "@/customization/components/custom-navigate";
  import StoreApiKeyPage from "@/pages/SettingsPage/pages/StoreApiKeyPage";
  import StorePage from "@/pages/StorePage";
  
 +// AIF 화면은 들어갈 때만 불러온다(스타일·React Flow 설정이 Flow 화면에 먼저 섞이지 않게).
-+const AifWorkbenchPage = lazy(() => import("@/aif/AifWorkbenchPage"));
++const AifProjectsPage = lazy(() => import("@/aif/AifProjectsPage"));
++const AifProjectPage = lazy(() => import("@/aif/AifProjectPage"));
 +
  export const CustomRoutesStorePages = () => {
    return (
@@ -249,15 +617,53 @@ index 61bc427..c8aacd9 100644
 +      <Route path="aif/check" element={<AifIntegrationCheckPage />} />
 +      <Route
 +        path="aif"
++        element={<CustomNavigate replace to="/aif/projects" />}
++      />
++      <Route
++        path="aif/projects"
 +        element={
 +          <Suspense fallback={null}>
-+            <AifWorkbenchPage />
++            <AifProjectsPage />
++          </Suspense>
++        }
++      />
++      <Route
++        path="aif/projects/:projectId"
++        element={
++          <Suspense fallback={null}>
++            <AifProjectPage />
 +          </Suspense>
 +        }
 +      />
        <Route
          path="store"
          element={
+diff --git a/src/frontend/src/pages/FlowPage/index.tsx b/src/frontend/src/pages/FlowPage/index.tsx
+index 6d7d1ac..0a3c9e2 100644
+--- a/src/frontend/src/pages/FlowPage/index.tsx
++++ b/src/frontend/src/pages/FlowPage/index.tsx
+@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
+ import { useHotkeys } from "react-hotkeys-hook";
+ import { useTranslation } from "react-i18next";
+ import { useBlocker, useParams } from "react-router-dom";
++import AifPublishPanel from "@/aif/AifPublishPanel";
+ import { AssistantPanel } from "@/components/core/assistantPanel";
+ import { FlowPageSlidingContainerContent } from "@/components/core/playgroundComponent/sliding-container/components/flow-page-sliding-container";
+ import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+@@ -76,7 +77,12 @@ function FlowPageMainContent({
+     return <MemoriesMainContent />;
+   }
+ 
+-  return <Page setIsLoading={setIsLoading} />;
++  return (
++    <>
++      <Page setIsLoading={setIsLoading} />
++      <AifPublishPanel />
++    </>
++  );
+ }
+ 
+ export default function FlowPage({ view }: { view?: boolean }): JSX.Element {
 diff --git a/src/frontend/src/style/classes.css b/src/frontend/src/style/classes.css
 index 3c1d54a..0dc45af 100644
 --- a/src/frontend/src/style/classes.css

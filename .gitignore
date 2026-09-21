@@ -12,6 +12,7 @@ __pycache__/
 .env
 backend/.env
 backend/data/*.sqlite3*
+backend/data/api_tokens.json
 *.local
 
 # 원본 Langflow 참조본: 실제 판결문 예시가 포함되어 있어 저장소에 넣지 않는다.

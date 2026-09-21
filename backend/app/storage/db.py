@@ -86,8 +86,32 @@ ALTER TABLE pipeline_drafts ADD COLUMN base_hash TEXT;
 ALTER TABLE pipeline_versions ADD COLUMN data_hash TEXT;
 """,
     ),
+    (
+        4,
+        "외부 결과 게시(Langflow Desktop) 매핑",
+        """
+CREATE TABLE IF NOT EXISTS external_publications (
+    principal TEXT NOT NULL,
+    external_run_id TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (principal, external_run_id)
+);
+CREATE INDEX IF NOT EXISTS idx_external_publications_project ON external_publications(project_id);
+""",
+    ),
 ]
 LATEST_SCHEMA = MIGRATIONS[-1][0]
+
+
+class PublicationConflict(Exception):
+    """같은 (principal, externalRunId) 가 이미 있다. existing 에 기존 매핑이 들어 있다."""
+
+    def __init__(self, existing: dict):
+        super().__init__("publication exists")
+        self.existing = existing
 
 
 class Database:
@@ -118,10 +142,12 @@ class Database:
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
             target = f"{self.path}.backup-v{current}-{stamp}"
             source = sqlite3.connect(self.path)
+            # sqlite3 의 with 문은 커밋만 하고 연결을 닫지 않으므로 직접 닫는다(백업 파일이 잠긴 채 남지 않게).
+            destination = sqlite3.connect(target)
             try:
-                with sqlite3.connect(target) as destination:
-                    source.backup(destination)
+                source.backup(destination)
             finally:
+                destination.close()
                 source.close()
             self.backup_path = target
         applied = []
@@ -234,7 +260,10 @@ class Database:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT project_id, revision, updated_at, json_extract(document, '$.document.id') AS document_id, "
-                "json_extract(document, '$.title') AS title FROM projects ORDER BY updated_at DESC"
+                "json_extract(document, '$.title') AS title, json_extract(document, '$.document.caseId') AS case_id, "
+                "json_extract(document, '$.analysisRuns[0].source.kind') AS source_kind, "
+                "json_extract(document, '$.analysisRuns[0].createdAt') AS analyzed_at "
+                "FROM projects ORDER BY updated_at DESC"
             ).fetchall()
         return [
             {
@@ -243,9 +272,76 @@ class Database:
                 "updatedAt": row["updated_at"],
                 "documentId": row["document_id"],
                 "title": row["title"],
+                "caseId": row["case_id"],
+                "source": row["source_kind"],
+                "analyzedAt": row["analyzed_at"],
             }
             for row in rows
         ]
+
+    # ---- external publications ----
+    def find_publication(self, principal: str, external_run_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM external_publications WHERE principal = ? AND external_run_id = ?", (principal, external_run_id)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def publish_external(
+        self,
+        *,
+        principal: str,
+        external_run_id: str,
+        request_hash: str,
+        run_record: dict,
+        document_text: str,
+        project_id: str,
+        project_revision: int,
+        project_document: dict,
+        created_at: str,
+    ) -> None:
+        """실행 기록·프로젝트·게시 매핑을 한 트랜잭션으로 저장한다. 하나라도 실패하면 아무것도 남지 않는다.
+
+        같은 (principal, externalRunId) 가 먼저 저장돼 있으면(동시 요청) PublicationConflict 를 낸다.
+        """
+        with self._lock:
+            conn = self._conn
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                existing = conn.execute(
+                    "SELECT * FROM external_publications WHERE principal = ? AND external_run_id = ?", (principal, external_run_id)
+                ).fetchone()
+                if existing:
+                    conn.execute("ROLLBACK")
+                    raise PublicationConflict(dict(existing))
+                conn.execute(
+                    "INSERT INTO analysis_runs(run_id, idempotency_key, status, created_at, updated_at, document, record) "
+                    "VALUES (?, NULL, ?, ?, ?, ?, ?)",
+                    (
+                        run_record["runId"],
+                        run_record["status"],
+                        run_record["createdAt"],
+                        run_record["updatedAt"],
+                        document_text,
+                        json.dumps(run_record, ensure_ascii=False),
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO projects(project_id, revision, updated_at, document) VALUES (?, ?, ?, ?)",
+                    (project_id, project_revision, created_at, json.dumps(project_document, ensure_ascii=False)),
+                )
+                conn.execute(
+                    "INSERT INTO external_publications(principal, external_run_id, request_hash, run_id, project_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (principal, external_run_id, request_hash, run_record["runId"], project_id, created_at),
+                )
+                conn.execute("COMMIT")
+            except PublicationConflict:
+                raise
+            except Exception:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+                raise
 
     # ---- local flows (mock) ----
     def get_local_flow(self, flow_id: str) -> dict | None:

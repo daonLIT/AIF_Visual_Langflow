@@ -142,9 +142,18 @@ export const api = {
   loadProject: (projectId: string) => request<ProjectFile>(`/api/projects/${encodeURIComponent(projectId)}`),
 
   listProjects: () =>
-    request<{ projects: Array<{ projectId: string; revision: number; updatedAt: string; title?: string | null }> }>(
-      '/api/projects',
-    ),
+    request<{
+      projects: Array<{
+        projectId: string;
+        revision: number;
+        updatedAt: string;
+        title?: string | null;
+        caseId?: string | null;
+        /** 첫 실행의 출처. 'langflow-desktop' 또는 null(사이트에서 만든 프로젝트) */
+        source?: string | null;
+        analyzedAt?: string | null;
+      }>;
+    }>('/api/projects'),
 };
 
 const flowPath = (flowId: string) => `/api/pipelines/${encodeURIComponent(flowId)}`;

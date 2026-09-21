@@ -7,7 +7,8 @@ integrations/langflow/
   patches/             Langflow v1.11.0 프런트엔드에 적용하는 AIF 변경 (git diff, P0·P1 누적)
   build-fork.ps1       고정 태그 체크아웃 → 패치 적용 → npm ci → 빌드
   start-langflow-p0.ps1 포크 빌드를 화면으로 제공하는 Langflow 서버 (별도 포트·설정·DB)
-  desktop-shell/       전용 Desktop 셸 (Electron, 별도 앱 ID·데이터 경로)
+  start-central-dev.ps1 로컬 통합 테스트용 중앙 AIF 서버 (토큰 인증, .profile/central 의 DB·토큰)
+  desktop-shell/       전용 Desktop 셸 (Electron, 별도 앱 ID·데이터 경로, 연결 설정·중계·outbox)
   .profile/            실험용 Langflow 설정·DB·로그 (git 제외)
 vendor/langflow-fork/  포크 체크아웃 (git 제외, build-fork.ps1 이 만든다)
 ```
@@ -90,21 +91,101 @@ vendor/langflow-fork/  포크 체크아웃 (git 제외, build-fork.ps1 이 만�
 - 파일 내려받기(프로젝트 파일·AIF 내보내기)는 Electron 에서 기본 저장 대화상자로 처리되는지 확인하지 않았다.
 - 사람이 직접 하는 드래그·줌·키보드 undo/redo 는 해 보지 않았다.
 
+## P2 결과 (2026-09-21): 중앙 저장과 Flow 연결
+
+### 구조
+
+```text
+Electron 셸 창 (Langflow 포크 화면)
+  Flow: Judgment Text Input → AIF Run Context ──(카탈로그 조회: 게시 토큰)──▶ 중앙 AIF 서버
+                              └▶ v11 분석(Ollama) → Result Validator → AIF Publish ──(게시: 게시 토큰)──▶ POST /api/integrations/langflow/results
+                                                                          │ 실패 시 outbox 보관
+  Flow 화면 오른쪽 아래 패널: 이번 실행의 게시 상태 · [이 결과 보기] · [다시 보내기]
+  /aif/projects, /aif/projects/:id ── /aif-bridge/api/… ──(셸이 검토 토큰을 붙여 허용 경로만)──▶ 중앙 AIF 서버
+```
+
+- 중앙 서버 (`backend/`, 자세한 계약은 `backend/README.md`)
+  - `AIF_AUTH_MODE=token`: 경로별 권한(scope). 토큰은 sha256 만 저장하고 `scripts/manage_tokens.py` 로 만든다.
+  - `GET /api/integrations/langflow/context`: Flow 입력 형식의 카탈로그와 버전·sha256.
+  - `POST /api/integrations/langflow/results`: 기존 어댑터로 검증·namespace·근거 매칭 → 미검토 annotation 프로젝트. 201/200(재전송)/409/413/422.
+    (principal, externalRunId) 기본 키와 요청 해시, 한 트랜잭션 저장. DB 마이그레이션 v4.
+  - 기존 마이그레이션의 백업 연결이 닫히지 않던 문제(백업 파일이 잠긴 채 남음)를 함께 고쳤다.
+- Desktop Flow (`langflow/make_desktop_flow.py` → `TopDown_Judgment_to_AIF_v11_Desktop.json`, 원래 v11 은 그대로)
+  - `components/aif_run_context.py`: 서버 카탈로그를 읽어 버전·해시를 고정하고 실행 ID(`lfd-<uuid>`)를 만든다. 읽지 못하면 오류로 멈춘다(빈 카탈로그로 분석하지 않음). 기존 Splitter 입력 형식을 그대로 낸다.
+  - `components/aif_publish.py`: 최종 출력 바로 앞. 보내기 전에 outbox 에 쓰고(토큰 없음), 일시 오류만 제한 재시도(기본 3회: 1·3·9초), 인증·검증·충돌 오류는 재시도하지 않는다. 분석 상태와 게시 상태를 따로 출력한다. invalid 분석은 게시하지 않는다.
+  - 서버 주소·토큰은 Flow 에 없다. 셸이 Langflow 를 띄울 때 `AIF_API_BASE`, `AIF_PUBLISH_TOKEN`, `AIF_OUTBOX_DIR` 로 넘긴다.
+- 셸 (`desktop-shell/`)
+  - `config.js`: 메뉴 **AIF → AIF 연결 설정** 창. 서버 주소·웹사이트 주소·검토 토큰·게시 토큰. 토큰은 Electron safeStorage(DPAPI)로 암호화해 `%APPDATA%\com.aif.LangflowDesktop\aif-config.json` 에 둔다. 화면에 토큰을 돌려주지 않는다.
+  - `bridge.js`·`bridge-rules.js`: 같은 출처 `/aif-bridge/api/…` 중 허용 목록(목록·조회·저장·카탈로그·근거 검증·health)만 설정된 서버로 넘기고 검토 토큰을 붙인다. 게시·파이프라인·분석 실행은 넘기지 않는다. 쿠키는 넘기지 않는다.
+  - `outbox.js`: `%APPDATA%\com.aif.LangflowDesktop\outbox` 를 시작 때·5분마다·메뉴·패널 [다시 보내기]로 재전송. 보내는 주소는 파일의 url 이 아니라 설정의 서버 주소. 200/201 삭제, 401/403·네트워크·5xx 는 남김, 그 밖의 4xx 는 `outbox/failed/` 로.
+  - 앱 안 링크는 같은 창에서, 설정된 웹사이트 출처만 기본 브라우저로 연다. [웹에서 열기]는 설정된 웹사이트 주소 + `/?projectId=`.
+  - 페이지가 저장 안 한 변경으로 닫기를 막으면(beforeunload) 확인 대화상자를 띄운다(Electron 은 기본적으로 안내 없이 막는다. P2 점검 중 발견).
+- 포크 화면 (`patches/0001-aif-langflow-host.patch`)
+  - `/aif/projects`(사건 목록: 검색·출처·저장 시각·버전, 로딩·인증 필요·권한 없음·설정 없음·연결 실패 구분), `/aif/projects/:projectId`(검토, ← 사건 목록, 웹에서 열기), `/aif` → 목록.
+  - 저장 안 한 편집이 있는 채로 다른 프로젝트를 열면 확인한다. 같은 프로젝트로 돌아오면 다시 불러오지 않는다. 늦게 도착한 이전 불러오기 응답은 버린다(공유 store).
+  - Flow 화면 게시 패널: AIF Publish 노드(출력 이름 `publish_result`)의 **이번 실행** 출력만 읽는다. 실행 중에는 숨긴다.
+
+### Langflow 부분 재실행 동작 (실측)
+
+게시 노드의 실행 버튼만 눌러도 Langflow 1.11 은 앞 단계(Run Context·LLM 단계)를 다시 빌드한다. 그래서 새 실행 ID·새 분석(128초)·새 프로젝트가 생긴다.
+**게시만 다시 보내는 방법은 outbox 재전송**(패널 [다시 보내기], 메뉴 **게시 대기 결과 다시 보내기**, 앱 시작 시 자동)이며 같은 실행 ID 를 쓴다.
+
+### 검증
+
+- 백엔드 `python run_tests.py`: 134개 통과.
+  - `tests/test_integrations.py`: 게시 201·재전송 200·사람 편집 보존·다른 내용 409·새 실행 별도·no_issues·invalid 미저장·깨진 참조·카탈로그 불일치·빈 원문·크기 413·노드 수 초과·동시 6건→1개·트랜잭션 중간 실패 무잔여·토큰 401/403·scope·토큰 교체·v3→v4 마이그레이션.
+  - `tests/test_desktop_components.py`: 실제 서버 앱에 붙인 Run Context·Publish 계약(카탈로그 → Splitter, 게시·재전송, 네트워크 실패 outbox, 제한 재시도, 409 → failed/, invalid 미게시, 링크).
+- 웹 `npm run check` 통과. 셸 `npm test` 3개 통과(중계 허용 목록, outbox 규칙). 포크 Jest: 헤더·AIF·FlowPage 65 묶음 905개 통과.
+- 실제 창 E2E (Electron 셸 + 테스트 Langflow 7870 + 로컬 중앙 서버 8000 토큰 모드 + 로컬 Ollama `gemma4:26b`, 예제 판결문 1,424자)
+  - `AIF_SHELL_PROBE=p2`:
+    1. Desktop Flow 를 올리고 출력 노드 실행 버튼을 눌렀다. 분석과 게시까지 149초가 걸렸고 패널이 "저장됨"을 표시했다.
+    2. 중앙 서버 조회: 출처 `langflow-desktop`, externalRunId 일치, 미검토 43, 확정 0, 카탈로그 버전·해시가 기록됐다.
+    3. [이 결과 보기]를 누르자 같은 창(창 1개)의 `/aif/projects/<id>` 에서 노드 21개와 원문이 표시됐다.
+    4. 사건 목록에 새 프로젝트가 나타났다.
+  - `AIF_SHELL_PROBE=p2b`:
+    1. 카탈로그를 읽은 직후 중앙 서버를 멈췄다. 게시가 실패(ConnectError)했고, outbox 에 보관됐다(토큰 없음).
+    2. 서버를 다시 켜고 [다시 보내기]를 눌렀다. 같은 externalRunId 로 저장됐고 outbox 가 비워졌다(미검토 41). 분석은 다시 돌지 않았다.
+- 입력은 테스트 준비 단계에서 Flow JSON 에 넣었다(사람이 입력 칸에 붙여 넣는 동작은 자동화하지 않음).
+
+### 아직 안 된 것 (P3 이후)
+
+- 사람이 직접 하는 수락·거절·수정·근거 연결·저장, 앱 재시작 뒤 복원, 웹에서 같은 결과 확인 (P3).
+- 독립 웹의 `?projectId=` 열기와 브라우저 로그인. 지금 viewerUrl·[웹에서 열기]가 가리키는 웹 주소는 아직 그 프로젝트를 열지 못하고, 토큰 모드 서버에는 웹이 로그인할 방법이 없다 (P3).
+- Desktop 과 웹이 같은 revision 을 고칠 때의 409 처리 확인 (P3).
+- 앱 재시작 직후 outbox 자동 재전송은 단위 테스트로만 확인했다(실제 창에서는 [다시 보내기] 경로를 확인).
+- 운영 배포(HTTPS·영구 볼륨·백업), 설치 패키지, 셸이 쓸 전용 Langflow venv (P4).
+
 ## 실행 방법
 
 ```powershell
+# 0. 저장소 루트 의존성 (npm workspaces)
+npm install
+
 # 1. 포크 빌드 (처음 한 번, 패치를 바꿨을 때)
 powershell -ExecutionPolicy Bypass -File integrations\langflow\build-fork.ps1
 
-# 2. 셸 의존성
-cd integrations\langflow\desktop-shell; npm install
+# 2. 중앙 서버 (로컬 통합 테스트용: 토큰 인증, .profile\central 의 DB·토큰)
+cd backend
+$env:AIF_API_TOKENS_FILE = (Resolve-Path ..\integrations\langflow\.profile\central).Path + '\api_tokens.json'
+python scripts\manage_tokens.py create --id desktop-publish --principal langflow-desktop --preset publish
+python scripts\manage_tokens.py create --id desktop-review --principal owner --preset review
+cd ..
+powershell -ExecutionPolicy Bypass -File integrations\langflow\start-central-dev.ps1
 
-# 3. 셸 실행: 7870 이 비어 있으면 서버를 직접 띄운다. 헤더의 AIF 를 누르면 검토 화면
+# 3. 셸
+cd integrations\langflow\desktop-shell; npm install
 $env:AIF_LANGFLOW_START = (Resolve-Path ..\start-langflow-p0.ps1).Path
 npx electron .
+#   처음 켜면 'AIF 연결 설정' 창이 뜬다: 서버 주소 http://127.0.0.1:8000, 위에서 만든 토큰 두 개.
+#   게시 토큰은 셸이 Langflow 를 띄울 때 넘기므로, 설정 후 셸을 다시 켠다.
 
-# 자동 점검: p0(테스트 페이지·재시작) / p1(검토 화면·스타일 격리). 결과 JSON 과 캡처가 남는다
-$env:AIF_SHELL_PROBE = 'p1'; npx electron .
+# 4. Langflow 에서 langflow\TopDown_Judgment_to_AIF_v11_Desktop.json 을 가져와 판결문을 붙여 넣고 출력 노드를 실행한다.
+#    끝나면 오른쪽 아래 패널의 [이 결과 보기].
+
+# 자동 점검: p0(테스트 페이지·재시작) / p1(검토 화면·스타일 격리) / p2(실제 실행·게시·열기) / p2b(서버 단절 후 재전송)
+#   p2·p2b 는 연결 설정 대신 환경변수 AIF_API_BASE, AIF_REVIEW_TOKEN, AIF_PUBLISH_TOKEN 을 쓸 수 있다.
+$env:AIF_SHELL_PROBE = 'p2'; npx electron .
 ```
 
-P0 서버는 공식 Desktop 의 venv 를 빌려 쓴다. 전용 Desktop 패키지로 배포할 때는 `C:\Program Files\Langflow\resources` 의 wheel 과 `constraints.txt` 로 별도 venv 를 만들어야 한다(P4).
+셸이 띄우는 Langflow 는 공식 Desktop 의 venv 를 빌려 쓴다. 전용 Desktop 패키지로 배포할 때는 `C:\Program Files\Langflow
+esources` 의 wheel 과 `constraints.txt` 로 별도 venv 를 만들어야 한다(P4).

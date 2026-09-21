@@ -2971,3 +2971,72 @@
 :where(.aif-root) .selection-list li .link-button {
   margin-left: 6px;
 }
+
+/* ---- 사건 목록 ---- */
+:where(.aif-root) .project-list {
+  height: 100%;
+  overflow: auto;
+  padding: 20px 24px;
+  background: var(--bg);
+}
+:where(.aif-root) .project-list-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+:where(.aif-root) .project-list-header h2 {
+  margin: 0 auto 0 0;
+  font-size: 18px;
+}
+:where(.aif-root) .project-list-header input {
+  width: min(320px, 50vw);
+  padding: 6px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font: inherit;
+}
+:where(.aif-root) .project-list-header button,
+:where(.aif-root) .project-table button:not(.link-button),
+:where(.aif-root) .project-bar button {
+  padding: 5px 11px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+:where(.aif-root) .project-list-note {
+  color: var(--text-muted);
+}
+:where(.aif-root) .project-list-note.is-error {
+  color: var(--error);
+}
+:where(.aif-root) .project-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+:where(.aif-root) .project-table th,
+:where(.aif-root) .project-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+:where(.aif-root) .project-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+:where(.aif-root) .project-table .link-button {
+  font-weight: 600;
+}
+:where(.aif-root) .project-id {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+:where(.aif-root) .project-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

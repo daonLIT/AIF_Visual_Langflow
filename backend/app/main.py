@@ -15,14 +15,17 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
+from .auth import make_auth_middleware
 from .config import Settings, load_settings
 from .i18n import parse_accept_language, reset_language, set_language
 from .routes.api import routes as api_routes
+from .routes.integrations import routes as integration_routes
 from .routes.pipeline import routes as pipeline_routes
 from .services.catalogs import CatalogError, IssueCatalog, SchemeCatalog
 from .services.langflow_client import LangflowClient
 from .services.pipeline.repository import LangflowFlowRepository, LocalFlowRepository
 from .services.pipeline.service import PipelineService
+from .services.publication import PublicationService
 from .services.run_manager import RunManager
 from .storage import Database
 
@@ -76,6 +79,7 @@ def create_app(
         )
     pipeline = PipelineService(settings, database, flow_repository, issue_catalog=issue_catalog, scheme_catalog=scheme_catalog)
     runs.pipeline = pipeline
+    publication = PublicationService(settings, database, issue_catalog=issue_catalog, scheme_catalog=scheme_catalog)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
@@ -90,7 +94,7 @@ def create_app(
             database.close()
 
     app = Starlette(
-        routes=[*api_routes, *pipeline_routes],
+        routes=[*api_routes, *pipeline_routes, *integration_routes],
         lifespan=lifespan,
         middleware=[
             # 개발 중 Vite dev 서버(다른 포트)에서 호출할 수 있게 허용. 배포 시엔 같은 출처를 권장.
@@ -102,12 +106,15 @@ def create_app(
             ),
             # 이 요청 동안의 메시지 언어. 분석 실행 task 도 이 컨텍스트를 물려받는다.
             Middleware(BaseHTTPMiddleware, dispatch=language_middleware),
+            # 토큰·권한 확인 (AIF_AUTH_MODE=off 면 로컬 개발 주체로 통과). 언어가 정해진 뒤라 오류 문구도 요청 언어로.
+            Middleware(BaseHTTPMiddleware, dispatch=make_auth_middleware(settings)),
         ],
     )
     app.state.settings = settings
     app.state.db = database
     app.state.runs = runs
     app.state.pipeline = pipeline
+    app.state.publication = publication
     app.state.issue_catalog = issue_catalog
     app.state.scheme_catalog = scheme_catalog
     app.state.catalog_errors = catalog_errors

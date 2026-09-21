@@ -13,6 +13,8 @@ PROJECT_ROOT = BACKEND_ROOT.parent
 ENV_FILE_CANDIDATES = (BACKEND_ROOT / ".env", PROJECT_ROOT / ".env")
 
 LANGFLOW_MODES = ("mock", "live")
+# off: 로컬 개발(인증 없음, 모든 권한). token: /api 요청마다 Bearer 토큰과 권한(scope)을 확인한다.
+AUTH_MODES = ("off", "token")
 
 
 class ConfigError(ValueError):
@@ -110,6 +112,16 @@ class Settings:
         default_factory=lambda: Path(_env("SCHEME_CATALOG_PATH", str(BACKEND_ROOT / "catalog" / "walton_schemes.json")))
     )
 
+    # 인증. 토큰 파일에는 토큰 원문이 아니라 sha256 만 둔다(scripts/manage_tokens.py 로 만든다).
+    auth_mode: str = field(default_factory=lambda: _env("AIF_AUTH_MODE", "off").strip().lower())
+    api_tokens_path: Path = field(
+        default_factory=lambda: Path(_env("AIF_API_TOKENS_FILE", str(BACKEND_ROOT / "data" / "api_tokens.json")))
+    )
+    # 게시 응답의 viewerUrl 을 만들 공개 사이트 주소 (예: https://aif.example.org). 비우면 viewerUrl 은 null.
+    public_site_url: str = field(default_factory=lambda: _env("AIF_PUBLIC_SITE_URL", "").rstrip("/"))
+    # 외부 결과 게시 요청 본문 상한(바이트)
+    max_publish_bytes: int = field(default_factory=lambda: _env_int("AIF_MAX_PUBLISH_BYTES", 6_000_000))
+
     # 시작 시 읽은 .env 파일 진단(값 없음)
     env_files: list[dict] = field(default_factory=list)
 
@@ -118,6 +130,8 @@ class Settings:
             raise ConfigError(
                 t("config.bad_mode", value=repr(self.langflow_mode), allowed=", ".join(LANGFLOW_MODES))
             )
+        if self.auth_mode not in AUTH_MODES:
+            raise ConfigError(t("config.bad_auth_mode", value=repr(self.auth_mode), allowed=", ".join(AUTH_MODES)))
 
     @property
     def is_live(self) -> bool:
@@ -134,6 +148,7 @@ class Settings:
             "outputComponentId": self.langflow_output_component_id,
             "timeoutSeconds": self.langflow_timeout_seconds,
             "maxConcurrency": self.max_concurrency,
+            "authMode": self.auth_mode,
             "envFiles": [
                 {"path": item["path"], "exists": item["exists"], "keys": item["keys"]} for item in self.env_files
             ],
