@@ -7,3 +7,5 @@ export { LanguageToggle } from './components/Layout/LanguageToggle';
 export { ProjectList, type ProjectListProps } from './components/Projects/ProjectList';
 export { describeApiError } from './api/errors';
 export { useAnnotationStore, type ServerLoadResult } from './store/annotationStore';
+export { useServerProject, type ServerProjectState } from './hooks/useServerProject';
+export { SaveConflictBanner } from './components/Projects/SaveConflictBanner';

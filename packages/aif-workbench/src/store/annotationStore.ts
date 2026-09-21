@@ -113,6 +113,8 @@ interface AnnotationState {
   dirty: boolean;
   lastSavedAt: string | null;
   notice: string | null;
+  /** 서버 저장이 revision 충돌(409)로 거절됨. 화면의 편집은 그대로 남아 있다. */
+  saveConflict: { at: string; message: string } | null;
   /** 폴링 중인 run */
   polling: string | null;
   /** 원문 패널이 스크롤할 근거 범위 (토큰으로 반복 요청 구분) */
@@ -167,6 +169,9 @@ interface AnnotationActions {
   // 저장
   buildProjectFile: () => ProjectFile | null;
   saveToServer: () => Promise<void>;
+  /** 저장 충돌 뒤: 서버 최신본을 다시 불러온다(화면의 편집은 버린다). */
+  reloadServerCopy: () => Promise<ServerLoadResult>;
+  dismissSaveConflict: () => void;
   /** 서버 프로젝트를 연다. 나중에 시작한 불러오기가 있으면 이 응답은 버린다(stale). */
   loadFromServer: (projectId: string) => Promise<ServerLoadResult>;
   loadProjectFile: (project: ProjectFile, fileName?: string, options?: { isCurrent?: () => boolean }) => Promise<void>;
@@ -191,6 +196,7 @@ const initialState: AnnotationState = {
   dirty: false,
   lastSavedAt: null,
   notice: null,
+  saveConflict: null,
   polling: null,
   evidenceFocus: null,
   summarizing: [],
@@ -681,12 +687,28 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
           revision: saved.revision,
           lastSavedAt: saved.savedAt,
           dirty: false,
+          saveConflict: null,
           notice: t('annotation.notice.saved', { revision: saved.revision }),
         });
       } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          // 다른 곳(웹·다른 Desktop)에서 먼저 저장했다. 편집은 지우지 않고 사용자가 고르게 한다.
+          set({ saveConflict: { at: new Date().toISOString(), message: error.message }, notice: null });
+          return;
+        }
         const message = error instanceof ApiError ? `${error.message} (${error.code})` : (error as Error).message;
         useGraphStore.getState().setErrorMessage(t('annotation.error.saveFailed', { message }));
       }
+    },
+
+    async reloadServerCopy() {
+      const projectId = get().projectId;
+      set({ saveConflict: null });
+      return get().loadFromServer(projectId);
+    },
+
+    dismissSaveConflict() {
+      set({ saveConflict: null });
     },
 
     async loadFromServer(projectId) {

@@ -80,7 +80,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       credentials: init?.credentials ?? host.credentials,
       // 서버 오류·경고 문구를 지금 화면 언어로 받는다.
-      headers: { 'Content-Type': 'application/json', 'Accept-Language': currentLang(), ...(init?.headers ?? {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Language': currentLang(),
+        ...(host.extraHeaders?.() ?? {}),
+        ...(init?.headers ?? {}),
+      },
     });
   } catch {
     throw new ApiError(0, 'NETWORK', t('api.error.network'));
@@ -94,6 +99,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new ApiError(response.status, 'BAD_RESPONSE', t('api.error.badResponse'));
     }
   }
+  if (response.status === 401) workbenchHost().onAuthRequired?.();
   if (!response.ok) {
     const error = (body as { error?: { code?: string; message?: string; details?: unknown[] } } | null)?.error;
     throw new ApiError(

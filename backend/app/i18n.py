@@ -969,4 +969,20 @@ MESSAGES: dict[str, dict[str, str]] = {
         'ko': '결과로 프로젝트를 만들 수 없습니다.',
         'en': 'A project could not be created from the result.',
     },
+    'auth.csrf': {
+        'ko': '요청을 확인할 수 없습니다(CSRF). 페이지를 새로고침한 뒤 다시 시도하세요.',
+        'en': 'The request could not be verified (CSRF). Reload the page and try again.',
+    },
+    'auth.login_input': {
+        'ko': '사용자 이름과 비밀번호를 입력하세요.',
+        'en': 'Enter a user name and password.',
+    },
+    'auth.login_failed': {
+        'ko': '사용자 이름 또는 비밀번호가 올바르지 않습니다.',
+        'en': 'The user name or password is not correct.',
+    },
+    'auth.login_locked': {
+        'ko': '로그인 실패가 여러 번 있어 잠시 막았습니다. 몇 분 뒤 다시 시도하세요.',
+        'en': 'Too many failed sign-ins. Try again in a few minutes.',
+    },
 }

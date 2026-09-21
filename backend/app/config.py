@@ -117,6 +117,12 @@ class Settings:
     api_tokens_path: Path = field(
         default_factory=lambda: Path(_env("AIF_API_TOKENS_FILE", str(BACKEND_ROOT / "data" / "api_tokens.json")))
     )
+    # 브라우저 로그인 계정 파일(scrypt 해시만 저장, scripts/manage_users.py 로 만든다)
+    users_path: Path = field(default_factory=lambda: Path(_env("AIF_USERS_FILE", str(BACKEND_ROOT / "data" / "users.json"))))
+    # 로그인 세션 유효 시간(시간)
+    session_ttl_hours: int = field(default_factory=lambda: _env_int("AIF_SESSION_TTL_HOURS", 12))
+    # 세션 쿠키 Secure 속성: auto(https 요청·X-Forwarded-Proto https 일 때) | true | false
+    cookie_secure: str = field(default_factory=lambda: _env("AIF_COOKIE_SECURE", "auto").strip().lower())
     # 게시 응답의 viewerUrl 을 만들 공개 사이트 주소 (예: https://aif.example.org). 비우면 viewerUrl 은 null.
     public_site_url: str = field(default_factory=lambda: _env("AIF_PUBLIC_SITE_URL", "").rstrip("/"))
     # 외부 결과 게시 요청 본문 상한(바이트)

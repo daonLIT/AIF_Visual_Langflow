@@ -9,3 +9,73 @@ body,
 body {
   background: #f5f6f8;
 }
+
+/* 로그인 화면 (.aif-root 안에서 workbench.css 변수를 쓴다) */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 16px;
+}
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, 100%);
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #d8dce3;
+  border-radius: 10px;
+}
+.login-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.login-head h1 {
+  margin: 0;
+  font-size: 18px;
+}
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 600;
+}
+.login-card input {
+  padding: 7px 9px;
+  border: 1px solid #b6bcc7;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 400;
+}
+.login-card button.is-primary {
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #2f5bd8;
+  color: #fff;
+}
+.login-error {
+  margin: 0;
+  color: #c0392b;
+}
+.login-note {
+  margin: 0;
+  color: #b7791f;
+}
+.web-view {
+  height: 100%;
+}
+.project-load-note {
+  margin: 0;
+  padding: 6px 14px;
+}
+.top-bar-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  color: #5f6674;
+}

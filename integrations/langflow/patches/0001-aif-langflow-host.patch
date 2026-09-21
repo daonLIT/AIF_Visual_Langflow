@@ -148,82 +148,32 @@ index 0000000..8c2ca22
 +}
 diff --git a/src/frontend/src/aif/AifProjectPage.tsx b/src/frontend/src/aif/AifProjectPage.tsx
 new file mode 100644
-index 0000000..9f83a25
+index 0000000..de04f86
 --- /dev/null
 +++ b/src/frontend/src/aif/AifProjectPage.tsx
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,85 @@
 +import {
 +  AifWorkbench,
-+  describeApiError,
 +  LanguageToggle,
 +  useAnnotationStore,
++  useServerProject,
 +} from "@aif/workbench";
 +import { useT } from "@aif/workbench/i18n";
-+import { useEffect, useState } from "react";
++import { useState } from "react";
 +import { useParams } from "react-router-dom";
 +import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
 +import { aifHost } from "./aifHost";
-+
-+type LoadState =
-+  | { kind: "loading" }
-+  | { kind: "ready" }
-+  | { kind: "error"; message: string };
 +
 +export default function AifProjectPage(): JSX.Element {
 +  const { projectId = "" } = useParams();
 +  const navigate = useCustomNavigate();
 +  const t = useT();
-+  const [state, setState] = useState<LoadState>({ kind: "loading" });
 +  const [notice, setNotice] = useState<string | null>(null);
 +  const loadedId = useAnnotationStore((s) => s.projectId);
-+
-+  useEffect(() => {
-+    // 같은 프로젝트를 이미 편집 중이면(목록에 다녀온 경우 등) 다시 불러오지 않아 편집을 잃지 않는다.
-+    const store = useAnnotationStore.getState();
-+    if (store.projectId === projectId && store.document) {
-+      setState({ kind: "ready" });
-+      return;
-+    }
-+    // 다른 프로젝트에 저장 안 한 편집이 남아 있으면 버릴지 묻는다(목록을 거쳐 와도 store 에 남아 있다).
-+    const editing = store.document ? store.projectId : null;
-+    if (
-+      store.dirty &&
-+      editing &&
-+      !window.confirm(t("projects.discardConfirm"))
-+    ) {
-+      navigate(`/aif/projects/${encodeURIComponent(editing)}`, {
-+        replace: true,
-+      });
-+      return;
-+    }
-+    setState({ kind: "loading" });
-+    let cancelled = false;
-+    void store.loadFromServer(projectId).then((result) => {
-+      if (cancelled || ("stale" in result && result.stale)) return;
-+      if (result.ok) {
-+        setState({ kind: "ready" });
-+      } else {
-+        setState({
-+          kind: "error",
-+          message: describeApiError(
-+            t,
-+            "error" in result ? result.error : null,
-+            projectId,
-+          ),
-+        });
-+      }
-+    });
-+    return () => {
-+      cancelled = true;
-+    };
-+    // t 는 언어가 바뀔 때만 바뀐다. 언어 전환으로 다시 불러오지 않는다.
-+    // eslint-disable-next-line react-hooks/exhaustive-deps
-+  }, [projectId]);
-+
-+  const backToList = () => {
-+    // 목록으로 가도 편집 상태는 남는다(같은 프로젝트를 다시 열면 그대로). 다른 프로젝트를 열 때 확인한다.
-+    navigate("/aif/projects");
-+  };
++  // 저장 안 한 편집을 지키려고 이동을 취소하면 편집 중인 프로젝트 주소로 돌아간다.
++  const state = useServerProject(projectId, (editing) =>
++    navigate(`/aif/projects/${encodeURIComponent(editing)}`, { replace: true }),
++  );
 +
 +  const openWeb = async () => {
 +    if (!aifHost?.openWeb) return;
@@ -233,7 +183,11 @@ index 0000000..9f83a25
 +
 +  const bar = (
 +    <div className="top-bar project-bar">
-+      <button type="button" onClick={backToList} data-testid="aif-back-to-list">
++      <button
++        type="button"
++        onClick={() => navigate("/aif/projects")}
++        data-testid="aif-back-to-list"
++      >
 +        {t("projects.back")}
 +      </button>
 +      <span className="top-bar-title">{projectId}</span>

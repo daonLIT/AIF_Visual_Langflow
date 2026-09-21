@@ -3040,3 +3040,30 @@
   align-items: center;
   gap: 8px;
 }
+
+/* ---- 저장 충돌 ---- */
+:where(.aif-root) .save-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 14px;
+  background: #fdf1dc;
+  border-bottom: 1px solid var(--warning);
+  color: #5c3d00;
+}
+:where(.aif-root) .save-conflict-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+:where(.aif-root) .save-conflict button {
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+:where(.aif-root) .save-conflict button.is-danger {
+  color: var(--error);
+  border-color: var(--error);
+}

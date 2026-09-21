@@ -72,7 +72,29 @@ python scripts/manage_tokens.py disable --id desktop-publish
 ```
 
 토큰 원문은 만들 때 한 번만 출력된다. 키 교체는 같은 `principal` 로 새 토큰을 만들고 Desktop 셸 설정을 바꾼 뒤 옛 토큰을 `disable` 한다.
-`principal` 이 같으면 교체 전후의 게시 재전송도 같은 결과로 묶인다. 브라우저 로그인(세션 쿠키)은 아직 없다(P3).
+`principal` 이 같으면 교체 전후의 게시 재전송도 같은 결과로 묶인다.
+
+### 브라우저 로그인 (세션 쿠키)
+
+| 메서드 / 경로 | 동작 |
+| --- | --- |
+| `POST /api/auth/login` | `{username, password}` → 세션 쿠키 `aif_session`(HttpOnly, SameSite=Strict, https 면 Secure) + `{user, scopes, csrfToken}` |
+| `GET /api/auth/session` | 로그인 상태와 CSRF 토큰(새로고침 뒤 다시 받음). 없으면 401. `AIF_AUTH_MODE=off` 면 `local-dev` |
+| `POST /api/auth/logout` | 세션 삭제, 쿠키 지움 |
+
+- 쿠키로 인증한 요청이 GET·HEAD 가 아니면 `X-CSRF-Token` 이 세션의 CSRF 토큰과 같아야 한다(아니면 `403 CSRF_FAILED`). 토큰(Bearer) 요청은 CSRF 대상이 아니다.
+- 세션은 DB(`auth_sessions`, 마이그레이션 v5)에 쿠키 값의 sha256 만 둔다. 유효 시간 `AIF_SESSION_TTL_HOURS`(기본 12).
+- 계정 파일(`AIF_USERS_FILE`)에는 scrypt 해시만 둔다. 계정을 끄면 이미 발급한 세션도 다음 요청부터 막힌다.
+- 같은 사용자 이름·주소로 10분 안에 5번 틀리면 `429 LOGIN_LOCKED`(서버 메모리, 단일 프로세스 기준). 없는 계정도 같은 시간이 걸리게 비교한다.
+- `AIF_COOKIE_SECURE`: `auto`(https 요청이나 `X-Forwarded-Proto: https` 일 때 Secure) | `true` | `false`.
+- 초기 운영은 단일 팀 모델이다. 로그인한 계정은 권한 안에서 모든 프로젝트를 본다(프로젝트별 소유권은 없음).
+
+```bash
+python scripts/manage_users.py create --username owner --principal owner --preset review   # 비밀번호는 입력창으로 받는다(10자 이상)
+python scripts/manage_users.py password --username owner
+python scripts/manage_users.py list
+python scripts/manage_users.py disable --username owner
+```
 
 ## 외부 결과 게시 (Langflow Desktop → 중앙 서버)
 

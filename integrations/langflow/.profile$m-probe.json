@@ -1,0 +1,18 @@
+{
+  "at": "2026-09-21T10:30:30.613Z",
+  "probe": "p3r",
+  "electron": "38.2.0",
+  "url": "http://127.0.0.1:7870",
+  "backend": "started",
+  "userData": "C:\\Users\\tldkw\\AppData\\Roaming\\com.aif.LangflowDesktop",
+  "steps": [
+    {
+      "name": "재시작 → 마지막 화면 복원",
+      "ok": true,
+      "detail": {
+        "path": "/aif/projects/project-3b5a0ea0ecb0467b",
+        "counts": "미검토 40 수락 2 거절 5"
+      }
+    }
+  ]
+}

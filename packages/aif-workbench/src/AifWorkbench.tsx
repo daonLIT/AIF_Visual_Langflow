@@ -9,6 +9,7 @@ import { useGraphStore } from './store/graphStore';
 import { useAnnotationStore } from './store/annotationStore';
 import { useCatalogStore } from './store/catalogStore';
 import { useLang, useT } from './i18n';
+import { SaveConflictBanner } from './components/Projects/SaveConflictBanner';
 
 type Pane = 'text' | 'graph' | 'review';
 
@@ -164,6 +165,7 @@ export function AifWorkbench({ topBar }: AifWorkbenchProps) {
       <div className={`app-shell ${narrow ? 'is-narrow' : ''} ${reviewCollapsed ? 'is-review-collapsed' : ''}`}>
         {topBar}
         <Toolbar />
+        <SaveConflictBanner />
         {narrow ? (
           <nav className="pane-tabs" aria-label={t('app.pane.aria')}>
             {(

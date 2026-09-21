@@ -10,6 +10,7 @@ $env:LANGFLOW_MODE = 'mock'
 $env:AIF_AUTH_MODE = 'token'
 $env:DATABASE_PATH = Join-Path $central 'aif-central.sqlite3'
 $env:AIF_API_TOKENS_FILE = Join-Path $central 'api_tokens.json'
+$env:AIF_USERS_FILE = Join-Path $central 'users.json'
 if (-not $env:AIF_PUBLIC_SITE_URL) { $env:AIF_PUBLIC_SITE_URL = 'http://localhost:5173' }
 $port = if ($env:AIF_CENTRAL_PORT) { $env:AIF_CENTRAL_PORT } else { '8000' }
 

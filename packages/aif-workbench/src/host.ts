@@ -11,6 +11,10 @@ export interface WorkbenchHost {
   sampleUrl?: string;
   /** 사이트에서 직접 분석을 시작하는 기능. Langflow 안에서는 Flow 실행이 그 역할을 한다. */
   analysis: boolean;
+  /** 요청마다 붙일 헤더 (웹: 로그인 세션의 X-CSRF-Token) */
+  extraHeaders?: () => Record<string, string>;
+  /** 서버가 401(인증 필요)을 돌려주면 부른다 (웹: 로그인 화면으로) */
+  onAuthRequired?: () => void;
 }
 
 const defaults: WorkbenchHost = {

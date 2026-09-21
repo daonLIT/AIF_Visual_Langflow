@@ -155,6 +155,45 @@ Electron 셸 창 (Langflow 포크 화면)
 - 앱 재시작 직후 outbox 자동 재전송은 단위 테스트로만 확인했다(실제 창에서는 [다시 보내기] 경로를 확인).
 - 운영 배포(HTTPS·영구 볼륨·백업), 설치 패키지, 셸이 쓸 전용 Langflow venv (P4).
 
+## P3 결과 (2026-09-21): 검토 작업 완성
+
+### 바뀐 것
+
+- 중앙 서버: 브라우저 로그인(세션 쿠키·CSRF·계정 파일·로그인 잠금, DB 마이그레이션 v5). `backend/README.md` 의 "브라우저 로그인".
+- 웹(`frontend/`): 사건 목록이 기본 진입, `?projectId=` 직접 열기·새로고침·뒤로 가기, 로그인 뒤 원래 주소로 복귀, 권한에 맞춰 사이트 분석·파이프라인 탭 숨김. `frontend/README.md` 의 "주소와 로그인".
+- 공유 화면(`@aif/workbench`)
+  - 저장 충돌(409) 배너: 편집은 그대로 두고 [내 편집 파일로 저장] / [서버 최신본 불러오기(확인 후 버림)] / [닫기].
+  - `useServerProject`: 웹과 Langflow 가 같은 규칙으로 서버 프로젝트를 연다(같은 프로젝트는 다시 불러오지 않음, 다른 프로젝트로 갈 때 미저장 편집 확인, 늦은 응답 버림).
+  - 호스트 설정 `extraHeaders`(CSRF)·`onAuthRequired`(401 → 로그인).
+- 셸: 다시 켜면 마지막으로 보던 앱 안 화면(예: 검토 중이던 `/aif/projects/<id>`)을 연다(`%APPDATA%\com.aif.LangflowDesktop\last-view.json`).
+
+### 검증 (실제 창)
+
+환경: Electron 셸 + 테스트 Langflow 7870 + 로컬 중앙 서버 8000(토큰·세션 인증) + 웹 개발 서버 5174. 점검용 프로젝트는 실제 v11 실행 결과 fixture 를 게시해 만들었다(LLM 재실행 없음).
+
+- `AIF_SHELL_PROBE=p3`(8단계 모두 통과):
+  1. Desktop 에서 미검토 47개 프로젝트를 열었다.
+  2. 노드 수락(필요한 노드 포함), 거절, 본문을 고쳐 수락, 원문 선택 → 선택한 제안에 수동 근거 연결.
+  3. 프로젝트 메뉴 → 서버 저장. 서버 revision 2. 수락·수정·거절·수동 근거·확정 노드가 저장됐고, 고친 본문이 그대로 들어갔다.
+  4. 새 브라우저 세션(쿠키 없음)으로 웹 `/?projectId=<id>` 를 열자 로그인 화면이 나왔다. 로그인하자 같은 주소의 프로젝트가 열렸고 개수가 Desktop 과 같았다. 검토 권한 계정이라 파이프라인 탭·분석 버튼은 보이지 않았다.
+  5. 웹 새로고침 → 쿠키 세션으로 유지.
+  6. 웹이 먼저 거절 하나를 저장(rev 3). Desktop(rev 2 기준)에서 수락 하나 → 저장 → 409 충돌 배너. 화면 편집과 개수가 그대로 남았다.
+  7. [서버 최신본 불러오기] → Desktop·웹·서버가 같다(rev 3).
+- `AIF_SHELL_PROBE=p3r`: 셸을 다시 켰다(Langflow 도 새로 기동). 마지막 화면 `/aif/projects/<id>` 가 열리고 개수가 저장된 상태와 같았다.
+- outbox 재시작 재전송: 보내지 못한 게시 요청 파일을 outbox 에 넣고 셸을 켰다. 시작하자마자 전송되고 파일이 지워졌으며, 중앙 서버에 프로젝트가 생겼다.
+- 테스트
+  - 백엔드 141개 통과. `tests/test_auth_sessions.py` 가 로그인·쿠키 속성·CSRF·잠금·로그아웃·계정 끄기·Secure·off 모드를 본다.
+  - 웹 `npm run check` 통과.
+  - 셸 `npm test` 3개 통과.
+  - 포크 Jest(AIF·헤더) 24개 통과.
+
+### 아직 안 된 것 (P4)
+
+- 운영 배포: HTTPS, 같은 출처 서빙(웹 + `/api`), 영구 볼륨, 백업·복구, 재시작·상태 확인, 인증키 교체 절차 문서.
+- 설치 패키지: 전용 Desktop 설치 파일(`electron-builder`), 셸 전용 Langflow venv, 업데이트·원복, 깨끗한 환경에서의 설치 재현.
+- 사람이 직접 하는 드래그·줌·키보드 undo/redo 는 자동 점검에 넣지 않았다(점검은 버튼·선택 범위를 스크립트로 조작).
+- 로그인 잠금은 서버 프로세스 메모리 기준이다. 여러 프로세스로 운영하면 공유 저장소가 필요하다.
+
 ## 실행 방법
 
 ```powershell
@@ -172,6 +211,14 @@ python scripts\manage_tokens.py create --id desktop-review --principal owner --p
 cd ..
 powershell -ExecutionPolicy Bypass -File integrations\langflow\start-central-dev.ps1
 
+#    웹 로그인 계정 (P3). 비밀번호는 입력창으로 받는다.
+cd backend
+$env:AIF_USERS_FILE = (Resolve-Path ..\integrations\langflow\.profile\central).Path + '\users.json'
+python scripts\manage_users.py create --username owner --principal owner --preset review
+cd ..
+#    웹: 5173 을 이미 쓰고 있으면 다른 포트로
+cd frontend; $env:VITE_API_TARGET = 'http://127.0.0.1:8000'; npx vite --port 5174; cd ..
+
 # 3. 셸
 cd integrations\langflow\desktop-shell; npm install
 $env:AIF_LANGFLOW_START = (Resolve-Path ..\start-langflow-p0.ps1).Path
@@ -183,6 +230,8 @@ npx electron .
 #    끝나면 오른쪽 아래 패널의 [이 결과 보기].
 
 # 자동 점검: p0(테스트 페이지·재시작) / p1(검토 화면·스타일 격리) / p2(실제 실행·게시·열기) / p2b(서버 단절 후 재전송)
+#           p3(Desktop 검토·저장 → 웹 로그인 확인 → 409) / p3r(재시작 복원, p3 다음에)
+#   p3 는 AIF_P3_WEB_URL(기본 http://localhost:5173), AIF_P3_WEB_USER, AIF_P3_WEB_PASSWORD 도 쓴다.
 #   p2·p2b 는 연결 설정 대신 환경변수 AIF_API_BASE, AIF_REVIEW_TOKEN, AIF_PUBLISH_TOKEN 을 쓸 수 있다.
 $env:AIF_SHELL_PROBE = 'p2'; npx electron .
 ```

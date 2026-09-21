@@ -209,4 +209,4 @@ AIF.schemefulfillments 는 scheme 카탈로그에 검증된 외부 schemeID(aifd
 - 취소는 로컬 취소입니다(Langflow/Ollama 계산은 계속될 수 있음).
 - 서버 재시작 시 진행 중이던 실행은 `interrupted` 로 표시됩니다.
 - 원문 교체를 undo 하면 텍스트와 근거는 되돌아가지만 문서 버전 번호는 유지됩니다.
-- 로그인·협업·외부 배포는 범위 밖입니다. CORS 는 `localhost:5173` 만 허용합니다.
+- 인증(`AIF_AUTH_MODE=token`): 브라우저는 로그인 세션 쿠키, Langflow Desktop 은 토큰을 씁니다(`backend/README.md`). 외부 배포 구성은 P4 입니다. CORS 는 `localhost:5173` 만 허용합니다.

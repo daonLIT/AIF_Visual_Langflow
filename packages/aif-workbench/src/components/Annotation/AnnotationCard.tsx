@@ -268,6 +268,7 @@ export function AnnotationCard(props: CardProps) {
             <button
               type="button"
               className="is-primary"
+              data-action="accept-edited-confirm"
               disabled={!draft.trim()}
               onClick={() => {
                 props.onAccept({ text: draft, withConnectableEdges: true });
@@ -290,6 +291,7 @@ export function AnnotationCard(props: CardProps) {
               <button
                 type="button"
                 className="is-primary"
+                data-action="accept"
                 disabled={!!dependency && dependency.unresolvableNodeIds.length > 0}
                 onClick={() => props.onAccept({ withDependencies: true, withConnectableEdges: true })}
                 title={
@@ -303,11 +305,11 @@ export function AnnotationCard(props: CardProps) {
                 {dependency && !dependency.ready ? t('card.acceptWithNodes') : t('card.accept')}
               </button>
               {node && node.currentValue.type !== 'RA' ? (
-                <button type="button" onClick={startEdit}>
+                <button type="button" data-action="accept-edited" onClick={startEdit}>
                   {t('card.acceptEdited')}
                 </button>
               ) : null}
-              <button type="button" className="is-danger" onClick={props.onReject}>
+              <button type="button" className="is-danger" data-action="reject" onClick={props.onReject}>
                 {t('card.reject')}
               </button>
             </>

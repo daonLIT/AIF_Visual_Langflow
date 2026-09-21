@@ -32,7 +32,31 @@ const LANGFLOW_URL = process.env.AIF_LANGFLOW_URL || "http://127.0.0.1:7870";
 const APP_ORIGIN = new URL(LANGFLOW_URL).origin;
 const START_SCRIPT = process.env.AIF_LANGFLOW_START || "";
 const OUTBOX_DIR = path.join(app.getPath("userData"), "outbox");
-const PROBE = { 1: "p0", p0: "p0", p1: "p1", p2: "p2", p2b: "p2b" }[process.env.AIF_SHELL_PROBE] ?? null;
+// 마지막으로 보던 앱 안 주소. 다시 켜면 그 화면(예: 검토 중인 AIF 프로젝트)을 연다.
+const LAST_VIEW_FILE = path.join(app.getPath("userData"), "last-view.json");
+
+function rememberView(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.origin !== APP_ORIGIN || parsed.pathname.startsWith("/login")) return;
+    fs.writeFileSync(LAST_VIEW_FILE, JSON.stringify({ path: parsed.pathname + parsed.search }));
+  } catch {
+    // 기록하지 못해도 동작에는 지장 없다
+  }
+}
+
+function startPath() {
+  // 자동 점검(p0~p2)은 늘 Flow 목록에서 시작한다. p3 복원 점검과 사용자 실행만 마지막 화면을 연다.
+  if (PROBE && !PROBE.startsWith("p3")) return "/flows";
+  try {
+    const { path: last } = JSON.parse(fs.readFileSync(LAST_VIEW_FILE, "utf8"));
+    if (typeof last === "string" && last.startsWith("/") && !last.startsWith("//")) return last;
+  } catch {
+    // 처음 실행
+  }
+  return "/flows";
+}
+const PROBE = { 1: "p0", p0: "p0", p1: "p1", p2: "p2", p2b: "p2b", p3: "p3", p3r: "p3r" }[process.env.AIF_SHELL_PROBE] ?? null;
 
 let backend = null;
 
@@ -139,6 +163,8 @@ function createWindow() {
     event.preventDefault();
     if (isAllowedExternal(url)) shell.openExternal(url);
   });
+  win.webContents.on("did-navigate", (_event, url) => rememberView(url));
+  win.webContents.on("did-navigate-in-page", (_event, url) => rememberView(url));
   // 페이지가 저장 안 한 변경으로 닫기·새로고침을 막으면(beforeunload) Electron 은 아무 안내 없이 막는다. 물어보고 결정한다.
   win.webContents.on("will-prevent-unload", (event) => {
     if (PROBE) {
@@ -470,6 +496,12 @@ async function probeP2b(win, mode) {
   writeProbe("p2b", mode, steps);
 }
 
+function runP3(kind, win, mode) {
+  const { probeP3, probeP3Restore } = require("./probe-p3");
+  const ctx = { probeTools, writeProbe, config, LANGFLOW_URL, app };
+  return kind === "p3" ? probeP3(ctx, win, mode) : probeP3Restore(ctx, win, mode);
+}
+
 async function probe(win, mode) {
   const wc = win.webContents;
   const js = (code) => wc.executeJavaScript(code, true);
@@ -571,12 +603,12 @@ app.whenReady().then(async () => {
     return;
   }
   const win = createWindow();
-  await win.loadURL(new URL("/flows", LANGFLOW_URL).toString());
+  await win.loadURL(new URL(startPath(), LANGFLOW_URL).toString());
   void flushNow();
   setInterval(() => void flushNow(), 5 * 60 * 1000);
   if (!PROBE && !config.isComplete()) openSettings(win);
   if (PROBE) {
-    await (PROBE === "p2b" ? probeP2b(win, mode) : PROBE === "p2" ? probeP2(win, mode) : PROBE === "p1" ? probeP1(win, mode) : probe(win, mode));
+    await (PROBE === "p3" || PROBE === "p3r" ? runP3(PROBE, win, mode) : PROBE === "p2b" ? probeP2b(win, mode) : PROBE === "p2" ? probeP2(win, mode) : PROBE === "p1" ? probeP1(win, mode) : probe(win, mode));
     app.quit();
   }
 });

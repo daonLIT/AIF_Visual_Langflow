@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useGraphStore } from '../../store/graphStore';
 import { useAnnotationStore } from '../../store/annotationStore';
 import { downloadCaseJson } from '../../io/exportAifOva';
+import { downloadJson } from '../../io/download';
 import type { ProjectFile } from '../../types/annotation';
 import { JudgmentInputDialog } from '../Analysis/JudgmentInputDialog';
 import { AnalysisStatus } from '../Analysis/AnalysisStatus';
@@ -9,18 +10,6 @@ import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { workbenchHost } from '../../host';
 import sampleCaseUrl from '../../../fixtures/sample-case.json?url';
-
-function downloadJson(name: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = name;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
 
 /** 프로젝트 저장/불러오기 메뉴 */
 function ProjectMenu() {
@@ -87,6 +76,7 @@ function ProjectMenu() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        data-action="project-menu"
         aria-haspopup="menu"
         aria-expanded={open}
         title={t('project.menu.title')}
@@ -101,7 +91,7 @@ function ProjectMenu() {
               revision: revision > 0 ? t('project.revision', { revision }) : t('project.notOnServer'),
             })}
           </div>
-          <button type="button" role="menuitem" className="menu-item" disabled={!caseData} onClick={() => { void saveToServer(); setOpen(false); }}>
+          <button type="button" role="menuitem" className="menu-item" data-action="save-server" disabled={!caseData} onClick={() => { void saveToServer(); setOpen(false); }}>
             {t('project.saveServer')}
           </button>
           <button type="button" role="menuitem" className="menu-item" disabled={!caseData} onClick={saveFile}>

@@ -317,7 +317,7 @@ class MigrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "annotation.sqlite3"
             conn = sqlite3.connect(path)
-            from app.storage.db import MIGRATIONS
+            from app.storage.db import LATEST_SCHEMA, MIGRATIONS
 
             for version, _label, script in MIGRATIONS[:3]:
                 for statement in [p.strip() for p in script.split(";") if p.strip()]:
@@ -328,7 +328,7 @@ class MigrationTest(unittest.TestCase):
             conn.close()
 
             db = Database(path)
-            self.assertEqual(db.schema_version(), 4)
+            self.assertEqual(db.schema_version(), LATEST_SCHEMA)
             self.assertIsNotNone(db.backup_path)
             self.assertTrue(Path(db.backup_path).exists())
             self.assertEqual(db.get_project_revision("p1"), 4)
