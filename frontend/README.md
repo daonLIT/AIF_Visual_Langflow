@@ -70,8 +70,19 @@ src/
 ├── layout/elkLayout.ts      ELK 계층형 레이아웃 (direction: UP)
 ├── validation/              graphValidator.ts
 ├── types/                   argument.ts (내부 모델) / rawJson.ts (원본 JSON)
+├── i18n/                    한국어/영어 문구 (ko.ts 기준, en.ts 는 타입으로 강제)
 └── utils/                   generateNodeId.ts / generateEdgeId.ts
 ```
+
+## 한국어 / English 전환
+
+상단 탭 줄 오른쪽 끝의 **文 English / 한국어** 버튼으로 전환한다. 고른 언어는 `localStorage['aif.lang']` 에 남고, 값이 없으면 한국어로 시작한다.
+
+- 화면 문구는 `src/i18n/ko.ts` 가 키의 기준이고 `en.ts` 는 같은 키를 모두 채워야 한다(빠지면 타입 오류).
+- 컴포넌트는 `useT()`, 스토어·검증기처럼 리액트 밖에서는 `t()` 를 쓴다. `t()` 는 부르는 시점의 언어를 읽으므로, 만들어 저장되는 문구(검토 이력 detail, scheme 재검토 사유 등)는 그때의 언어로 남는다.
+- 카탈로그는 데이터에 영어 필드를 함께 두고 `schemeName` / `issueLabel` 같은 헬퍼로 고른다: `walton_schemes.json` 의 `name`·`groupEn`·`descriptionEn`·`labelEn`·`templateEn`·`textEn`, `issue_catalog.json` 의 `categoryNameEn`·`labelEn`·`criteriaEn`.
+- 판결문 원문·AI 가 만든 노드 본문·요약처럼 사건 데이터는 번역하지 않는다.
+- 중계 서버(backend)의 오류·경고 문구도 따라온다: `api/client.ts` 가 모든 요청에 `Accept-Language` 를 붙이고 서버가 그 언어로 만든다 (`backend/app/i18n.py`).
 
 ## 이번 단계에서 제외한 것
 

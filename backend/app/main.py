@@ -12,9 +12,11 @@ import logging
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from .config import Settings, load_settings
+from .i18n import parse_accept_language, reset_language, set_language
 from .routes.api import routes as api_routes
 from .routes.pipeline import routes as pipeline_routes
 from .services.catalogs import CatalogError, IssueCatalog, SchemeCatalog
@@ -25,6 +27,15 @@ from .services.run_manager import RunManager
 from .storage import Database
 
 logger = logging.getLogger("annotation.main")
+
+
+async def language_middleware(request, call_next):
+    """Accept-Language 로 이 요청의 메시지 언어를 정한다 (지원: ko, en)."""
+    token = set_language(parse_accept_language(request.headers.get("accept-language")))
+    try:
+        return await call_next(request)
+    finally:
+        reset_language(token)
 
 
 def create_app(
@@ -41,18 +52,19 @@ def create_app(
     # 요청마다 URL 을 남기는 httpx 로그는 끈다 (Langflow 주소·flow ID 가 로그에 반복되지 않게).
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    catalog_errors: list[str] = []
+    # 서버 시작 때는 요청 언어를 모르므로 오류를 그대로 담아 두고, 응답할 때 그 요청의 언어로 만든다.
+    catalog_errors: list[CatalogError] = []
     issue_catalog = scheme_catalog = None
     try:
         issue_catalog = IssueCatalog.load(settings.issue_catalog_path)
     except CatalogError as error:
-        catalog_errors.append(str(error))
+        catalog_errors.append(error)
     try:
         scheme_catalog = SchemeCatalog.load(settings.scheme_catalog_path)
     except CatalogError as error:
-        catalog_errors.append(str(error))
-    for message in catalog_errors:
-        logger.warning(message)
+        catalog_errors.append(error)
+    for error in catalog_errors:
+        logger.warning("%s", error)
 
     owns_database = db is None
     database = db or Database(settings.database_path)
@@ -87,7 +99,9 @@ def create_app(
                 allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                 allow_methods=["*"],
                 allow_headers=["*"],
-            )
+            ),
+            # 이 요청 동안의 메시지 언어. 분석 실행 task 도 이 컨텍스트를 물려받는다.
+            Middleware(BaseHTTPMiddleware, dispatch=language_middleware),
         ],
     )
     app.state.settings = settings

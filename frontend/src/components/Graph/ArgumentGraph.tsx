@@ -28,6 +28,7 @@ import { RANode } from './nodes/RANode';
 import { CANode } from './nodes/CANode';
 import { IssueNode } from './nodes/IssueNode';
 import type { ArgumentNodeData } from './nodes/NodeShell';
+import { useT, type MessageKey } from '../../i18n';
 import { GraphContextMenu, type ContextMenuState } from './GraphContextMenu';
 import { NodeDetailPanel } from './NodeDetailPanel';
 import { findIssue, useCatalogStore } from '../../store/catalogStore';
@@ -41,11 +42,11 @@ const nodeTypes = {
   ISSUE: IssueNode,
 };
 
-const NODE_TYPE_LABEL: Record<ArgumentNodeType, string> = {
-  I: '진술(I)',
-  RA: '추론(RA)',
-  CA: '반박(CA)',
-  ISSUE: '쟁점(ISSUE)',
+const NODE_TYPE_KEY: Record<ArgumentNodeType, MessageKey> = {
+  I: 'graph.nodeType.i',
+  RA: 'graph.nodeType.ra',
+  CA: 'graph.nodeType.ca',
+  ISSUE: 'graph.nodeType.issue',
 };
 
 /** 쟁점 노드에 도달하는 모든 조상 노드(하위 논증)를 찾는다. */
@@ -207,6 +208,7 @@ function toFlowEdges(
 }
 
 export function ArgumentGraph() {
+  const t = useT();
   const caseData = useGraphStore((state) => state.caseData);
   const graphVersion = useGraphStore((state) => state.graphVersion);
   const fitViewToken = useGraphStore((state) => state.fitViewToken);
@@ -314,12 +316,12 @@ export function ArgumentGraph() {
       if (!connection.source || !connection.target) return;
       const acceptedIds = new Set(useGraphStore.getState().caseData?.nodes.map((node) => node.id) ?? []);
       if (!acceptedIds.has(connection.source) || !acceptedIds.has(connection.target)) {
-        setErrorMessage('초안(미검토) 노드에는 관계를 연결할 수 없습니다. 먼저 노드 제안을 수락하세요.');
+        setErrorMessage(t('graph.error.draftEdge'));
         return;
       }
       addEdgeToStore(connection.source, connection.target);
     },
-    [addEdgeToStore, setErrorMessage],
+    [addEdgeToStore, setErrorMessage, t],
   );
 
   const handleSelectionChange = useCallback(
@@ -355,13 +357,13 @@ export function ArgumentGraph() {
       // RA / CA 는 별도 텍스트가 필요 없고, I / ISSUE 만 내용을 입력받는다.
       let text: string = type;
       if (type === 'I' || type === 'ISSUE') {
-        const input = window.prompt(`${NODE_TYPE_LABEL[type]} 텍스트를 입력하세요.`, '');
+        const input = window.prompt(t('graph.prompt.newNodeText', { type: t(NODE_TYPE_KEY[type]) }), '');
         if (input === null) return;
         text = input.trim();
       }
       addNode(type, text, { x: flowX, y: flowY });
     },
-    [addNode],
+    [addNode, t],
   );
 
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -382,8 +384,8 @@ export function ArgumentGraph() {
   if (!caseData) {
     return (
       <div className="graph-empty">
-        <p>판결문을 입력하거나 JSON 파일을 불러오면 논증 그래프가 여기에 표시됩니다.</p>
-        <p className="graph-empty-hint">상단의 [판결문 입력] 또는 [JSON 불러오기] 버튼을 사용하세요.</p>
+        <p>{t('graph.empty')}</p>
+        <p className="graph-empty-hint">{t('graph.empty.hint')}</p>
       </div>
     );
   }

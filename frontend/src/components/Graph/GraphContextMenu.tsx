@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ArgumentNodeType } from '../../types/argument';
+import { useT, type MessageKey } from '../../i18n';
 
 export type ContextMenuTarget =
   | { kind: 'pane'; flowX: number; flowY: number }
@@ -23,11 +24,11 @@ interface GraphContextMenuProps {
   onRejectDraft: (annotationId: string) => void;
 }
 
-const ADDABLE: Array<{ type: ArgumentNodeType; label: string }> = [
-  { type: 'I', label: 'I  진술 노드' },
-  { type: 'RA', label: 'RA  추론 노드' },
-  { type: 'CA', label: 'CA  반박 노드' },
-  { type: 'ISSUE', label: 'ISSUE  쟁점 노드' },
+const ADDABLE: Array<{ type: ArgumentNodeType; labelKey: MessageKey }> = [
+  { type: 'I', labelKey: 'menu.add.i' },
+  { type: 'RA', labelKey: 'menu.add.ra' },
+  { type: 'CA', labelKey: 'menu.add.ca' },
+  { type: 'ISSUE', labelKey: 'menu.add.issue' },
 ];
 
 export function GraphContextMenu({
@@ -40,6 +41,7 @@ export function GraphContextMenu({
   onAcceptDraft,
   onRejectDraft,
 }: GraphContextMenuProps) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function GraphContextMenu({
     >
       {menu.target.kind === 'pane' ? (
         <>
-          <div className="context-menu-title">노드 추가</div>
+          <div className="context-menu-title">{t('menu.addNode')}</div>
           {ADDABLE.map((item) => (
             <button
               key={item.type}
@@ -78,7 +80,7 @@ export function GraphContextMenu({
                 onClose();
               }}
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </>
@@ -86,7 +88,7 @@ export function GraphContextMenu({
 
       {menu.target.kind === 'node' && menu.target.draftAnnotationId ? (
         <>
-          <div className="context-menu-title">초안 노드 (AI 제안)</div>
+          <div className="context-menu-title">{t('menu.draftNode')}</div>
           <button
             type="button"
             className="context-menu-item"
@@ -95,7 +97,7 @@ export function GraphContextMenu({
               onClose();
             }}
           >
-            제안 수락
+            {t('menu.acceptProposal')}
           </button>
           <button
             type="button"
@@ -105,15 +107,15 @@ export function GraphContextMenu({
               onClose();
             }}
           >
-            제안 거절
+            {t('menu.rejectProposal')}
           </button>
-          <div className="context-menu-hint">텍스트 편집: 노드 더블클릭</div>
+          <div className="context-menu-hint">{t('menu.editHint')}</div>
         </>
       ) : null}
 
       {menu.target.kind === 'edge' && menu.target.draftAnnotationId ? (
         <>
-          <div className="context-menu-title">초안 관계 (제안)</div>
+          <div className="context-menu-title">{t('menu.draftEdge')}</div>
           <button
             type="button"
             className="context-menu-item"
@@ -122,7 +124,7 @@ export function GraphContextMenu({
               onClose();
             }}
           >
-            관계 수락 (필요한 노드와 함께)
+            {t('menu.acceptEdge')}
           </button>
           <button
             type="button"
@@ -132,14 +134,14 @@ export function GraphContextMenu({
               onClose();
             }}
           >
-            관계 거절
+            {t('menu.rejectEdge')}
           </button>
         </>
       ) : null}
 
       {menu.target.kind === 'node' && !menu.target.draftAnnotationId ? (
         <>
-          <div className="context-menu-title">노드</div>
+          <div className="context-menu-title">{t('menu.node')}</div>
           <button
             type="button"
             className="context-menu-item"
@@ -148,7 +150,7 @@ export function GraphContextMenu({
               onClose();
             }}
           >
-            이 노드로 이동
+            {t('menu.focusNode')}
           </button>
           <button
             type="button"
@@ -158,15 +160,15 @@ export function GraphContextMenu({
               onClose();
             }}
           >
-            노드 삭제
+            {t('menu.deleteNode')}
           </button>
-          <div className="context-menu-hint">텍스트 편집: 노드 더블클릭</div>
+          <div className="context-menu-hint">{t('menu.editHint')}</div>
         </>
       ) : null}
 
       {menu.target.kind === 'edge' && !menu.target.draftAnnotationId ? (
         <>
-          <div className="context-menu-title">엣지</div>
+          <div className="context-menu-title">{t('menu.edge')}</div>
           <button
             type="button"
             className="context-menu-item is-danger"
@@ -175,7 +177,7 @@ export function GraphContextMenu({
               onClose();
             }}
           >
-            엣지 삭제
+            {t('menu.deleteEdge')}
           </button>
         </>
       ) : null}

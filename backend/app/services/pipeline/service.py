@@ -33,6 +33,7 @@ from .flow_model import (
     validate_flow_data,
 )
 from .repository import PipelineError, _templates_from_flow, flow_header, now_iso
+from ...i18n import t
 
 WORKING_COPY_TAG = "aif-working-copy"
 RUN_SNAPSHOT_TAG = "aif-run-snapshot"
@@ -164,11 +165,11 @@ class PipelineService:
         if flow_id == self.production_flow_id:
             raise PipelineError(
                 "PRODUCTION_PROTECTED",
-                "프로덕션 flow(LANGFLOW_FLOW_ID)에는 직접 적용하지 않습니다. 작업용 flow 를 복제한 뒤 적용하세요.",
+                t("svc.production_protected"),
                 status=409,
             )
         if flow is not None and self._is_snapshot(flow):
-            raise PipelineError("SNAPSHOT_PROTECTED", "실행용 스냅샷 flow 는 수정하지 않습니다(실행 기록의 버전 고정).", status=409)
+            raise PipelineError("SNAPSHOT_PROTECTED", t("svc.snapshot_protected"), status=409)
 
     # ---- API ----
     async def list_flows(self) -> dict:
@@ -222,11 +223,11 @@ class PipelineService:
         source = await self.repo.get_flow(flow_id)
         stamp = now_iso()[:16].replace("T", " ")
         payload = {
-            "name": (name or f"{source.get('name') or 'flow'} (작업용 {stamp})")[:200],
-            "description": f"AIF_Visual 파이프라인 편집 작업용 복제본. 원본: {source.get('name')} ({flow_id})",
+            "name": (name or t("svc.clone_name", name=source.get("name") or "flow", stamp=stamp))[:200],
+            "description": t("svc.clone_description", name=source.get("name"), flowId=flow_id),
             # 서버 안에서 원격 → 원격으로 복사하므로 비밀 값도 그대로 유지된다(브라우저를 거치지 않음).
             "data": copy.deepcopy(source.get("data") or {}),
-            "tags": sorted(set((t for t in source.get("tags") or [] if t != RUN_SNAPSHOT_TAG)) | {WORKING_COPY_TAG}),
+            "tags": sorted(set(tag for tag in source.get("tags") or [] if tag != RUN_SNAPSHOT_TAG) | {WORKING_COPY_TAG}),
             "is_component": False,
         }
         if source.get("folder_id"):
@@ -235,7 +236,7 @@ class PipelineService:
         created_id = str(created.get("id"))
         self.db.set_flow_meta(created_id, flow_id, now_iso(), None)
         self.db.add_pipeline_version(
-            uuid.uuid4().hex, created_id, "cloned", now_iso(), f"{flow_id} 에서 복제", created.get("updated_at"),
+            uuid.uuid4().hex, created_id, "cloned", now_iso(), t("svc.cloned_from", flowId=flow_id), created.get("updated_at"),
             mask_secrets(payload["data"])[0], data_hash=execution_hash(payload["data"]),
         )
         return self._view(created if isinstance(created.get("data"), dict) else await self.repo.get_flow(created_id))
@@ -255,7 +256,7 @@ class PipelineService:
         self._guard_writable(flow_id)
         issues = self._validate(data)
         if _error_count(issues):
-            raise PipelineError("VALIDATION", "검증 오류가 있어 적용하지 않았습니다.", status=422, details=issues)
+            raise PipelineError("VALIDATION", t("svc.validation_failed"), status=422, details=issues)
 
         remote = await self.repo.get_flow(flow_id)
         self._guard_writable(flow_id, remote)
@@ -264,18 +265,18 @@ class PipelineService:
         if base_updated_at and str(remote.get("updated_at")) != str(base_updated_at):
             raise PipelineError(
                 "CONFLICT",
-                f"편집을 시작한 뒤 Langflow 의 flow 가 바뀌었습니다 (현재 {remote.get('updated_at')}). 다시 불러와 변경을 합치세요.",
+                t("svc.conflict_updated_at", updatedAt=remote.get("updated_at")),
                 status=409,
             )
         if base_hash and base_hash != remote_hash:
             raise PipelineError(
                 "CONFLICT",
-                "편집을 시작한 뒤 Langflow 의 flow 내용(실행 해시)이 바뀌었습니다. 다시 불러와 변경을 합치세요.",
+                t("svc.conflict_hash"),
                 status=409,
             )
         restored, secret_warnings = restore_secrets({"nodes": data.get("nodes") or [], "edges": data.get("edges") or []}, remote_data)
         if contains_sentinel(restored):
-            raise PipelineError("SECRET_SENTINEL", "마스킹 값이 남아 있어 적용하지 않았습니다.", status=500)
+            raise PipelineError("SECRET_SENTINEL", t("svc.secret_sentinel"), status=500)
         extra_keys = {k: v for k, v in remote_data.items() if k not in ("nodes", "edges")}
         extra_keys.update({k: v for k, v in data.items() if k not in ("nodes", "edges")})
         new_data = {**extra_keys, **restored}
@@ -283,12 +284,12 @@ class PipelineService:
 
         backup_id = uuid.uuid4().hex
         self.db.add_pipeline_version(
-            backup_id, flow_id, "backup", now_iso(), "적용 직전 원격 flow 백업", remote.get("updated_at"),
+            backup_id, flow_id, "backup", now_iso(), t("svc.backup_note"), remote.get("updated_at"),
             mask_secrets(remote_data)[0], data_hash=remote_hash,
         )
         snapshot_error = None
         try:
-            await self.repo.create_snapshot(flow_id, f"AIF_Visual 적용 전 백업: {note or ''}".strip())
+            await self.repo.create_snapshot(flow_id, t("svc.snapshot_note", note=note or "").strip())
         except (LangflowError, PipelineError) as error:  # 스냅샷 기능이 없거나 권한이 없어도 로컬 백업은 있다.
             snapshot_error = str(error)
 
@@ -312,12 +313,18 @@ class PipelineService:
             diff = diff_flow_data(new_data, reread.get("data") or {})
             raise PipelineError(
                 "APPLY_NOT_VERIFIED",
-                "Langflow 에 저장을 요청했지만 다시 읽은 flow 가 보낸 내용과 다릅니다. 적용이 완료되었다고 볼 수 없습니다.",
+                t("svc.apply_not_verified"),
                 status=502,
                 details=[
-                    f"변경된 컴포넌트: {', '.join(diff['nodesChanged']) or '없음'}",
-                    f"추가 {len(diff['nodesAdded'])} / 삭제 {len(diff['nodesRemoved'])} / 연결 +{diff['edgesAdded']} -{diff['edgesRemoved']}",
-                    f"백업 버전 {backup_id} 으로 복원할 수 있습니다.",
+                    t("svc.diff_changed", names=", ".join(diff["nodesChanged"]) or t("svc.diff_none")),
+                    t(
+                        "svc.diff_counts",
+                        added=len(diff["nodesAdded"]),
+                        removed=len(diff["nodesRemoved"]),
+                        edgesAdded=diff["edgesAdded"],
+                        edgesRemoved=diff["edgesRemoved"],
+                    ),
+                    t("svc.restore_hint", versionId=backup_id),
                 ],
             )
         self.db.delete_pipeline_draft(flow_id)
@@ -340,19 +347,19 @@ class PipelineService:
     async def get_version(self, version_id: str) -> dict:
         version = self.db.get_pipeline_version(version_id)
         if version is None:
-            raise PipelineError("NOT_FOUND", "버전을 찾을 수 없습니다.", status=404)
+            raise PipelineError("NOT_FOUND", t("svc.version_not_found"), status=404)
         return version
 
     async def restore_version(self, flow_id: str, version_id: str, base_updated_at: str | None, base_hash: str | None = None) -> dict:
         version = await self.get_version(version_id)
         if version["flowId"] != flow_id:
-            raise PipelineError("VERSION_MISMATCH", "다른 flow 의 버전입니다.", status=400)
+            raise PipelineError("VERSION_MISMATCH", t("svc.version_mismatch"), status=400)
         return await self.apply(
             flow_id,
             version["data"],
             base_updated_at=base_updated_at,
             base_hash=base_hash,
-            note=f"{version['createdAt']} 버전({version['kind']}) 복원",
+            note=t("svc.restore_note", createdAt=version["createdAt"], kind=version["kind"]),
             kind="restored",
         )
 
@@ -360,18 +367,18 @@ class PipelineService:
         """실행에 쓸 flow 를 고정한다: 해시·모델 설정·입출력 컴포넌트, live 에서는 해시별 실행용 스냅샷 flow."""
         if not flow_id:
             if self.settings.is_live:
-                raise PipelineError("NOT_CONFIGURED", "분석에 사용할 flow 가 없습니다. LANGFLOW_FLOW_ID 를 설정하세요.", status=400)
-            return {"flowId": None, "runFlowId": None, "mock": True, "note": "mock 모드: fixture 응답을 사용합니다."}
+                raise PipelineError("NOT_CONFIGURED", t("svc.no_analysis_flow_configured"), status=400)
+            return {"flowId": None, "runFlowId": None, "mock": True, "note": t("svc.mock_fixture_note")}
         try:
             flow = await self.repo.get_flow(flow_id)
         except LangflowError:
             if not self.settings.is_live:
-                return {"flowId": flow_id, "runFlowId": flow_id, "mock": True, "note": "mock 모드: 로컬 flow 를 찾지 못했습니다."}
+                return {"flowId": flow_id, "runFlowId": flow_id, "mock": True, "note": t("svc.mock_no_local_flow")}
             raise
         data = flow.get("data") or {}
         relay = self._relay(data)
         if relay["errors"]:
-            raise PipelineError("RELAY", "실행할 flow 에서 중계 서버 입력·출력 컴포넌트를 정할 수 없습니다.", status=409, details=[e["message"] for e in relay["errors"]])
+            raise PipelineError("RELAY", t("svc.relay_unresolved"), status=409, details=[e["message"] for e in relay["errors"]])
         flow_hash = execution_hash(data)
         version = self.db.find_pipeline_version_by_hash(flow_id, flow_hash)
         pinned = {
@@ -399,8 +406,8 @@ class PipelineService:
                 snapshot_id = None
         if not snapshot_id:
             payload = {
-                "name": f"[AIF 실행 스냅샷] {flow.get('name') or flow_id} #{flow_hash[:8]}"[:200],
-                "description": f"실행 버전 고정용 스냅샷. 원본 {flow_id}, 실행 해시 {flow_hash}. 수정하지 마세요.",
+                "name": t("svc.snapshot_name", name=flow.get("name") or flow_id, hash=flow_hash[:8])[:200],
+                "description": t("svc.snapshot_description", flowId=flow_id, hash=flow_hash),
                 "data": copy.deepcopy(data),
                 "tags": [RUN_SNAPSHOT_TAG],
                 "is_component": False,
@@ -411,7 +418,7 @@ class PipelineService:
             snapshot_id = str(created.get("id"))
             check = await self.repo.get_flow(snapshot_id)
             if execution_hash(check.get("data") or {}) != flow_hash:
-                raise PipelineError("SNAPSHOT_NOT_VERIFIED", "실행용 스냅샷 flow 를 만들었지만 내용이 원본과 달라 실행하지 않았습니다.", status=502)
+                raise PipelineError("SNAPSHOT_NOT_VERIFIED", t("svc.snapshot_not_verified"), status=502)
             self.db.save_run_snapshot(flow_id, flow_hash, snapshot_id, now_iso())
         pinned["runFlowId"] = snapshot_id
         pinned["snapshot"] = True
@@ -420,7 +427,7 @@ class PipelineService:
     async def summarizer_config(self, flow_id: str | None) -> dict:
         """분석 flow 의 I-node Summarizer 설정(프롬프트·모델). 사이트의 '요약 생성'도 같은 설정을 쓴다."""
         if not flow_id:
-            raise PipelineError("NOT_CONFIGURED", "분석 flow 가 설정되지 않았습니다.", status=400)
+            raise PipelineError("NOT_CONFIGURED", t("svc.analysis_flow_not_set"), status=400)
         flow = await self.repo.get_flow(flow_id)
         for node in (flow.get("data") or {}).get("nodes") or []:
             if has_component_class(node, "NodeSummarizer"):
@@ -437,7 +444,7 @@ class PipelineService:
                     "numCtx": value("num_ctx", 8192),
                     "timeout": value("timeout", 600),
                 }
-        raise PipelineError("NO_SUMMARIZER", "분석 flow 에 I-node Summarizer 컴포넌트가 없습니다.", status=409)
+        raise PipelineError("NO_SUMMARIZER", t("svc.no_summarizer"), status=409)
 
     async def component_templates(self, flow_id: str | None) -> dict:
         templates: dict[str, dict] = {}
@@ -446,7 +453,7 @@ class PipelineService:
             for item in await self.repo.component_templates():
                 templates.setdefault(item["key"], item)
         except (LangflowError, PipelineError) as error:
-            warnings.append(f"Langflow 컴포넌트 목록을 가져오지 못했습니다: {error}")
+            warnings.append(t("svc.templates_failed", error=error))
         if flow_id:
             flow = await self.repo.get_flow(flow_id)
             for key, item in _templates_from_flow(flow).items():
@@ -466,7 +473,7 @@ class PipelineService:
         if flow_id:
             flow = await self.repo.get_flow(flow_id)
             if self._is_snapshot(flow):
-                raise PipelineError("SNAPSHOT_PROTECTED", "실행용 스냅샷 flow 는 분석 flow 로 지정할 수 없습니다.", status=409)
+                raise PipelineError("SNAPSHOT_PROTECTED", t("svc.snapshot_not_analysis_flow"), status=409)
         self.db.set_setting(ANALYSIS_FLOW_SETTING, flow_id or None)
         return {"analysisFlowId": self.analysis_flow_id(), "productionFlowId": self.production_flow_id}
 
@@ -479,7 +486,7 @@ class PipelineService:
 
         try:
             version = await self.repo.ping()
-            add("langflow", True, f"응답함 (version {version.get('version') or version.get('main_version') or '?'})")
+            add("langflow", True, t("svc.ping_ok", version=version.get("version") or version.get("main_version") or "?"))
         except (LangflowError, PipelineError) as error:
             add("langflow", False, str(error))
 
@@ -492,7 +499,7 @@ class PipelineService:
                 issues = self._validate(data)
                 relay = self._relay(data)
                 flow_models = model_settings(data)
-                detail = f"{flow.get('name')} — 검증 오류 {_error_count(issues)}개"
+                detail = t("svc.flow_errors", name=flow.get("name"), count=_error_count(issues))
                 if relay["notes"]:
                     detail += " · " + " ".join(relay["notes"])
                 add("analysis_flow", _error_count(issues) == 0, detail)
@@ -501,12 +508,12 @@ class PipelineService:
                 add(
                     "flow_contract",
                     not missing,
-                    "쟁점 자동 선택·요약·scheme·검증 단계가 있는 v11 flow" if not missing else f"계획서의 처리 단계가 없는 flow 입니다: {', '.join(missing)} (v11 flow 가져오기 필요)",
+                    t("svc.flow_contract_ok") if not missing else t("svc.flow_contract_missing", missing=", ".join(missing)),
                 )
             except (LangflowError, PipelineError) as error:
                 add("analysis_flow", False, str(error))
         else:
-            add("analysis_flow", None if not self.settings.is_live else False, "분석 flow 가 설정되지 않았습니다 (LANGFLOW_FLOW_ID).")
+            add("analysis_flow", None if not self.settings.is_live else False, t("svc.analysis_flow_missing"))
 
         urls = sorted({str(m.get("base_url")).rstrip("/") for m in flow_models if m.get("base_url")}) or ["http://localhost:11434"]
         for url in urls:
@@ -514,18 +521,29 @@ class PipelineService:
                 async with httpx.AsyncClient(timeout=5.0) as client:
                     response = await client.get(f"{url}/api/tags")
                 installed = [m.get("name") for m in response.json().get("models", [])] if response.status_code == 200 else []
-                add("ollama", response.status_code == 200, f"{url} — 모델 {len(installed)}개")
+                add("ollama", response.status_code == 200, t("svc.ollama_models_count", url=url, count=len(installed)))
                 needed = sorted({str(m.get("model_name")) for m in flow_models if m.get("model_name") and str(m.get("base_url", url)).rstrip("/") == url})
                 missing = [name for name in needed if name not in installed]
                 if needed:
-                    add("ollama_models", not missing, f"flow 가 쓰는 모델 {', '.join(needed)}" + (f" — 설치 안 됨: {', '.join(missing)}" if missing else " 모두 설치됨"))
+                    add(
+                        "ollama_models",
+                        not missing,
+                        t("svc.ollama_models_needed", names=", ".join(needed))
+                        + (t("svc.ollama_models_missing", names=", ".join(missing)) if missing else t("svc.ollama_models_ok")),
+                    )
             except (httpx.HTTPError, ValueError) as error:
-                add("ollama", False, f"{url} 에 연결할 수 없습니다: {error.__class__.__name__}")
+                add("ollama", False, t("svc.ollama_unreachable", url=url, name=error.__class__.__name__))
         add(
             "catalogs",
             bool(self.issue_catalog and self.scheme_catalog),
-            f"쟁점 카탈로그 v{self.issue_catalog.version if self.issue_catalog else '?'} ({len(self.issue_catalog.active_ids()) if self.issue_catalog else 0}개) · "
-            f"scheme 카탈로그 v{self.scheme_catalog.version if self.scheme_catalog else '?'} ({len(self.scheme_catalog.by_key) if self.scheme_catalog else 0}개, {self.scheme_catalog.data.get('status') if self.scheme_catalog else ''})",
+            t(
+                "svc.catalogs_detail",
+                issueVersion=self.issue_catalog.version if self.issue_catalog else "?",
+                issueCount=len(self.issue_catalog.active_ids()) if self.issue_catalog else 0,
+                schemeVersion=self.scheme_catalog.version if self.scheme_catalog else "?",
+                schemeCount=len(self.scheme_catalog.by_key) if self.scheme_catalog else 0,
+                schemeStatus=self.scheme_catalog.data.get("status") if self.scheme_catalog else "",
+            ),
         )
         return report
 

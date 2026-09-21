@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..i18n import Joined, Msg
+
 # 쟁점 수는 판결문이 정하고 이 값은 천장일 뿐이다(사람이 만든 정답 그래프는 1~4개, 평균 2.65).
 # flow 의 Issue Selector·Branch Extractor·Graph Builder·Result Validator 의 MAX_SELECTED 와 같은 값이어야 한다.
 MAX_SELECTED_ISSUES = 3
@@ -18,16 +20,17 @@ class CatalogError(ValueError):
     pass
 
 
-def _load_json(path: Path, label: str) -> tuple[dict, str]:
+def _load_json(path: Path, label: Msg) -> tuple[dict, str]:
+    # 카탈로그는 서버 시작 때 읽으므로 아직 언어를 모른다. 메시지는 Msg 로 두고 응답할 때 만든다.
     if not path.exists():
-        raise CatalogError(f"{label} 파일이 없습니다: {path}")
+        raise CatalogError(Msg("catalog.file_missing", label=label, path=path))
     raw = path.read_bytes()
     try:
         data = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise CatalogError(f"{label} JSON 을 해석할 수 없습니다: {error}") from error
+        raise CatalogError(Msg("catalog.bad_json", label=label, error=error)) from error
     if not isinstance(data, dict):
-        raise CatalogError(f"{label} 최상위가 객체가 아닙니다.")
+        raise CatalogError(Msg("catalog.not_object", label=label))
     return data, hashlib.sha256(raw).hexdigest()
 
 
@@ -39,14 +42,14 @@ class IssueCatalog:
 
     @classmethod
     def load(cls, path: Path) -> "IssueCatalog":
-        data, digest = _load_json(path, "쟁점 카탈로그")
+        data, digest = _load_json(path, Msg("catalog.issue"))
         issues = data.get("issues")
         if not isinstance(issues, list) or not issues:
-            raise CatalogError("쟁점 카탈로그에 issues 가 없습니다.")
+            raise CatalogError(Msg("catalog.no_issues"))
         by_id = {}
         for issue in issues:
             if not isinstance(issue, dict) or not issue.get("issueId"):
-                raise CatalogError("쟁점 카탈로그 항목에 issueId 가 없습니다.")
+                raise CatalogError(Msg("catalog.no_issue_id"))
             by_id[issue["issueId"]] = issue
         return cls(data=data, sha256=digest, by_id=by_id)
 
@@ -100,20 +103,20 @@ class SchemeCatalog:
 
     @classmethod
     def load(cls, path: Path) -> "SchemeCatalog":
-        data, digest = _load_json(path, "스킴 카탈로그")
+        data, digest = _load_json(path, Msg("catalog.scheme"))
         schemes = data.get("schemes")
         if not isinstance(schemes, list) or not schemes:
-            raise CatalogError("스킴 카탈로그에 schemes 가 없습니다.")
+            raise CatalogError(Msg("catalog.no_schemes"))
         by_key = {}
         for scheme in schemes:
             key = scheme.get("schemeKey") if isinstance(scheme, dict) else None
             if not key or key in RESERVED_SCHEME_KEYS:
-                raise CatalogError(f"스킴 카탈로그의 schemeKey 가 비었거나 예약어입니다: {key!r}")
+                raise CatalogError(Msg("catalog.bad_scheme_key", key=repr(key)))
             by_key[key] = scheme
         catalog = cls(data=data, sha256=digest, by_key=by_key)
         migrations_path = path.parent / SCHEME_MIGRATIONS_FILE
         if migrations_path.exists():
-            migration_data, _ = _load_json(migrations_path, "스킴 카탈로그 대응표")
+            migration_data, _ = _load_json(migrations_path, Msg("catalog.migrations"))
             catalog.migrations = migration_data.get("migrations") or []
             catalog.validate_migrations()
         return catalog
@@ -121,15 +124,15 @@ class SchemeCatalog:
     def validate_migrations(self) -> None:
         """현재 카탈로그로 가는 대응표의 대상 key·역할·CQ 가 실제로 있는지 확인한다. 틀리면 CatalogError."""
         if not isinstance(self.migrations, list):
-            raise CatalogError("스킴 카탈로그 대응표의 migrations 가 배열이 아닙니다.")
-        problems: list[str] = []
+            raise CatalogError(Msg("catalog.migrations_not_array"))
+        problems: list[Msg] = []
         for migration in self.migrations:
             if not isinstance(migration, dict) or not isinstance(migration.get("schemes"), dict):
-                problems.append("대응표 항목에 schemes 가 없습니다.")
+                problems.append(Msg("catalog.migration_no_schemes"))
                 continue
             source, target = migration.get("fromVersion"), migration.get("toVersion")
             if not isinstance(source, int) or not isinstance(target, int) or source >= target:
-                problems.append(f"대응표 버전이 올바르지 않습니다: {source!r} → {target!r}")
+                problems.append(Msg("catalog.migration_bad_version", source=repr(source), target=repr(target)))
                 continue
             if target != self.version:
                 continue  # 더 이전 단계의 대응표는 대상 카탈로그가 없어 검사할 수 없다.
@@ -137,28 +140,28 @@ class SchemeCatalog:
                 label = f"v{source}→v{target} {key}"
                 action = rule.get("action") if isinstance(rule, dict) else None
                 if action not in MIGRATION_ACTIONS:
-                    problems.append(f"{label}: action 이 올바르지 않습니다 ({action!r})")
+                    problems.append(Msg("catalog.migration_bad_action", label=label, action=repr(action)))
                     continue
                 if action == "keep" and key not in self.by_key:
-                    problems.append(f"{label}: keep 인데 현재 카탈로그에 key 가 없습니다")
+                    problems.append(Msg("catalog.migration_keep_missing", label=label))
                 if action in ("replace", "unclassify") and key in self.by_key:
-                    problems.append(f"{label}: 현재 카탈로그에 있는 key 는 keep 이어야 합니다")
+                    problems.append(Msg("catalog.migration_should_keep", label=label))
                 destination = key if action == "keep" else rule.get("to")
                 if action == "replace" and destination not in self.by_key:
-                    problems.append(f"{label}: 바꿀 key {destination!r} 가 현재 카탈로그에 없습니다")
+                    problems.append(Msg("catalog.migration_missing_target", label=label, destination=repr(destination)))
                     continue
                 if action != "unclassify":
                     unknown_roles = set((rule.get("roleMap") or {}).values()) - self.roles(destination)
                     unknown_questions = set((rule.get("questionMap") or {}).values()) - self.question_ids(destination)
                     if unknown_roles:
-                        problems.append(f"{label}: {destination} 에 없는 역할 {sorted(unknown_roles)}")
+                        problems.append(Msg("catalog.migration_unknown_roles", label=label, destination=destination, roles=sorted(unknown_roles)))
                     if unknown_questions:
-                        problems.append(f"{label}: {destination} 에 없는 CQ {sorted(unknown_questions)}")
+                        problems.append(Msg("catalog.migration_unknown_questions", label=label, destination=destination, questions=sorted(unknown_questions)))
                 for candidate in rule.get("candidates") or []:
                     if candidate.get("schemeKey") not in self.by_key:
-                        problems.append(f"{label}: 후보 {candidate.get('schemeKey')!r} 가 현재 카탈로그에 없습니다")
+                        problems.append(Msg("catalog.migration_unknown_candidate", label=label, candidate=repr(candidate.get("schemeKey"))))
         if problems:
-            raise CatalogError("스킴 카탈로그 대응표 오류: " + "; ".join(problems))
+            raise CatalogError(Msg("catalog.migration_errors", problems=Joined(problems)))
 
     def public_data(self) -> dict:
         """API 로 내보낼 카탈로그. 프런트가 불러오기 전환에 쓰도록 대응표를 함께 싣는다."""

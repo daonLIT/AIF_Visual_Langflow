@@ -3,6 +3,8 @@
  * backend/app/services/aif_adapter.py 의 normalize_scheme_application / issueRef 정규화 결과와 같은 형식이다.
  * 프로젝트 확장 스키마이며 AIF 표준 필드가 아니다.
  */
+import { currentLang, pickLocalized, t, type MessageKey } from '../i18n';
+
 
 export type CriticalQuestionStatus = 'open' | 'satisfied' | 'challenged';
 export type SchemeStatus = 'suggested' | 'confirmed' | 'needs_review';
@@ -93,18 +95,24 @@ export interface IssueRefLink {
 export interface SchemeRole {
   roleId: string;
   label: string;
+  /** 영어 화면용 역할 이름 (카탈로그가 주면 쓴다) */
+  labelEn?: string;
   template: string;
+  templateEn?: string;
 }
 
 export interface SchemeDefinition {
   schemeKey: string;
+  /** Walton 원문 이름(영어) */
   name: string;
   nameKo: string;
   group: string;
+  groupEn?: string;
   description: string;
+  descriptionEn?: string;
   premiseRoles: SchemeRole[];
   conclusionRole: SchemeRole;
-  criticalQuestions: Array<{ id: string; text: string }>;
+  criticalQuestions: Array<{ id: string; text: string; textEn?: string }>;
   /** 검증된 외부(AIFdb) scheme ID. 없으면 schemefulfillments 를 만들지 않는다. */
   aifdbSchemeId: number | null;
   /** 형식·비판적 질문의 출처 */
@@ -151,8 +159,11 @@ export interface IssueCatalogItem {
   issueId: string;
   categoryId: string;
   categoryName: string;
+  categoryNameEn?: string;
   label: string;
+  labelEn?: string;
   criteria: string;
+  criteriaEn?: string;
   order: number;
   sourceSheet: string;
   sourceRow: number;
@@ -163,21 +174,58 @@ export interface IssueCatalog {
   catalogVersion: number;
   source: { fileName: string; sheet: string; range: string; sha256: string; importedAt: string };
   note?: string;
-  categories: Array<{ categoryId: string; name: string; order: number; issueIds: string[] }>;
+  categories: Array<{ categoryId: string; name: string; nameEn?: string; order: number; issueIds: string[] }>;
   issues: IssueCatalogItem[];
 }
 
-export const CQ_STATUS_LABEL: Record<CriticalQuestionStatus, string> = {
-  open: '미검토',
-  satisfied: '충족',
-  challenged: '문제 있음',
+export const CQ_STATUS_KEY: Record<CriticalQuestionStatus, MessageKey> = {
+  open: 'cq.status.open',
+  satisfied: 'cq.status.satisfied',
+  challenged: 'cq.status.challenged',
 };
 
-export const SCHEME_STATUS_LABEL: Record<SchemeStatus, string> = {
-  suggested: '제안',
-  confirmed: '확정',
-  needs_review: '재검토 필요',
+export const SCHEME_STATUS_KEY: Record<SchemeStatus, MessageKey> = {
+  suggested: 'scheme.status.suggested',
+  confirmed: 'scheme.status.confirmed',
+  needs_review: 'scheme.status.needsReview',
 };
+
+/** 카탈로그 scheme 이름 (영어 화면에서는 Walton 원문 이름) */
+export function schemeName(definition: SchemeDefinition): string {
+  return currentLang() === 'en' ? definition.name || definition.nameKo : definition.nameKo || definition.name;
+}
+
+export function schemeDescription(definition: SchemeDefinition): string {
+  return pickLocalized(currentLang(), definition.description, definition.descriptionEn);
+}
+
+export function schemeGroupName(definition: SchemeDefinition): string {
+  return pickLocalized(currentLang(), definition.group, definition.groupEn);
+}
+
+export function roleLabel(role: SchemeRole): string {
+  return pickLocalized(currentLang(), role.label, role.labelEn);
+}
+
+export function roleTemplate(role: SchemeRole): string {
+  return pickLocalized(currentLang(), role.template, role.templateEn);
+}
+
+export function questionText(question: { text: string; textEn?: string }): string {
+  return pickLocalized(currentLang(), question.text, question.textEn);
+}
+
+export function issueLabel(issue: IssueCatalogItem | null | undefined): string {
+  return issue ? pickLocalized(currentLang(), issue.label, issue.labelEn) : '';
+}
+
+export function issueCategoryName(issue: IssueCatalogItem | null | undefined): string {
+  return issue ? pickLocalized(currentLang(), issue.categoryName, issue.categoryNameEn) : '';
+}
+
+export function issueCriteria(issue: IssueCatalogItem | null | undefined): string {
+  return issue ? pickLocalized(currentLang(), issue.criteria, issue.criteriaEn) : '';
+}
 
 export function emptySchemeApplication(catalogVersion: number | null = null): SchemeApplication {
   return {
@@ -203,17 +251,21 @@ export function findSchemeDefinition(catalog: SchemeCatalog | null, schemeKey: s
 /** 그래프 RA 배지에 붙일 짧은 이름. scheme 정보가 없으면 null */
 export function schemeShortName(application: SchemeApplication | null | undefined, catalog: SchemeCatalog | null): string | null {
   if (!application) return null;
-  if (application.schemeKey === UNCLASSIFIED) return '미분류';
-  if (application.schemeKey === CUSTOM) return application.customSchemeName || '직접 작성';
+  if (application.schemeKey === UNCLASSIFIED) return t('scheme.unclassified.short');
+  if (application.schemeKey === CUSTOM) return application.customSchemeName || t('scheme.custom.short');
   const definition = findSchemeDefinition(catalog, application.schemeKey);
-  return definition ? shortKoreanName(definition.nameKo) : application.schemeKey;
+  if (!definition) return application.schemeKey;
+  return currentLang() === 'en' ? shortEnglishName(definition.name) : shortKoreanName(definition.nameKo);
 }
 
 /** 상세 패널 제목용 전체 이름 */
 export function schemeFullName(application: SchemeApplication | null | undefined, catalog: SchemeCatalog | null): string {
-  if (!application || application.schemeKey === UNCLASSIFIED) return '미분류 (적절한 scheme 없음)';
-  if (application.schemeKey === CUSTOM) return `${application.customSchemeName || '(이름 없음)'} · 직접 작성`;
-  return findSchemeDefinition(catalog, application.schemeKey)?.nameKo ?? application.schemeKey;
+  if (!application || application.schemeKey === UNCLASSIFIED) return t('scheme.unclassified.full');
+  if (application.schemeKey === CUSTOM) {
+    return t('scheme.custom.full', { name: application.customSchemeName || t('scheme.custom.noName') });
+  }
+  const definition = findSchemeDefinition(catalog, application.schemeKey);
+  return definition ? schemeName(definition) : application.schemeKey;
 }
 
 /** "증인 진술에 의한 논증" → "증인 진술", "원인에서 결과로의 논증" → "원인에서 결과로" */
@@ -222,6 +274,15 @@ export function shortKoreanName(nameKo: string): string {
   if (nameKo.endsWith('로의 논증')) return nameKo.slice(0, -'의 논증'.length);
   if (nameKo.endsWith(' 논증')) return nameKo.slice(0, -' 논증'.length);
   return nameKo;
+}
+
+/** "Argument from Witness Testimony" → "Witness Testimony" */
+export function shortEnglishName(name: string): string {
+  const prefixes = ['Argument from an ', 'Argument from a ', 'Argument from ', 'Argument to '];
+  for (const prefix of prefixes) {
+    if (name.startsWith(prefix)) return name.slice(prefix.length);
+  }
+  return name;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -397,7 +458,10 @@ export function migrateSchemeApplication(application: SchemeApplication, catalog
     // 대응표에 없는 key: 새 카탈로그에 있으면 그대로, 없으면 미분류
     const rule: SchemeMigrationRule = reserved
       ? { action: 'keep' }
-      : (migration.schemes[current.schemeKey] ?? { action: existsInTarget(current.schemeKey) ? 'keep' : 'unclassify', note: '대응표에 없는 key 입니다.' });
+      : (migration.schemes[current.schemeKey] ?? {
+          action: existsInTarget(current.schemeKey) ? 'keep' : 'unclassify',
+          note: t('scheme.migration.unknownKey'),
+        });
     const schemeKey = rule.action === 'replace' && rule.to ? rule.to : rule.action === 'unclassify' ? UNCLASSIFIED : current.schemeKey;
     const definition = toCurrent ? findSchemeDefinition(catalog, schemeKey) : undefined;
     const identity = rule.action === 'keep';
@@ -453,13 +517,23 @@ export function migrateSchemeApplication(application: SchemeApplication, catalog
     const contentChanged = !sameValue(schemeContent({ ...next, catalogVersion: current.catalogVersion }), schemeContent(current));
     if (review || contentChanged) {
       const parts = [
-        keyChanged ? `${current.schemeKey} → ${schemeKey === UNCLASSIFIED ? '미분류' : schemeKey}` : `${current.schemeKey} 유지`,
-        lostRoles > 0 ? `역할 ${lostRoles}개 비움` : '',
-        remappedQuestions > 0 ? `CQ ${remappedQuestions}개 번호 변경` : '',
-        droppedQuestions > 0 ? `CQ 응답 ${droppedQuestions}개 이력으로 이동` : '',
-        rule.candidates?.length ? `대안 후보 ${rule.candidates.length}개` : '',
+        keyChanged
+          ? t('scheme.migration.keyChanged', {
+              from: current.schemeKey,
+              to: schemeKey === UNCLASSIFIED ? t('scheme.unclassified.short') : schemeKey,
+            })
+          : t('scheme.migration.keyKept', { key: current.schemeKey }),
+        lostRoles > 0 ? t('scheme.migration.lostRoles', { count: lostRoles }) : '',
+        remappedQuestions > 0 ? t('scheme.migration.remappedQuestions', { count: remappedQuestions }) : '',
+        droppedQuestions > 0 ? t('scheme.migration.droppedQuestions', { count: droppedQuestions }) : '',
+        rule.candidates?.length ? t('scheme.migration.candidates', { count: rule.candidates.length }) : '',
       ].filter(Boolean);
-      const detail = `scheme 카탈로그 v${current.catalogVersion} → v${migration.toVersion}: ${parts.join(', ')}${rule.note ? ` (${rule.note})` : ''}`;
+      const detail =
+        t('scheme.migration.detail', {
+          from: current.catalogVersion,
+          to: migration.toVersion,
+          parts: parts.join(', '),
+        }) + (rule.note ? ` (${rule.note})` : '');
       next.history = [
         ...(current.history ?? []),
         {

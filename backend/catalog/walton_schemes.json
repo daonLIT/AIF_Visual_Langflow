@@ -25,49 +25,64 @@
       "name": "Argument from Witness Testimony",
       "nameKo": "증인 진술에 의한 논증",
       "group": "진술·증언",
+      "groupEn": "Testimony",
       "description": "사건을 알 수 있는 위치에 있던 증인이 진실하게 A 라고 진술했으므로 A 를 그럴듯한 사실로 받아들인다.",
+      "descriptionEn": "A witness who was in a position to know asserted, truthfully, that A; so A is accepted as plausibly true.",
       "premiseRoles": [
         {
           "roleId": "position",
           "label": "알 수 있는 위치",
-          "template": "증인 W 는 A 가 참인지 알 수 있는 위치에 있었다."
+          "labelEn": "In a position to know",
+          "template": "증인 W 는 A 가 참인지 알 수 있는 위치에 있었다.",
+          "templateEn": "Witness W is in a position to know whether A is true or not."
         },
         {
           "roleId": "truthTelling",
           "label": "진실성",
-          "template": "증인 W 는 (자신이 아는 대로) 진실을 말하고 있다."
+          "labelEn": "Truth-telling",
+          "template": "증인 W 는 (자신이 아는 대로) 진실을 말하고 있다.",
+          "templateEn": "Witness W is telling the truth (as W knows it)."
         },
         {
           "roleId": "statement",
           "label": "진술",
-          "template": "증인 W 는 A 가 참(거짓)이라고 진술했다."
+          "labelEn": "Statement",
+          "template": "증인 W 는 A 가 참(거짓)이라고 진술했다.",
+          "templateEn": "Witness W states that A is true (false)."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "A 는 참(거짓)으로 받아들일 만하다."
+        "labelEn": "Conclusion",
+        "template": "A 는 참(거짓)으로 받아들일 만하다.",
+        "templateEn": "A may plausibly be taken to be true (false)."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "증인의 진술은 그 자체로 일관되는가?"
+          "text": "증인의 진술은 그 자체로 일관되는가?",
+          "textEn": "Is the witness's testimony internally consistent?"
         },
         {
           "id": "CQ2",
-          "text": "증인의 진술은 (증언 외의 증거로) 이미 알려진 사건 사실과 부합하는가?"
+          "text": "증인의 진술은 (증언 외의 증거로) 이미 알려진 사건 사실과 부합하는가?",
+          "textEn": "Is the testimony consistent with the known facts of the case (established by evidence other than the testimony)?"
         },
         {
           "id": "CQ3",
-          "text": "증인의 진술은 다른 증인들이 (독립적으로) 한 진술과 부합하는가?"
+          "text": "증인의 진술은 다른 증인들이 (독립적으로) 한 진술과 부합하는가?",
+          "textEn": "Is the testimony consistent with what other witnesses have (independently) testified to?"
         },
         {
           "id": "CQ4",
-          "text": "증인의 진술에 어떤 편향이 있다고 볼 사정이 있는가?"
+          "text": "증인의 진술에 어떤 편향이 있다고 볼 사정이 있는가?",
+          "textEn": "Is there any reason to think the witness is biased?"
         },
         {
           "id": "CQ5",
-          "text": "증인이 진술한 A 는 얼마나 그럴듯한가?"
+          "text": "증인이 진술한 A 는 얼마나 그럴듯한가?",
+          "textEn": "How plausible is the statement A made by the witness?"
         }
       ],
       "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 41번과 carneades-4 walton.yml (Gordon·Walton) 의 예외 조건이 일치. 원 목록의 진술(statement) 전제는 Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 형식에 따라 포함.",
@@ -79,36 +94,47 @@
       "name": "Argument from Evidence to a Hypothesis",
       "nameKo": "증거에서 가설로의 논증",
       "group": "증거·인과 추론",
+      "groupEn": "Evidence and causal reasoning",
       "description": "가설 A 가 참이면 관찰되어야 할 사실 B 가 실제로 관찰되었으므로 A 가 참이라고 추론한다(검증에 의한 논증).",
+      "descriptionEn": "If hypothesis A were true, fact B would be observed; B is in fact observed, so A is inferred to be true (argument from verification).",
       "premiseRoles": [
         {
           "roleId": "conditional",
           "label": "가설-관찰 관계",
-          "template": "가설 A 가 참이면, 사건을 보고하는 명제 B 가 참으로 관찰될 것이다."
+          "labelEn": "Hypothesis-observation link",
+          "template": "가설 A 가 참이면, 사건을 보고하는 명제 B 가 참으로 관찰될 것이다.",
+          "templateEn": "If hypothesis A is true, then a proposition B reporting an event will be observed to be true."
         },
         {
           "roleId": "observation",
           "label": "관찰",
-          "template": "이 사안에서 B 가 참으로 관찰되었다."
+          "labelEn": "Observation",
+          "template": "이 사안에서 B 가 참으로 관찰되었다.",
+          "templateEn": "B has been observed to be true in this case."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "A 는 참이다."
+        "labelEn": "Conclusion",
+        "template": "A 는 참이다.",
+        "templateEn": "A is true."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "A 가 참이면 B 가 참이라는 관계가 실제로 성립하는가?"
+          "text": "A 가 참이면 B 가 참이라는 관계가 실제로 성립하는가?",
+          "textEn": "Does the relation hold that if A is true then B is true?"
         },
         {
           "id": "CQ2",
-          "text": "B 가 참(거짓)으로 관찰되었는가?"
+          "text": "B 가 참(거짓)으로 관찰되었는가?",
+          "textEn": "Has B been observed to be true (false)?"
         },
         {
           "id": "CQ3",
-          "text": "A 가 참이어서가 아니라 다른 이유로 B 가 참일 수 있지 않은가?"
+          "text": "A 가 참이어서가 아니라 다른 이유로 B 가 참일 수 있지 않은가?",
+          "textEn": "Could there be some reason other than A being true why B is true?"
         }
       ],
       "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 8번.",
@@ -120,32 +146,42 @@
       "name": "Argument from Sign",
       "nameKo": "징표에 의한 논증",
       "group": "증거·인과 추론",
+      "groupEn": "Evidence and causal reasoning",
       "description": "이 상황에서 발견된 A 는 일반적으로 B 의 징표이므로 이 상황에서 B 가 참일 수 있다고 추론한다.",
+      "descriptionEn": "A, found in this situation, is generally a sign of B, so B may plausibly be true in this situation.",
       "premiseRoles": [
         {
           "roleId": "specific",
           "label": "구체적 발견",
-          "template": "이 상황에서 A(발견 사실)가 참이다."
+          "labelEn": "Specific finding",
+          "template": "이 상황에서 A(발견 사실)가 참이다.",
+          "templateEn": "A (a finding) is true in this situation."
         },
         {
           "roleId": "general",
           "label": "일반적 징표 관계",
-          "template": "A 는 일반적으로 B 가 참인 상황의 징표이다."
+          "labelEn": "General sign relation",
+          "template": "A 는 일반적으로 B 가 참인 상황의 징표이다.",
+          "templateEn": "B is generally indicated as true when its sign A is true in this kind of situation."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "이 상황에서 B 가 참일 수 있다."
+        "labelEn": "Conclusion",
+        "template": "이 상황에서 B 가 참일 수 있다.",
+        "templateEn": "B may plausibly be true in this situation."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "징표 A 와 B 사이의 관계(상관의 강도)가 입증되었는가?"
+          "text": "징표 A 와 B 사이의 관계(상관의 강도)가 입증되었는가?",
+          "textEn": "Is the relation between sign A and B (the strength of the correlation) established?"
         },
         {
           "id": "CQ2",
-          "text": "A 를 B 보다 더 믿을 만하게 설명하는 다른 사건이 있는가?"
+          "text": "A 를 B 보다 더 믿을 만하게 설명하는 다른 사건이 있는가?",
+          "textEn": "Is there another event that would explain A better than B does?"
         }
       ],
       "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 1번.",
@@ -157,36 +193,47 @@
       "name": "Argument from Inconsistent Commitment",
       "nameKo": "모순된 공약(진술 번복)에 의한 논증",
       "group": "진술·증언",
+      "groupEn": "Testimony",
       "description": "a 가 A 에 대한 입장을 밝혔지만 이 사안의 다른 증거는 a 가 실제로는 A 를 고수하지 않음을 보여 주므로 a 의 입장(진술)이 모순된다고 추론한다.",
+      "descriptionEn": "Party a took a position on A, but other evidence in the case shows that a does not in fact hold to A, so a's commitments are inconsistent.",
       "premiseRoles": [
         {
           "roleId": "initialCommitment",
           "label": "처음의 입장",
-          "template": "a 는 A 를 주장했거나 A 를 받아들인다고 표시했다(일반적으로 또는 과거의 말로)."
+          "labelEn": "Initial commitment",
+          "template": "a 는 A 를 주장했거나 A 를 받아들인다고 표시했다(일반적으로 또는 과거의 말로).",
+          "templateEn": "Party a has claimed A, or has indicated acceptance of A (generally, or in earlier statements)."
         },
         {
           "roleId": "opposedCommitment",
           "label": "반대되는 증거",
-          "template": "이 사안의 다른 증거는 a 가 실제로는 A 를 받아들이지 않음을 보여 준다."
+          "labelEn": "Opposing evidence",
+          "template": "이 사안의 다른 증거는 a 가 실제로는 A 를 받아들이지 않음을 보여 준다.",
+          "templateEn": "Other evidence in this case shows that a does not in fact accept A."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "a 의 입장(공약)은 서로 모순된다."
+        "labelEn": "Conclusion",
+        "template": "a 의 입장(공약)은 서로 모순된다.",
+        "templateEn": "a's commitments are inconsistent with each other."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "a 가 A 를 받아들인다는 증거는 무엇인가? 말인가, 행동인가?"
+          "text": "a 가 A 를 받아들인다는 증거는 무엇인가? 말인가, 행동인가?",
+          "textEn": "What is the evidence that a accepts A — words or actions?"
         },
         {
           "id": "CQ2",
-          "text": "a 가 A 를 받아들이지 않는다는 추가 증거는 무엇인가? 말인가, 행동인가?"
+          "text": "a 가 A 를 받아들이지 않는다는 추가 증거는 무엇인가? 말인가, 행동인가?",
+          "textEn": "What further evidence is there that a does not accept A — words or actions?"
         },
         {
           "id": "CQ3",
-          "text": "전제의 증거가 입장 사이의 충돌을 어떻게 보여 주는가?"
+          "text": "전제의 증거가 입장 사이의 충돌을 어떻게 보여 주는가?",
+          "textEn": "How does the evidence in the premises show a conflict between the commitments?"
         }
       ],
       "sourceNote": "Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 에 기초해 구현자가 정리한 형식·CQ. 이번에 확인한 공개 자료에는 이 scheme 의 원문이 없어 원서 대조가 필요함.",
@@ -198,32 +245,42 @@
       "name": "Argument from Alternatives",
       "nameKo": "대안에 의한 논증",
       "group": "증거·인과 추론",
+      "groupEn": "Evidence and causal reasoning",
       "description": "X 또는 Y 중 하나가 성립할 수 있는데 X 는 그럴듯하게 성립하지 않으므로 Y 가 그럴듯하게 성립한다고 추론한다(대안 배제).",
+      "descriptionEn": "Either X or Y may hold; X plausibly does not hold, so Y plausibly holds (exclusion of alternatives).",
       "premiseRoles": [
         {
           "roleId": "alternatives",
           "label": "대안",
-          "template": "X 또는 Y 중 하나가 성립할 수 있다."
+          "labelEn": "Alternatives",
+          "template": "X 또는 Y 중 하나가 성립할 수 있다.",
+          "templateEn": "Either X or Y may hold."
         },
         {
           "roleId": "exclusion",
           "label": "대안 배제",
-          "template": "X 는 그럴듯하게 성립하지 않는다."
+          "labelEn": "Exclusion of an alternative",
+          "template": "X 는 그럴듯하게 성립하지 않는다.",
+          "templateEn": "X plausibly does not hold."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "Y 가 그럴듯하게 성립한다."
+        "labelEn": "Conclusion",
+        "template": "Y 가 그럴듯하게 성립한다.",
+        "templateEn": "Y plausibly holds."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "X 가 성립하더라도 Y 가 일어날 수 있지 않은가?"
+          "text": "X 가 성립하더라도 Y 가 일어날 수 있지 않은가?",
+          "textEn": "Could Y occur even if X holds?"
         },
         {
           "id": "CQ2",
-          "text": "X 가 성립하지 않는다는 것이 그럴듯한가? 그것을 뒷받침하는 증거는 무엇인가?"
+          "text": "X 가 성립하지 않는다는 것이 그럴듯한가? 그것을 뒷받침하는 증거는 무엇인가?",
+          "textEn": "Is it plausible that X does not hold, and what evidence supports that?"
         }
       ],
       "sourceNote": "형식: Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 13번(Walton·Reed·Macagno 형식을 옮긴 webis-de argmining25 정의 파일과 일치). CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 42번.",
@@ -235,36 +292,47 @@
       "name": "Argument from Effect to Cause",
       "nameKo": "결과에서 원인으로의 논증",
       "group": "증거·인과 추론",
+      "groupEn": "Evidence and causal reasoning",
       "description": "일반적으로 A 가 일어나면 B 가 일어나는데 이 사안에서 B 가 실제로 일어났으므로 A 가 일어났다고 추정한다.",
+      "descriptionEn": "Generally, when A happens B follows; B did happen in this case, so A is presumed to have happened.",
       "premiseRoles": [
         {
           "roleId": "causalGeneralization",
           "label": "인과 일반화",
-          "template": "일반적으로 A 가 일어나면 B 가 일어난다(일어날 수 있다)."
+          "labelEn": "Causal generalisation",
+          "template": "일반적으로 A 가 일어나면 B 가 일어난다(일어날 수 있다).",
+          "templateEn": "Generally, if A happens then B happens (or may happen)."
         },
         {
           "roleId": "effect",
           "label": "결과 발생",
-          "template": "이 사안에서 B 가 실제로 일어났다."
+          "labelEn": "Effect occurred",
+          "template": "이 사안에서 B 가 실제로 일어났다.",
+          "templateEn": "B happened in this case."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "이 사안에서 A 가 일어났다고 추정된다."
+        "labelEn": "Conclusion",
+        "template": "이 사안에서 A 가 일어났다고 추정된다.",
+        "templateEn": "A is presumed to have happened in this case."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "A 가 일어나면 B 가 일어난다는 인과 일반화는 얼마나 강한가?"
+          "text": "A 가 일어나면 B 가 일어난다는 인과 일반화는 얼마나 강한가?",
+          "textEn": "How strong is the causal generalisation that B follows from A?"
         },
         {
           "id": "CQ2",
-          "text": "B 가 실제로 일어났다는 증거가 충분한가?"
+          "text": "B 가 실제로 일어났다는 증거가 충분한가?",
+          "textEn": "Is the evidence that B did happen sufficient?"
         },
         {
           "id": "CQ3",
-          "text": "A 가 아닌 다른 원인으로 B 가 일어났을 수 있지 않은가?"
+          "text": "A 가 아닌 다른 원인으로 B 가 일어났을 수 있지 않은가?",
+          "textEn": "Could B have happened through a cause other than A?"
         }
       ],
       "sourceNote": "Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 5장 3절에서 결과→원인 논증을 다룬다. 공개 자료로 확인한 원인→결과 형식(hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 11번)을 뒤집어 구현자가 구성했으며 CQ3 은 다른 원인 가능성을 묻도록 추가함. 원서 대조가 필요함.",
@@ -276,45 +344,59 @@
       "name": "Argument from Best Explanation",
       "nameKo": "최선의 설명에 의한 논증",
       "group": "증거·인과 추론",
+      "groupEn": "Evidence and causal reasoning",
       "description": "인정된 사실 F 를 E 가 만족스럽게 설명하고 지금까지 나온 다른 설명은 E 만큼 만족스럽지 않으므로 E 를 그럴듯한 가설로 받아들인다(귀추).",
+      "descriptionEn": "E satisfactorily explains the accepted facts F, and no rival explanation offered so far is as satisfactory, so E is accepted as a plausible hypothesis (abduction).",
       "premiseRoles": [
         {
           "roleId": "findings",
           "label": "인정 사실",
-          "template": "F 는 발견되었거나 주어진 사실(들)이다."
+          "labelEn": "Accepted facts",
+          "template": "F 는 발견되었거나 주어진 사실(들)이다.",
+          "templateEn": "F is a finding or a given set of facts."
         },
         {
           "roleId": "explanation",
           "label": "설명",
-          "template": "E 는 F 에 대한 만족스러운 설명이다."
+          "labelEn": "Explanation",
+          "template": "E 는 F 에 대한 만족스러운 설명이다.",
+          "templateEn": "E is a satisfactory explanation of F."
         },
         {
           "roleId": "noBetterAlternative",
           "label": "더 나은 대안 없음",
-          "template": "지금까지 제시된 다른 설명 E' 중 E 만큼 만족스러운 것이 없다."
+          "labelEn": "No better alternative",
+          "template": "지금까지 제시된 다른 설명 E' 중 E 만큼 만족스러운 것이 없다.",
+          "templateEn": "No alternative explanation E' offered so far is as satisfactory as E."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "E 는 가설로서 그럴듯하다."
+        "labelEn": "Conclusion",
+        "template": "E 는 가설로서 그럴듯하다.",
+        "templateEn": "E is plausible as a hypothesis."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "대안과 별개로 E 는 F 에 대한 설명으로서 얼마나 만족스러운가?"
+          "text": "대안과 별개로 E 는 F 에 대한 설명으로서 얼마나 만족스러운가?",
+          "textEn": "How satisfactory is E as an explanation of F, apart from the alternatives?"
         },
         {
           "id": "CQ2",
-          "text": "E 는 다른 대안 설명보다 얼마나 더 나은가?"
+          "text": "E 는 다른 대안 설명보다 얼마나 더 나은가?",
+          "textEn": "How much better is E than the alternative explanations?"
         },
         {
           "id": "CQ3",
-          "text": "조사(심리)가 얼마나 진행되었는가? 충분히 철저했는가?"
+          "text": "조사(심리)가 얼마나 진행되었는가? 충분히 철저했는가?",
+          "textEn": "How far has the investigation (the hearing) progressed — was it thorough enough?"
         },
         {
           "id": "CQ4",
-          "text": "결론을 내리기 전에 조사(심리)를 더 진행하는 것이 낫지 않은가?"
+          "text": "결론을 내리기 전에 조사(심리)를 더 진행하는 것이 낫지 않은가?",
+          "textEn": "Would it be better to continue the investigation (the hearing) before drawing a conclusion?"
         }
       ],
       "sourceNote": "Walton, Reed & Macagno (2008), Argumentation Schemes, 9장 scheme 목록 에 인용된 Walton(2001)의 귀추 scheme(비판적 질문 4개: 만족도·대안 비교·조사 진행 정도·계속 여부)에 기초해 구현자가 정리. carneades-4 walton.yml (Gordon·Walton) abduction(더 정합적인 설명이 있으면 예외)과 방향이 일치. 원서 대조가 필요함.",
@@ -326,36 +408,47 @@
       "name": "Argument from Ignorance",
       "nameKo": "무지(증거 부재)에 의한 논증",
       "group": "증거·인과 추론",
+      "groupEn": "Evidence and causal reasoning",
       "description": "A 가 참이라면 알려져 있을 것인데 A 가 참이라고 알려져 있지 않으므로 A 는 참이 아니라고 추론한다(형사 판결에서는 증명 부족과 입증책임 문제로 자주 나타남).",
+      "descriptionEn": "If A were true it would be known; A is not known to be true, so A is taken not to be true (in criminal judgments this usually appears as insufficient proof and burden of proof).",
       "premiseRoles": [
         {
           "roleId": "wouldBeKnown",
           "label": "알려질 조건",
-          "template": "A 가 참이라면 A 가 참이라는 것이 알려져 있을 것이다."
+          "labelEn": "Would be known",
+          "template": "A 가 참이라면 A 가 참이라는 것이 알려져 있을 것이다.",
+          "templateEn": "If A were true, it would be known that A is true."
         },
         {
           "roleId": "notKnown",
           "label": "알려지지 않음",
-          "template": "A 가 참이라고 알려져 있지 않다."
+          "labelEn": "Not known",
+          "template": "A 가 참이라고 알려져 있지 않다.",
+          "templateEn": "A is not known to be true."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "A 는 참이 아니다."
+        "labelEn": "Conclusion",
+        "template": "A 는 참이 아니다.",
+        "templateEn": "A is not true."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "증거 조사가 얼마나 진행되었는가?"
+          "text": "증거 조사가 얼마나 진행되었는가?",
+          "textEn": "How far has the search for evidence progressed?"
         },
         {
           "id": "CQ2",
-          "text": "논의 전체에서 입증책임은 어느 쪽에 있는가? 즉 궁극적으로 증명할 사항은 무엇이고 누가 증명해야 하는가?"
+          "text": "논의 전체에서 입증책임은 어느 쪽에 있는가? 즉 궁극적으로 증명할 사항은 무엇이고 누가 증명해야 하는가?",
+          "textEn": "Which side carries the burden of proof in the dispute as a whole — what has ultimately to be proved, and by whom?"
         },
         {
           "id": "CQ3",
-          "text": "그 당사자가 입증책임을 다하려면 어느 정도로 강한 증명이 필요한가?"
+          "text": "그 당사자가 입증책임을 다하려면 어느 정도로 강한 증명이 필요한가?",
+          "textEn": "How strong does the proof need to be for that party to discharge the burden?"
         }
       ],
       "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 35번. carneades-4 walton.yml (Gordon·Walton) ignorance(조사되지 않았으면 예외)와 일치.",
@@ -367,36 +460,47 @@
       "name": "Argument from Verbal Classification",
       "nameKo": "언어적 분류(포섭)에 의한 논증",
       "group": "규칙·분류",
+      "groupEn": "Rules and classification",
       "description": "a 는 속성 F 를 가지고 F 를 가진 것은 G 로 분류될 수 있으므로 a 는 G 에 해당한다고 추론한다(사실을 법적 개념·구성요건에 포섭).",
+      "descriptionEn": "a has property F, and whatever has F can be classified as G, so a falls under G (subsuming facts under a legal concept or element).",
       "premiseRoles": [
         {
           "roleId": "individual",
           "label": "개별 사실",
-          "template": "a 는 속성 F 를 가진다."
+          "labelEn": "Individual fact",
+          "template": "a 는 속성 F 를 가진다.",
+          "templateEn": "a has property F."
         },
         {
           "roleId": "classification",
           "label": "분류 기준",
-          "template": "일반적으로 F 를 가진 것은 G 로 분류될 수 있다."
+          "labelEn": "Classification rule",
+          "template": "일반적으로 F 를 가진 것은 G 로 분류될 수 있다.",
+          "templateEn": "Generally, whatever has property F can be classified as G."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "a 는 G 에 해당한다."
+        "labelEn": "Conclusion",
+        "template": "a 는 G 에 해당한다.",
+        "templateEn": "a falls under G."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "a 가 F 를 가진다는 것이 확실한가, 아니면 의심의 여지가 있는가?"
+          "text": "a 가 F 를 가진다는 것이 확실한가, 아니면 의심의 여지가 있는가?",
+          "textEn": "Is it certain that a has F, or is it open to doubt?"
         },
         {
           "id": "CQ2",
-          "text": "F 인 상황과 G 인 상황 사이의 관계가 입증되었는가? 분류 기준이 임의적이거나 편향된 정의에 기대고 있지 않은가?"
+          "text": "F 인 상황과 G 인 상황 사이의 관계가 입증되었는가? 분류 기준이 임의적이거나 편향된 정의에 기대고 있지 않은가?",
+          "textEn": "Is the relation between having F and being classified as G established — does the classification rest on an arbitrary or biased definition?"
         },
         {
           "id": "CQ3",
-          "text": "a 의 구체적 사정에서는 G 가 성립하지 않을 가능성이 있는가?"
+          "text": "a 의 구체적 사정에서는 G 가 성립하지 않을 가능성이 있는가?",
+          "textEn": "Could G fail to hold in a's particular circumstances?"
         }
       ],
       "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 3번. CQ2 의 정의 의심 부분은 같은 파일 32번(정의에서 언어적 분류로)의 CQ2 를 합침.",
@@ -408,36 +512,47 @@
       "name": "Argument from an Established Rule",
       "nameKo": "확립된 규칙에 의한 논증",
       "group": "규칙·분류",
+      "groupEn": "Rules and classification",
       "description": "A 를 하는 것이 x 에게 확립된 규칙이면 (예외가 아닌 한) x 는 A 를 해야 하는데 A 가 a 에게 확립된 규칙이므로 a 는 A 를 해야 한다고 추론한다(법규·판례 법리의 적용).",
+      "descriptionEn": "If doing A is an established rule for x then, barring exceptions, x must do A; doing A is an established rule for a, so a must do A (applying a statute or case-law rule).",
       "premiseRoles": [
         {
           "roleId": "rule",
           "label": "확립된 규칙",
-          "template": "모든 x 에 대해, A 를 하는 것이 x 에게 확립된 규칙이면 (예외적인 경우가 아닌 한) x 는 A 를 해야 한다."
+          "labelEn": "Established rule",
+          "template": "모든 x 에 대해, A 를 하는 것이 x 에게 확립된 규칙이면 (예외적인 경우가 아닌 한) x 는 A 를 해야 한다.",
+          "templateEn": "For all x, if doing A is an established rule for x then, unless the case is an exception, x must do A."
         },
         {
           "roleId": "applicability",
           "label": "규칙 적용 대상",
-          "template": "A 를 하는 것이 a 에게 확립된 규칙이다."
+          "labelEn": "Rule applies to",
+          "template": "A 를 하는 것이 a 에게 확립된 규칙이다.",
+          "templateEn": "Doing A is an established rule for a."
         }
       ],
       "conclusionRole": {
         "roleId": "conclusion",
         "label": "결론",
-        "template": "a 는 A 를 해야 한다(규칙에 따른 법적 효과가 인정된다)."
+        "labelEn": "Conclusion",
+        "template": "a 는 A 를 해야 한다(규칙에 따른 법적 효과가 인정된다).",
+        "templateEn": "a must do A (the legal effect of the rule applies)."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "규칙이 실제로 A 를 정하고 있는가?"
+          "text": "규칙이 실제로 A 를 정하고 있는가?",
+          "textEn": "Does the rule actually require A?"
         },
         {
           "id": "CQ2",
-          "text": "그 규칙이 이 사안에 적용되는가?"
+          "text": "그 규칙이 이 사안에 적용되는가?",
+          "textEn": "Does that rule apply to this case?"
         },
         {
           "id": "CQ3",
-          "text": "이 규칙이 올바른 규칙인가, 아니면 다른 규칙이 적용되어야 하는가? 둘 이상의 규칙이 관련되어 어느 쪽이 더 적절한지 의문이 있는가?"
+          "text": "이 규칙이 올바른 규칙인가, 아니면 다른 규칙이 적용되어야 하는가? 둘 이상의 규칙이 관련되어 어느 쪽이 더 적절한지 의문이 있는가?",
+          "textEn": "Is this the right rule, or should another rule apply — is more than one rule in play, so that it is doubtful which fits better?"
         }
       ],
       "sourceNote": "형식·CQ: hitz-zentroa/critical_questions_generation 의 walton_plus.jsonl (Walton 2008 기반 scheme 형식·CQ 템플릿) 19번. carneades-4 walton.yml (Gordon·Walton) established_rule(규칙의 유효성은 가정)과 일치.",
@@ -449,31 +564,40 @@
       "name": "Issue Resolution",
       "nameKo": "쟁점 판단에 의한 연결",
       "group": "쟁점 구조",
+      "groupEn": "Issue structure",
       "description": "상위 명제가 해당 쟁점에 대한 판단을 이룬다는 구조 관계. 증거에서 결론을 끌어내는 실질 추론이 아니라, 쟁점 노드와 그 판단을 잇는 연결이다.",
+      "descriptionEn": "A structural relation stating that the upper proposition is the finding on that issue. It is not substantive inference from evidence to a conclusion but the link between an issue node and its finding.",
       "premiseRoles": [
         {
           "roleId": "finding",
           "label": "판단",
-          "template": "명제 A 는 쟁점 Q 에 대하여 내려진 판단이다."
+          "labelEn": "Finding",
+          "template": "명제 A 는 쟁점 Q 에 대하여 내려진 판단이다.",
+          "templateEn": "Proposition A is the finding reached on issue Q."
         }
       ],
       "conclusionRole": {
         "roleId": "issue",
         "label": "쟁점",
-        "template": "쟁점 Q 는 A 와 같이 판단된다."
+        "labelEn": "Issue",
+        "template": "쟁점 Q 는 A 와 같이 판단된다.",
+        "templateEn": "Issue Q is decided as A states."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "판단 A 는 쟁점 Q 가 묻는 범위 안에 있는가?"
+          "text": "판단 A 는 쟁점 Q 가 묻는 범위 안에 있는가?",
+          "textEn": "Does finding A stay within the scope of what issue Q asks?"
         },
         {
           "id": "CQ2",
-          "text": "쟁점 Q 에 대한 판단으로서 A 에 빠진 부분이 있는가?"
+          "text": "쟁점 Q 에 대한 판단으로서 A 에 빠진 부분이 있는가?",
+          "textEn": "Is anything missing from A as a finding on issue Q?"
         },
         {
           "id": "CQ3",
-          "text": "A 가 쟁점 Q 의 문장을 되풀이한 것에 그치지 않는가?"
+          "text": "A 가 쟁점 Q 의 문장을 되풀이한 것에 그치지 않는가?",
+          "textEn": "Does A do more than restate the wording of issue Q?"
         }
       ],
       "sourceNote": "프로젝트 정의. Walton 논증 도식이 아니라 쟁점 그래프의 구조 관계다. 쟁점을 결론으로 두는 연결에 Walton scheme 을 배정하면 아래 추론을 다시 서술하거나 미분류로 떨어지는 문제가 있어 따로 두었다.",
@@ -485,31 +609,40 @@
       "name": "Issue Aggregation",
       "nameKo": "쟁점 종합에 의한 연결",
       "group": "쟁점 구조",
+      "groupEn": "Issue structure",
       "description": "쟁점별 판단을 종합하여 종국 판단에 이른다는 구조 관계. 판결문의 '다음과 같은 사정들을 종합하여 보면' 에 해당하며, 쟁점 하나하나가 독립적으로 결론을 지지한다는 뜻이 아니다.",
+      "descriptionEn": "A structural relation stating that the findings on the individual issues, taken together, lead to the final conclusion. It matches the judgment's phrase 'taking the following circumstances together', and does not mean that each issue supports the conclusion on its own.",
       "premiseRoles": [
         {
           "roleId": "issueFinding",
           "label": "쟁점별 판단",
-          "template": "쟁점 Q1 … Qn 이 각각 판단되었다."
+          "labelEn": "Findings on the issues",
+          "template": "쟁점 Q1 … Qn 이 각각 판단되었다.",
+          "templateEn": "Issues Q1 … Qn have each been decided."
         }
       ],
       "conclusionRole": {
         "roleId": "mainClaim",
         "label": "종국 판단",
-        "template": "이를 종합하면 주 주장 C 가 인정(배척)된다."
+        "labelEn": "Final conclusion",
+        "template": "이를 종합하면 주 주장 C 가 인정(배척)된다.",
+        "templateEn": "Taken together, main claim C is upheld (or rejected)."
       },
       "criticalQuestions": [
         {
           "id": "CQ1",
-          "text": "종합에 필요한 쟁점이 빠지지 않았는가?"
+          "text": "종합에 필요한 쟁점이 빠지지 않았는가?",
+          "textEn": "Is any issue needed for the aggregation missing?"
         },
         {
           "id": "CQ2",
-          "text": "어느 한 쟁점의 판단이 달라지면 종국 판단도 달라지는가?"
+          "text": "어느 한 쟁점의 판단이 달라지면 종국 판단도 달라지는가?",
+          "textEn": "Would the final conclusion change if the finding on any single issue changed?"
         },
         {
           "id": "CQ3",
-          "text": "종국 판단과 어긋나는 쟁점 판단이 있는가?"
+          "text": "종국 판단과 어긋나는 쟁점 판단이 있는가?",
+          "textEn": "Is there a finding on an issue that conflicts with the final conclusion?"
         }
       ],
       "sourceNote": "프로젝트 정의. Walton 논증 도식이 아니라 쟁점 그래프의 구조 관계다. 쟁점별 판단을 모아 종국 판단에 잇는 연결로, 수렴(convergent) 관계를 한 RA 로 표현한다.",

@@ -1,16 +1,19 @@
 import { useEffect } from 'react';
 import { usePipelineStore } from '../../store/pipelineStore';
+import { useLang, useT, type MessageKey } from '../../i18n';
 
-const KIND_LABEL: Record<string, string> = {
-  backup: '적용 전 백업',
-  applied: '적용본',
-  restored: '복원본',
-  cloned: '복제 시점',
-  'applied-unverified': '적용 요청 (재조회 불일치)',
-  'restored-unverified': '복원 요청 (재조회 불일치)',
+const VERSION_KIND_KEY: Record<string, MessageKey> = {
+  backup: 'lf.versions.backup',
+  applied: 'lf.versions.applied',
+  restored: 'lf.versions.restored',
+  cloned: 'lf.versions.cloned',
+  'applied-unverified': 'lf.versions.appliedUnverified',
+  'restored-unverified': 'lf.versions.restoredUnverified',
 };
 
 export function VersionsDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const lang = useLang();
   const versions = usePipelineStore((state) => state.versions);
   const current = usePipelineStore((state) => state.current);
   const busy = usePipelineStore((state) => state.busy);
@@ -31,55 +34,55 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="versions-title">
         <header className="dialog-header">
-          <h2 id="versions-title">버전 기록 — {current?.flow.name}</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="닫기">
+          <h2 id="versions-title">{t('lf.versions.title', { name: current?.flow.name ?? '' })}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label={t('lf.close')}>
             &#10005;
           </button>
         </header>
         <div className="dialog-body">
           <p className="dialog-note">
-            Langflow 에 적용할 때마다 적용 직전의 원격 flow 가 백업됩니다. 복원도 같은 방식으로 적용되며, 비밀 값은 저장하지 않고 현재 Langflow 의
-            값을 유지합니다.{dirty ? ' 편집 중인 변경은 복원하면 사라집니다.' : ''}
+            {t('lf.versions.note')}
+            {dirty ? t('lf.versions.note.dirty') : ''}
           </p>
-          {protectedFlow ? <div className="annotation-warning">프로덕션 flow 에는 복원할 수 없습니다. 작업용 복제본에서 복원하세요.</div> : null}
+          {protectedFlow ? <div className="annotation-warning">{t('lf.versions.protected')}</div> : null}
           {versions.length === 0 ? (
-            <div className="judgment-empty">아직 기록이 없습니다. 이 편집기에서 적용·복제한 뒤에 생깁니다.</div>
+            <div className="judgment-empty">{t('lf.versions.empty')}</div>
           ) : (
             <table className="lf-versions">
               <thead>
                 <tr>
-                  <th>시각</th>
-                  <th>종류</th>
-                  <th>메모</th>
-                  <th>규모</th>
-                  <th>실행 해시</th>
+                  <th>{t('lf.versions.time')}</th>
+                  <th>{t('lf.versions.kind')}</th>
+                  <th>{t('lf.versions.note.column')}</th>
+                  <th>{t('lf.versions.size')}</th>
+                  <th>{t('lf.versions.hash')}</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {versions.map((version) => (
                   <tr key={version.versionId}>
-                    <td>{new Date(version.createdAt).toLocaleString()}</td>
-                    <td>{KIND_LABEL[version.kind] ?? version.kind}</td>
+                    <td>{new Date(version.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'ko-KR')}</td>
+                    <td>{VERSION_KIND_KEY[version.kind] ? t(VERSION_KIND_KEY[version.kind]) : version.kind}</td>
                     <td>{version.note ?? ''}</td>
                     <td>
                       {version.nodeCount ?? '?'} / {version.edgeCount ?? '?'}
                     </td>
                     <td title={version.dataHash ?? undefined}>
                       {version.dataHash ? version.dataHash.slice(0, 19) : '-'}
-                      {current && version.dataHash === current.hash ? ' (현재)' : ''}
+                      {current && version.dataHash === current.hash ? t('lf.versions.current') : ''}
                     </td>
                     <td>
                       <button
                         type="button"
                         disabled={!!busy || protectedFlow}
                         onClick={() => {
-                          if (window.confirm('이 버전으로 복원해 Langflow 에 적용할까요? 현재 원격 상태는 먼저 백업됩니다.')) {
+                          if (window.confirm(t('lf.versions.restore.confirm'))) {
                             void restoreVersion(version.versionId);
                           }
                         }}
                       >
-                        이 버전으로 복원
+                        {t('lf.versions.restore')}
                       </button>
                     </td>
                   </tr>
@@ -90,7 +93,7 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
         </div>
         <footer className="dialog-footer">
           <button type="button" onClick={onClose}>
-            닫기
+            {t('lf.close')}
           </button>
         </footer>
       </div>

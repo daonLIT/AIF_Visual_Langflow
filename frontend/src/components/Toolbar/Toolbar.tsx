@@ -6,6 +6,7 @@ import type { ProjectFile } from '../../types/annotation';
 import { JudgmentInputDialog } from '../Analysis/JudgmentInputDialog';
 import { AnalysisStatus } from '../Analysis/AnalysisStatus';
 import { api } from '../../api/client';
+import { useT } from '../../i18n';
 
 function downloadJson(name: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -21,6 +22,7 @@ function downloadJson(name: string, data: unknown) {
 
 /** 프로젝트 저장/불러오기 메뉴 */
 function ProjectMenu() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [serverProjects, setServerProjects] = useState<Array<{ projectId: string; title?: string | null; revision: number; updatedAt: string }>>([]);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,7 @@ function ProjectMenu() {
   const saveFile = () => {
     const project = buildProjectFile();
     if (!project) {
-      setErrorMessage('저장할 프로젝트가 없습니다.');
+      setErrorMessage(t('project.error.nothingToSave'));
       return;
     }
     downloadJson(`${project.title || project.projectId}.project.json`, project);
@@ -69,11 +71,11 @@ function ProjectMenu() {
     try {
       const parsed = JSON.parse(await file.text()) as ProjectFile;
       if (!parsed || parsed.schemaVersion === undefined || !parsed.document || !parsed.acceptedGraph) {
-        throw new Error('프로젝트 파일 형식이 아닙니다 (schemaVersion/document/acceptedGraph 필요).');
+        throw new Error(t('project.error.badFile'));
       }
       await loadProjectFile(parsed, file.name);
     } catch (error) {
-      setErrorMessage(`프로젝트 열기 실패: ${(error as Error).message}`);
+      setErrorMessage(t('project.error.openFailed', { message: (error as Error).message }));
     }
     setOpen(false);
   };
@@ -85,21 +87,26 @@ function ProjectMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="프로젝트 저장 / 불러오기"
+        title={t('project.menu.title')}
       >
-        프로젝트{dirty ? ' •' : ''}
+        {t('project.menu')}
+        {dirty ? ' •' : ''}
       </button>
       {open ? (
         <div className="menu" role="menu">
-          <div className="menu-title">현재 프로젝트 {revision > 0 ? `(서버 revision ${revision})` : '(서버 미저장)'}</div>
+          <div className="menu-title">
+            {t('project.current', {
+              revision: revision > 0 ? t('project.revision', { revision }) : t('project.notOnServer'),
+            })}
+          </div>
           <button type="button" role="menuitem" className="menu-item" disabled={!caseData} onClick={() => { void saveToServer(); setOpen(false); }}>
-            서버에 저장
+            {t('project.saveServer')}
           </button>
           <button type="button" role="menuitem" className="menu-item" disabled={!caseData} onClick={saveFile}>
-            파일로 저장 (.project.json)
+            {t('project.saveFile')}
           </button>
           <button type="button" role="menuitem" className="menu-item" onClick={() => fileRef.current?.click()}>
-            프로젝트 파일 열기
+            {t('project.openFile')}
           </button>
           <input
             ref={fileRef}
@@ -112,9 +119,9 @@ function ProjectMenu() {
               event.target.value = '';
             }}
           />
-          <div className="menu-title">서버 프로젝트</div>
+          <div className="menu-title">{t('project.serverList')}</div>
           {serverProjects.length === 0 ? (
-            <div className="menu-hint">저장된 프로젝트가 없거나 서버에 연결되지 않았습니다.</div>
+            <div className="menu-hint">{t('project.serverEmpty')}</div>
           ) : (
             serverProjects.slice(0, 10).map((project) => (
               <button
@@ -128,7 +135,8 @@ function ProjectMenu() {
                 }}
                 title={project.projectId}
               >
-                {project.title || project.projectId} <span className="menu-meta">rev {project.revision}</span>
+                {project.title || project.projectId}{' '}
+                <span className="menu-meta">{t('project.rev', { revision: project.revision })}</span>
               </button>
             ))
           )}
@@ -139,6 +147,7 @@ function ProjectMenu() {
 }
 
 export function Toolbar() {
+  const t = useT();
   const caseData = useGraphStore((state) => state.caseData);
   const fileName = useGraphStore((state) => state.fileName);
   const isLayouting = useGraphStore((state) => state.isLayouting);
@@ -179,13 +188,13 @@ export function Toolbar() {
   return (
     <header className="toolbar">
       <div className="toolbar-title">
-        <span className="toolbar-app">법적 논증 그래프 검토</span>
-        <span className="toolbar-file">{projectTitle || fileName || '불러온 파일 없음'}</span>
+        <span className="toolbar-app">{t('toolbar.app')}</span>
+        <span className="toolbar-file">{projectTitle || fileName || t('toolbar.noFile')}</span>
       </div>
 
       <div className="toolbar-actions">
         <button type="button" className="is-primary" onClick={() => setInputOpen(true)}>
-          판결문 입력
+          {t('toolbar.judgmentInput')}
         </button>
         <AnalysisStatus />
 
@@ -202,36 +211,36 @@ export function Toolbar() {
             event.target.value = '';
           }}
         />
-        <button type="button" onClick={() => inputRef.current?.click()} title="AIF/OVA JSON 불러오기">
-          JSON 불러오기
+        <button type="button" onClick={() => inputRef.current?.click()} title={t('toolbar.importJson.title')}>
+          {t('toolbar.importJson')}
         </button>
-        <button type="button" onClick={() => void loadSample()} title="예제 판결문 JSON 열기">
-          예제 열기
+        <button type="button" onClick={() => void loadSample()} title={t('toolbar.sample.title')}>
+          {t('toolbar.sample')}
         </button>
 
         <span className="toolbar-divider" />
 
         <button type="button" disabled={!hasCase} onClick={requestFitView}>
-          화면 맞춤
+          {t('toolbar.fitView')}
         </button>
         <button
           type="button"
           disabled={!hasCase || isLayouting}
           onClick={() => void runAutoLayout()}
         >
-          {isLayouting ? '정렬 중...' : '자동 정렬'}
+          {isLayouting ? t('toolbar.layouting') : t('toolbar.autoLayout')}
         </button>
         <button type="button" disabled={!hasCase} onClick={runValidation}>
-          검증
+          {t('toolbar.validate')}
         </button>
 
         <span className="toolbar-divider" />
 
-        <button type="button" disabled={!canUndo} onClick={undo} title="실행 취소 (Ctrl+Z)">
-          되돌리기
+        <button type="button" disabled={!canUndo} onClick={undo} title={t('toolbar.undo.title')}>
+          {t('toolbar.undo')}
         </button>
-        <button type="button" disabled={!canRedo} onClick={redo} title="다시 실행 (Ctrl+Shift+Z)">
-          다시 실행
+        <button type="button" disabled={!canRedo} onClick={redo} title={t('toolbar.redo.title')}>
+          {t('toolbar.redo')}
         </button>
 
         <span className="toolbar-divider" />
@@ -241,9 +250,9 @@ export function Toolbar() {
           type="button"
           disabled={!hasCase}
           onClick={() => caseData && downloadCaseJson(caseData)}
-          title="확정된 그래프만 AIF/OVA 형식으로 내보냅니다 (미검토·거절 제안 제외)"
+          title={t('toolbar.export.title')}
         >
-          AIF/OVA 내보내기
+          {t('toolbar.export')}
         </button>
       </div>
 

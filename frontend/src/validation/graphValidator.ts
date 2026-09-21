@@ -2,6 +2,7 @@ import type { ArgumentCase, ValidationResult } from '../types/argument';
 import { summaryStateOf } from '../types/argument';
 import { CUSTOM, UNCLASSIFIED } from '../types/scheme';
 import { issueSelectionProblems } from '../store/graphRules';
+import { t } from '../i18n';
 
 export interface ValidationSummary {
   results: ValidationResult[];
@@ -46,7 +47,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
       level: 'error',
       code: 'RULE_08_DUPLICATE_NODE_ID',
       nodeId: id,
-      message: `노드 ID 가 중복되었습니다: ${id}`,
+      message: t('rule.08', { nodeId: id }),
     });
   }
 
@@ -58,7 +59,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         level: 'error',
         code: 'RULE_09_DUPLICATE_EDGE_ID',
         edgeId: edge.id,
-        message: `엣지 ID 가 중복되었습니다: ${edge.id}`,
+        message: t('rule.09', { edgeId: edge.id }),
       });
     }
     seenEdgeIds.add(edge.id);
@@ -78,7 +79,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         level: 'error',
         code: 'RULE_01_INVALID_NODE_REFERENCE',
         edgeId: edge.id,
-        message: `엣지 ${edge.id} 의 fromID(${edge.source}) 에 해당하는 노드가 없습니다.`,
+        message: t('rule.01.from', { edgeId: edge.id, nodeId: edge.source }),
       });
     }
     if (!target) {
@@ -86,7 +87,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         level: 'error',
         code: 'RULE_01_INVALID_NODE_REFERENCE',
         edgeId: edge.id,
-        message: `엣지 ${edge.id} 의 toID(${edge.target}) 에 해당하는 노드가 없습니다.`,
+        message: t('rule.01.to', { edgeId: edge.id, nodeId: edge.target }),
       });
     }
 
@@ -97,7 +98,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         code: 'RULE_02_SELF_EDGE',
         edgeId: edge.id,
         nodeId: edge.source,
-        message: `엣지 ${edge.id}: 노드가 자기 자신을 가리킵니다.`,
+        message: t('rule.02', { edgeId: edge.id }),
       });
     }
 
@@ -108,7 +109,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         code: 'RULE_03_I_TO_I',
         edgeId: edge.id,
         nodeId: source.id,
-        message: `엣지 ${edge.id}: I 노드끼리 직접 연결할 수 없습니다. I → RA → I 형태로 연결하세요.`,
+        message: t('rule.03', { edgeId: edge.id }),
       });
     }
 
@@ -127,7 +128,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
           level: 'error',
           code: 'RULE_04_RA_NO_INCOMING',
           nodeId: node.id,
-          message: 'RA 노드에 전제(들어오는 엣지)가 없습니다.',
+          message: t('rule.04'),
         });
       }
       // RULE 05
@@ -136,7 +137,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
           level: 'error',
           code: 'RULE_05_RA_NO_OUTGOING',
           nodeId: node.id,
-          message: 'RA 노드에 결론(나가는 엣지)이 없습니다.',
+          message: t('rule.05'),
         });
       }
     }
@@ -147,7 +148,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         level: 'error',
         code: 'RULE_06_CA_CONNECTIVITY',
         nodeId: node.id,
-        message: `CA 노드는 들어오는 엣지와 나가는 엣지가 각각 1개 이상이어야 합니다. (in ${inCount} / out ${outCount})`,
+        message: t('rule.06', { incoming: inCount, outgoing: outCount }),
       });
     }
 
@@ -157,7 +158,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
         level: 'warning',
         code: 'RULE_07_ISOLATED_NODE',
         nodeId: node.id,
-        message: '연결되지 않은 고립 노드입니다.',
+        message: t('rule.07'),
       });
     }
   }
@@ -190,7 +191,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
           level: 'warning',
           code: 'RULE_10_OVA_AIF_MISMATCH',
           nodeId: id,
-          message: `불러온 파일의 OVA 노드 ${id} 에 대응하는 AIF 노드가 없습니다.`,
+          message: t('rule.10.node', { nodeId: id }),
         });
       }
     }
@@ -202,7 +203,7 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
             level: 'warning',
             code: 'RULE_10_OVA_AIF_MISMATCH',
             nodeId: endpoint,
-            message: `불러온 파일의 OVA 엣지가 존재하지 않는 노드 ${endpoint} 를 참조합니다.`,
+            message: t('rule.10.edge', { nodeId: endpoint }),
           });
         }
       }
@@ -225,13 +226,13 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
     if (node.type === 'RA' && schemeAware) {
       if (!application) {
         // RULE 11
-        results.push({ level: 'warning', code: 'RULE_11_RA_SCHEME_MISSING', nodeId: node.id, message: 'RA 노드에 scheme 정보가 없습니다.' });
+        results.push({ level: 'warning', code: 'RULE_11_RA_SCHEME_MISSING', nodeId: node.id, message: t('rule.11.missing') });
       } else {
         if (application.schemeKey === UNCLASSIFIED) {
-          results.push({ level: 'warning', code: 'RULE_11_RA_UNCLASSIFIED', nodeId: node.id, message: 'RA 가 미분류(적절한 scheme 없음) 상태입니다.' });
+          results.push({ level: 'warning', code: 'RULE_11_RA_UNCLASSIFIED', nodeId: node.id, message: t('rule.11.unclassified') });
         }
         if (application.schemeKey === CUSTOM && !application.customSchemeName) {
-          results.push({ level: 'warning', code: 'RULE_11_RA_CUSTOM_NAME', nodeId: node.id, message: '직접 작성 scheme 의 이름이 없습니다.' });
+          results.push({ level: 'warning', code: 'RULE_11_RA_CUSTOM_NAME', nodeId: node.id, message: t('rule.11.customName') });
         }
         // RULE 12
         const incomingIds = sources.get(node.id) ?? new Set<string>();
@@ -242,12 +243,12 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
             level: 'warning',
             code: 'RULE_12_SCHEME_REFERENCE',
             nodeId: node.id,
-            message: `scheme 전제 참조 ${stale.length}개가 이 RA 로 연결된 노드가 아닙니다. scheme 을 다시 확인하세요.`,
+            message: t('rule.12.premises', { count: stale.length }),
           });
         }
         const badConclusions = application.conclusionNodeIds.filter((id) => !outgoingIds.has(id));
         if (badConclusions.length > 0) {
-          results.push({ level: 'warning', code: 'RULE_12_SCHEME_REFERENCE', nodeId: node.id, message: 'scheme 의 결론 노드가 이 RA 가 가리키는 노드와 다릅니다.' });
+          results.push({ level: 'warning', code: 'RULE_12_SCHEME_REFERENCE', nodeId: node.id, message: t('rule.12.conclusion') });
         }
         // RULE 15
         if (application.status === 'needs_review') {
@@ -255,21 +256,28 @@ export function validateCase(argumentCase: ArgumentCase): ValidationSummary {
             level: 'warning',
             code: 'RULE_15_SCHEME_NEEDS_REVIEW',
             nodeId: node.id,
-            message: `scheme 재검토 필요: ${(application.reviewReasons ?? []).join(' / ') || '연결 또는 본문 변경'}`,
+            message: t('rule.15.needsReview', {
+              reasons: (application.reviewReasons ?? []).join(' / ') || t('rule.15.needsReview.default'),
+            }),
           });
         }
         if (application.errors && application.errors.length > 0) {
-          results.push({ level: 'warning', code: 'RULE_15_SCHEME_ERRORS', nodeId: node.id, message: `scheme 결과 검증 오류: ${application.errors.join(' / ')}` });
+          results.push({
+            level: 'warning',
+            code: 'RULE_15_SCHEME_ERRORS',
+            nodeId: node.id,
+            message: t('rule.15.errors', { errors: application.errors.join(' / ') }),
+          });
         }
       }
     }
     // RULE 13
     if (node.type === 'ISSUE' && catalogAware && !node.issueRef) {
-      results.push({ level: 'warning', code: 'RULE_13_ISSUE_UNCLASSIFIED', nodeId: node.id, message: '쟁점 노드에 카탈로그 쟁점 분류가 없습니다.' });
+      results.push({ level: 'warning', code: 'RULE_13_ISSUE_UNCLASSIFIED', nodeId: node.id, message: t('rule.13') });
     }
     // RULE 16
     if ((node.type === 'I' || node.type === 'ISSUE') && summaryStateOf(node) === 'stale') {
-      results.push({ level: 'warning', code: 'RULE_16_SUMMARY_STALE', nodeId: node.id, message: '요약을 만든 뒤 본문이 바뀌었습니다. 요약을 다시 만들거나 고치세요.' });
+      results.push({ level: 'warning', code: 'RULE_16_SUMMARY_STALE', nodeId: node.id, message: t('rule.16') });
     }
   }
 

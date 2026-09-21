@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from .catalogs import CUSTOM, MAX_SELECTED_ISSUES, UNCLASSIFIED, IssueCatalog, SchemeCatalog
 from .evidence_matcher import DocumentMatcher
 from .texthash import text_hash
+from ..i18n import t
 
 NODE_TYPES = {"I", "RA", "CA", "ISSUE"}
 RULE_TYPES = {"RA", "CA"}
@@ -68,7 +69,7 @@ class Proposal:
 def parse_json_text(text: str) -> dict:
     """외곽 코드 펜스만 제거하고 JSON 파서를 사용한다. eval 금지."""
     if not isinstance(text, str):
-        raise InvalidResultError("결과가 문자열이 아닙니다.")
+        raise InvalidResultError(t("adapter.not_string"))
     stripped = text.strip()
     fence = _FENCE.match(stripped)
     if fence:
@@ -77,9 +78,9 @@ def parse_json_text(text: str) -> dict:
         # 문자열 안의 실제 줄바꿈(Langflow 메시지 처리 과정에서 생길 수 있음)은 허용한다.
         parsed = json.loads(stripped, strict=False)
     except json.JSONDecodeError as error:
-        raise InvalidResultError(f"결과 JSON 파싱 실패: {error.msg} (line {error.lineno})") from error
+        raise InvalidResultError(t("adapter.json_parse_failed", message=error.msg, line=error.lineno)) from error
     if not isinstance(parsed, dict):
-        raise InvalidResultError("결과 JSON 의 최상위가 객체가 아닙니다.")
+        raise InvalidResultError(t("adapter.json_not_object"))
     return parsed
 
 
@@ -88,73 +89,73 @@ def validate_graph(raw: dict) -> list[str]:
     errors: list[str] = []
     aif = raw.get("AIF")
     if not isinstance(aif, dict):
-        return ["AIF 섹션이 없습니다."]
+        return [t("adapter.no_aif")]
     nodes = aif.get("nodes")
     edges = aif.get("edges", [])
     if not isinstance(nodes, list) or not nodes:
-        return ["AIF.nodes 가 비어 있거나 배열이 아닙니다."]
+        return [t("adapter.nodes_empty")]
     if not isinstance(edges, list):
-        return ["AIF.edges 가 배열이 아닙니다."]
+        return [t("adapter.edges_not_array")]
 
     ids: set[str] = set()
     for index, node in enumerate(nodes):
         if not isinstance(node, dict):
-            errors.append(f"nodes[{index}] 가 객체가 아닙니다.")
+            errors.append(t("adapter.node_not_object", index=index))
             continue
         node_id = node.get("nodeID")
         if not isinstance(node_id, str) or not node_id:
-            errors.append(f"nodes[{index}] 에 nodeID 가 없습니다.")
+            errors.append(t("adapter.node_no_id", index=index))
             continue
         if node_id in ids:
-            errors.append(f"중복 nodeID: {node_id}")
+            errors.append(t("adapter.duplicate_node_id", nodeId=node_id))
         ids.add(node_id)
         if node.get("type") not in NODE_TYPES:
-            errors.append(f"노드 {node_id} 의 type 이 허용값이 아닙니다: {node.get('type')!r}")
+            errors.append(t("adapter.bad_node_type", nodeId=node_id, type=repr(node.get("type"))))
         if not isinstance(node.get("text"), str):
-            errors.append(f"노드 {node_id} 의 text 가 문자열이 아닙니다.")
+            errors.append(t("adapter.text_not_string", nodeId=node_id))
         elif node.get("type") in {"I", "ISSUE"} and not node["text"].strip():
-            errors.append(f"노드 {node_id} 의 text 가 비어 있습니다.")
+            errors.append(t("adapter.text_empty", nodeId=node_id))
         evidence = node.get("evidence")
         if evidence is not None and not isinstance(evidence, list):
-            errors.append(f"노드 {node_id} 의 evidence 가 배열이 아닙니다.")
+            errors.append(t("adapter.evidence_not_array", nodeId=node_id))
         if node.get("summary") is not None and not isinstance(node.get("summary"), str):
-            errors.append(f"노드 {node_id} 의 summary 가 문자열이 아닙니다.")
+            errors.append(t("adapter.summary_not_string", nodeId=node_id))
         for key in ("schemeApplication", "scheme", "issueRef"):
             if node.get(key) is not None and not isinstance(node.get(key), dict):
-                errors.append(f"노드 {node_id} 의 {key} 가 객체가 아닙니다.")
+                errors.append(t("adapter.field_not_object", nodeId=node_id, field=key))
         if node.get("issueRefs") is not None and not isinstance(node.get("issueRefs"), list):
-            errors.append(f"노드 {node_id} 의 issueRefs 가 배열이 아닙니다.")
+            errors.append(t("adapter.issue_refs_not_array", nodeId=node_id))
 
     edge_ids: set[int] = set()
     for index, edge in enumerate(edges):
         if not isinstance(edge, dict):
-            errors.append(f"edges[{index}] 가 객체가 아닙니다.")
+            errors.append(t("adapter.edge_not_object", index=index))
             continue
         edge_id = edge.get("edgeID")
         if isinstance(edge_id, bool) or not isinstance(edge_id, int):
-            errors.append(f"edges[{index}] 의 edgeID 가 정수가 아닙니다.")
+            errors.append(t("adapter.edge_id_not_int", index=index))
         elif edge_id in edge_ids:
-            errors.append(f"중복 edgeID: {edge_id}")
+            errors.append(t("adapter.duplicate_edge_id", edgeId=edge_id))
         else:
             edge_ids.add(edge_id)
         for key in ("fromID", "toID"):
             ref = edge.get(key)
             if not isinstance(ref, str) or ref not in ids:
-                errors.append(f"edges[{index}] 의 {key}({ref!r}) 에 해당하는 노드가 없습니다.")
+                errors.append(t("adapter.edge_bad_ref", index=index, field=key, ref=repr(ref)))
         if edge.get("fromID") == edge.get("toID"):
-            errors.append(f"edges[{index}] 가 자기 자신을 가리킵니다.")
+            errors.append(t("adapter.edge_self", index=index))
 
     ova = raw.get("OVA")
     if ova is not None:
         if not isinstance(ova, dict):
-            errors.append("OVA 섹션이 객체가 아닙니다.")
+            errors.append(t("adapter.ova_not_object"))
         else:
             for index, ova_node in enumerate(ova.get("nodes") or []):
                 if not isinstance(ova_node, dict) or ova_node.get("nodeID") not in ids:
-                    errors.append(f"OVA.nodes[{index}] 가 존재하지 않는 AIF 노드를 참조합니다.")
+                    errors.append(t("adapter.ova_node_bad_ref", index=index))
             for index, ova_edge in enumerate(ova.get("edges") or []):
                 if not isinstance(ova_edge, dict) or ova_edge.get("fromID") not in ids or ova_edge.get("toID") not in ids:
-                    errors.append(f"OVA.edges[{index}] 가 존재하지 않는 AIF 노드를 참조합니다.")
+                    errors.append(t("adapter.ova_edge_bad_ref", index=index))
     return errors
 
 
@@ -230,8 +231,8 @@ def normalize_scheme_application(
     errors = [str(e) for e in raw.get("errors") or [] if isinstance(e, str)]
     key = _clean_str(raw.get("schemeKey")) or UNCLASSIFIED
     if schemes is not None and not schemes.is_valid_key(key):
-        errors.append(f"허용되지 않은 scheme key '{key}'")
-        warnings.append(f"RA {node_id}: 허용되지 않은 scheme '{key}' 를 미분류로 두었습니다.")
+        errors.append(t("adapter.scheme_key_not_allowed", key=key))
+        warnings.append(t("adapter.scheme_key_unclassified", nodeId=node_id, key=key))
         key = UNCLASSIFIED
     roles = schemes.roles(key) if schemes is not None else set()
     questions = schemes.question_ids(key) if schemes is not None else set()
@@ -242,13 +243,13 @@ def normalize_scheme_application(
             continue
         role = _clean_str(binding.get("roleId")) or None
         if role and roles and role not in roles:
-            errors.append(f"scheme {key} 에 없는 전제 역할 '{role}'")
+            errors.append(t("adapter.role_not_in_scheme", key=key, role=role))
             continue
         node_ids = []
         for original in binding.get("nodeIds") or []:
             mapped = id_map.get(original) if isinstance(original, str) else None
             if mapped is None or mapped not in incoming:
-                errors.append(f"전제 참조 {original!r} 가 이 RA 로 들어오는 노드가 아닙니다")
+                errors.append(t("adapter.premise_ref_bad", ref=repr(original)))
                 continue
             node_ids.append(mapped)
         if node_ids:
@@ -258,7 +259,7 @@ def normalize_scheme_application(
     for original in raw.get("conclusionNodeIds") or []:
         mapped = id_map.get(original) if isinstance(original, str) else None
         if mapped is None or mapped not in outgoing:
-            errors.append(f"결론 참조 {original!r} 가 이 RA 가 가리키는 노드가 아닙니다")
+            errors.append(t("adapter.conclusion_ref_bad", ref=repr(original)))
             continue
         conclusions.append(mapped)
 
@@ -268,7 +269,7 @@ def normalize_scheme_application(
             continue
         question_id = _clean_str(item.get("questionId"))
         if questions and question_id not in questions:
-            errors.append(f"scheme {key} 에 없는 비판적 질문 {question_id}")
+            errors.append(t("adapter.question_not_in_scheme", key=key, questionId=question_id))
             continue
         if key in (UNCLASSIFIED, CUSTOM) and schemes is not None:
             continue
@@ -321,7 +322,7 @@ def _remap_fulfillments(section: dict, id_map: dict[str, str], warnings: list[st
                 continue
             mapped = id_map.get(entry["nodeID"])
             if mapped is None:
-                warnings.append(f"AIF.{key} 항목이 없는 노드 {entry['nodeID']!r} 를 가리켜 제외했습니다.")
+                warnings.append(t("adapter.fulfillment_dropped", field=key, nodeId=repr(entry["nodeID"])))
                 continue
             kept.append({**entry, "nodeID": mapped})
         remapped[key] = kept
@@ -345,7 +346,7 @@ def build_proposal(
 
     if status == "invalid":
         details = [str(e) for e in (raw.get("errors") or selection_meta.get("errors") or []) if e]
-        raise InvalidResultError("Langflow 결과가 검증을 통과하지 못했습니다(쟁점 선택 또는 그래프 제약 위반).", details, code="INVALID_SELECTION")
+        raise InvalidResultError(t("adapter.invalid_selection"), details, code="INVALID_SELECTION")
     if status == "no_issues":
         reason = _clean_str(raw.get("reason")) or selection_meta.get("noIssueReason") or ""
         summary = {
@@ -359,11 +360,11 @@ def build_proposal(
         warnings = [str(w) for w in selection_meta.get("warnings") or []]
         return Proposal(namespace=namespace, graph=None, annotations=[], summary=summary, warnings=warnings, outcome="no_issues")
     if status not in (None, "ok"):
-        raise InvalidResultError(f"알 수 없는 결과 status: {status!r}")
+        raise InvalidResultError(t("adapter.unknown_status", status=repr(status)))
 
     errors = validate_graph(raw)
     if errors:
-        raise InvalidResultError("Langflow 결과 그래프가 유효하지 않습니다.", errors)
+        raise InvalidResultError(t("adapter.graph_invalid"), errors)
 
     aif = raw["AIF"]
     ova = raw.get("OVA") if isinstance(raw.get("OVA"), dict) else {}
@@ -373,7 +374,7 @@ def build_proposal(
     issue_nodes_raw = [n for n in aif["nodes"] if n["type"] == "ISSUE"]
     constraint_errors = []
     if len(issue_nodes_raw) > MAX_SELECTED_ISSUES:
-        constraint_errors.append(f"쟁점 노드가 {len(issue_nodes_raw)}개입니다(최대 {MAX_SELECTED_ISSUES}개).")
+        constraint_errors.append(t("adapter.too_many_issues", count=len(issue_nodes_raw), max=MAX_SELECTED_ISSUES))
     seen_issue_ids: set[str] = set()
     for node in issue_nodes_raw:
         ref = node.get("issueRef") if isinstance(node.get("issueRef"), dict) else None
@@ -381,12 +382,12 @@ def build_proposal(
             continue
         issue_id = _clean_str(ref.get("issueId"))
         if issue_catalog is not None and not issue_catalog.is_active(issue_id):
-            constraint_errors.append(f"쟁점 노드 {node['nodeID']} 의 issueId '{issue_id}' 는 카탈로그에 없습니다.")
+            constraint_errors.append(t("adapter.issue_not_in_catalog", nodeId=node["nodeID"], issueId=issue_id))
         if issue_id in seen_issue_ids:
-            constraint_errors.append(f"issueId '{issue_id}' 가 중복 선택되었습니다.")
+            constraint_errors.append(t("adapter.issue_duplicated", issueId=issue_id))
         seen_issue_ids.add(issue_id)
     if constraint_errors:
-        raise InvalidResultError(f"쟁점 선택 제약(최대 {MAX_SELECTED_ISSUES}개·카탈로그 ID·중복 없음)을 어겼습니다.", constraint_errors, code="INVALID_SELECTION")
+        raise InvalidResultError(t("adapter.selection_constraints", max=MAX_SELECTED_ISSUES), constraint_errors, code="INVALID_SELECTION")
 
     used: set[str] = set()
     id_map: dict[str, str] = {}
@@ -404,7 +405,7 @@ def build_proposal(
     ova_edge_by_key = {(e["fromID"], e["toID"]): e for e in (ova.get("edges") or []) if isinstance(e, dict)}
     missing_positions = [n["nodeID"] for n in aif["nodes"] if n["nodeID"] not in ova_by_id]
     if missing_positions:
-        warnings.append(f"OVA 좌표가 없는 노드 {len(missing_positions)}개는 기본 좌표(0,0)를 사용합니다.")
+        warnings.append(t("adapter.missing_positions", count=len(missing_positions)))
 
     matcher = DocumentMatcher(document_text)
     counts = {"exact": 0, "normalized": 0, "ambiguous": 0, "unmatched": 0, "none": 0}
@@ -625,25 +626,32 @@ def build_proposal(
             }
         )
         if not grounded:
-            warnings.append(f"선택 쟁점 {ref['issueId']}: 원문에서 근거를 찾지 못했습니다(근거 없음/미검출).")
+            warnings.append(t("adapter.issue_not_grounded", issueId=ref["issueId"]))
 
     for item in selection_meta.get("warnings") or []:
-        warnings.append(f"쟁점 선택: {item}")
+        warnings.append(t("adapter.selection_warning", item=item))
     for report in meta.get("branches") or []:
         if not isinstance(report, dict):
             continue
         label = report.get("issueId") or f"#{report.get('issueIndex')}"
         if report.get("status") not in (None, "ok"):
-            warnings.append(f"쟁점 {label} 세부 추출 {report.get('status')}: {report.get('error') or '원인 미상'}")
+            warnings.append(
+                t(
+                    "adapter.branch_failed",
+                    label=label,
+                    status=report.get("status"),
+                    error=report.get("error") or t("adapter.branch_unknown_error"),
+                )
+            )
         for item in report.get("warnings") or []:
-            warnings.append(f"쟁점 {label}: {item}")
+            warnings.append(t("adapter.branch_warning", label=label, item=item))
     summaries_meta = meta.get("summaries") if isinstance(meta.get("summaries"), dict) else {}
     if summaries_meta.get("missing"):
-        warnings.append(f"요약을 만들지 못한 노드 {len(summaries_meta['missing'])}개 (본문 앞부분을 임시 표시)")
+        warnings.append(t("adapter.summaries_missing", count=len(summaries_meta["missing"])))
     for item in (meta.get("schemes") or {}).get("errors") or []:
-        warnings.append(f"scheme 분류: {item}")
+        warnings.append(t("adapter.scheme_warning", item=item))
     for item in (meta.get("validation") or {}).get("warnings") or []:
-        warnings.append(f"flow 검증: {item}")
+        warnings.append(t("adapter.flow_validation", item=item))
 
     summary = {
         "nodeCount": len(new_nodes),

@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useGraphStore } from '../../store/graphStore';
+import { useT } from '../../i18n';
 
 /** 판결문 패널 안에 접을 수 있는 형태로 붙는 쟁점 목록. */
 export function IssueNavigator() {
+  const t = useT();
   const caseData = useGraphStore((state) => state.caseData);
   const highlightIssueId = useGraphStore((state) => state.highlightIssueId);
   const requestFocus = useGraphStore((state) => state.requestFocus);
@@ -26,7 +28,7 @@ export function IssueNavigator() {
           aria-expanded={!collapsed}
         >
           <span className={`caret ${collapsed ? 'is-collapsed' : ''}`} aria-hidden="true" />
-          쟁점 {issues.length}
+          {t('issueNav.count', { count: issues.length })}
         </button>
         {highlightIssueId ? (
           <button
@@ -34,7 +36,7 @@ export function IssueNavigator() {
             className="link-button"
             onClick={() => setHighlightIssue(null)}
           >
-            강조 해제
+            {t('issueNav.clearHighlight')}
           </button>
         ) : null}
       </header>
@@ -42,7 +44,7 @@ export function IssueNavigator() {
       {collapsed ? null : (
         <ol className="issue-list">
           {issues.length === 0 ? (
-            <li className="issue-empty">ISSUE 노드가 없습니다.</li>
+            <li className="issue-empty">{t('issueNav.empty')}</li>
           ) : (
             issues.map((issue, index) => (
               <li key={issue.id}>
@@ -56,7 +58,7 @@ export function IssueNavigator() {
                   title={issue.text}
                 >
                   <span className="issue-index">{index + 1}</span>
-                  <span className="issue-text">{issue.text || '(제목 없음)'}</span>
+                  <span className="issue-text">{issue.text || t('issueNav.untitled')}</span>
                 </button>
               </li>
             ))

@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Annotation, EdgeAnnotation, EvidenceSpan, NodeAnnotation } from '../../types/annotation';
-import { MATCH_LABEL, ORIGIN_LABEL, STATUS_LABEL } from '../../types/annotation';
+import { MATCH_KEY, ORIGIN_KEY, STATUS_KEY } from '../../types/annotation';
 import type { ArgumentNodeType, ValidationResult } from '../../types/argument';
 import type { EdgeDependency } from '../../store/reviewLogic';
 import { findIssue, useCatalogStore } from '../../store/catalogStore';
-import { schemeShortName } from '../../types/scheme';
+import { issueLabel, schemeShortName } from '../../types/scheme';
+import { useT } from '../../i18n';
 
-const TYPE_LABEL: Record<ArgumentNodeType, string> = { I: 'I', RA: 'RA', CA: 'CA', ISSUE: '쟁점' };
+function typeLabel(type: ArgumentNodeType, issueText: string): string {
+  return type === 'ISSUE' ? issueText : type;
+}
 
 export interface CardProps {
   annotation: Annotation;
@@ -40,13 +43,12 @@ function EvidenceList({
   onChoose: (index: number, candidate: { start: number; end: number }) => void;
   onRemove: (index: number) => void;
 }) {
+  const t = useT();
   if (annotation.kind === 'edge') return null;
   if (annotation.currentValue.type === 'RA' || annotation.currentValue.type === 'CA') return null;
   if (annotation.evidence.length === 0) {
     return (
-      <div className="evidence-empty">
-        근거 없음 — 원문에서 문장을 드래그한 뒤 “이 제안의 근거로 연결”을 누르세요.
-      </div>
+      <div className="evidence-empty">{t('card.evidence.empty')}</div>
     );
   }
   return (
@@ -55,34 +57,44 @@ function EvidenceList({
         const located = span.start !== null && span.end !== null;
         return (
           <li key={index} className={`evidence-item is-${span.match}`}>
-            <span className={`evidence-badge is-${span.match}`}>{MATCH_LABEL[span.match]}</span>
-            {span.derived ? <span className="evidence-derived" title="인용문이 아니라 노드 문장으로 원문을 찾은 결과">문장 매칭</span> : null}
+            <span className={`evidence-badge is-${span.match}`}>{t(MATCH_KEY[span.match])}</span>
+            {span.derived ? (
+              <span className="evidence-derived" title={t('card.evidence.derived.title')}>
+                {t('card.evidence.derived')}
+              </span>
+            ) : null}
             <button
               type="button"
               className="evidence-quote"
               disabled={!located}
               onClick={() => onJump(span)}
-              title={located ? '원문 위치로 이동' : '원문 위치가 확정되지 않았습니다'}
+              title={located ? t('card.evidence.goTo') : t('card.evidence.noPosition')}
             >
               “{truncate(span.quote, 90)}”
             </button>
             {!located && span.candidates && span.candidates.length > 0 ? (
               <div className="evidence-candidates">
-                후보 {span.candidates.length}곳:
+                {t('card.evidence.candidates', { count: span.candidates.length })}
                 {span.candidates.slice(0, 8).map((candidate, i) => (
                   <button
                     key={`${candidate.start}-${i}`}
                     type="button"
                     className="link-button"
                     onClick={() => onChoose(index, candidate)}
-                    title="이 위치로 확정"
+                    title={t('card.evidence.pickCandidate')}
                   >
                     #{i + 1} ({candidate.start})
                   </button>
                 ))}
               </div>
             ) : null}
-            <button type="button" className="icon-button evidence-remove" onClick={() => onRemove(index)} aria-label="근거 제거" title="근거 제거">
+            <button
+              type="button"
+              className="icon-button evidence-remove"
+              onClick={() => onRemove(index)}
+              aria-label={t('card.evidence.remove')}
+              title={t('card.evidence.remove')}
+            >
               &#10005;
             </button>
           </li>
@@ -93,6 +105,7 @@ function EvidenceList({
 }
 
 export function AnnotationCard(props: CardProps) {
+  const t = useT();
   const { annotation, selected, dependency, structuralWarnings } = props;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -116,10 +129,14 @@ export function AnnotationCard(props: CardProps) {
   };
 
   const schemeLabel = node?.currentValue.type === 'RA' ? schemeShortName(node.currentValue.schemeApplication, schemeCatalog) : null;
+  const issueTypeLabel = t('card.type.issue');
   const title = node
     ? node.currentValue.type === 'RA'
-      ? `RA · ${schemeLabel ?? 'scheme 없음'}${node.currentValue.schemeApplication?.status === 'needs_review' ? ' (재검토 필요)' : ''}`
-      : node.currentValue.text || `(${TYPE_LABEL[node.currentValue.type]})`
+      ? t('card.ra.title', {
+          scheme: schemeLabel ?? t('card.ra.noScheme'),
+          review: node.currentValue.schemeApplication?.status === 'needs_review' ? t('card.ra.needsReview') : '',
+        })
+      : node.currentValue.text || `(${typeLabel(node.currentValue.type, issueTypeLabel)})`
     : (() => {
         const source = props.nodeText(edge!.currentValue.source);
         const target = props.nodeText(edge!.currentValue.target);
@@ -134,32 +151,53 @@ export function AnnotationCard(props: CardProps) {
     >
       <button type="button" className="annotation-card-main" onClick={props.onSelect} aria-pressed={selected}>
         <span className="annotation-badges">
-          <span className={`badge badge-origin is-${annotation.origin}`}>{ORIGIN_LABEL[annotation.origin]}</span>
-          <span className={`badge badge-status is-${status}`}>{STATUS_LABEL[status]}</span>
-          {node ? <span className={`badge badge-type is-${node.currentValue.type}`}>{TYPE_LABEL[node.currentValue.type]}</span> : <span className="badge badge-type is-edge">관계</span>}
-          {annotation.note ? <span className="badge badge-note" title={annotation.note}>비고</span> : null}
+          <span className={`badge badge-origin is-${annotation.origin}`}>{t(ORIGIN_KEY[annotation.origin])}</span>
+          <span className={`badge badge-status is-${status}`}>{t(STATUS_KEY[status])}</span>
+          {node ? (
+            <span className={`badge badge-type is-${node.currentValue.type}`}>
+              {typeLabel(node.currentValue.type, issueTypeLabel)}
+            </span>
+          ) : (
+            <span className="badge badge-type is-edge">{t('card.type.edge')}</span>
+          )}
+          {annotation.note ? (
+            <span className="badge badge-note" title={annotation.note}>
+              {t('card.note')}
+            </span>
+          ) : null}
         </span>
         <span className="annotation-title">{title}</span>
       </button>
 
-      {node?.currentValue.summary ? <div className="annotation-summary">요약: {node.currentValue.summary}</div> : null}
+      {node?.currentValue.summary ? (
+        <div className="annotation-summary">{t('card.summary', { summary: node.currentValue.summary })}</div>
+      ) : null}
       {node?.currentValue.type === 'ISSUE' && node.currentValue.issueRef ? (
         <div className="annotation-summary">
-          분류: {findIssue(issueCatalog, node.currentValue.issueRef.issueId)?.label ?? node.currentValue.issueRef.issueId}
+          {t('card.issueClass', {
+            label:
+              issueLabel(findIssue(issueCatalog, node.currentValue.issueRef.issueId)) || node.currentValue.issueRef.issueId,
+          })}
         </div>
       ) : null}
       {node?.currentValue.type === 'RA' && node.currentValue.schemeApplication?.rationale ? (
-        <div className="annotation-summary">적용 이유: {truncate(node.currentValue.schemeApplication.rationale, 140)}</div>
+        <div className="annotation-summary">
+          {t('card.rationale', { rationale: truncate(node.currentValue.schemeApplication.rationale, 140) })}
+        </div>
       ) : null}
       {node?.currentValue.type === 'ISSUE' && node.currentValue.issueRef?.selectionReason ? (
-        <div className="annotation-summary">선택 이유: {truncate(node.currentValue.issueRef.selectionReason, 140)}</div>
+        <div className="annotation-summary">
+          {t('card.selectionReason', { reason: truncate(node.currentValue.issueRef.selectionReason, 140) })}
+        </div>
       ) : null}
-      {annotation.evidence.some((span) => span.reviewReason) ? <div className="annotation-warning">본문 수정 후 근거 재검토 필요</div> : null}
+      {annotation.evidence.some((span) => span.reviewReason) ? (
+        <div className="annotation-warning">{t('card.evidenceReview')}</div>
+      ) : null}
 
       {annotation.note ? <div className="annotation-note">{annotation.note}</div> : null}
 
       {node && status === 'modified' && node.currentValue.type !== 'RA' && node.originalValue.text !== node.currentValue.text ? (
-        <div className="annotation-original">원안: {truncate(node.originalValue.text, 160)}</div>
+        <div className="annotation-original">{t('card.original', { text: truncate(node.originalValue.text, 160) })}</div>
       ) : null}
 
       {edge ? (
@@ -173,9 +211,10 @@ export function AnnotationCard(props: CardProps) {
                 className={`link-button ${info.accepted ? '' : 'is-muted'}`}
                 onClick={() => props.onFocusNode(edge.currentValue[end])}
               >
-                {end === 'source' ? '전제' : '결론'}: {info.type ? `[${TYPE_LABEL[info.type]}] ` : ''}
+                {end === 'source' ? t('card.edge.source') : t('card.edge.target')}:{' '}
+                {info.type ? `[${typeLabel(info.type, issueTypeLabel)}] ` : ''}
                 {truncate(info.text, 60)}
-                {info.accepted ? '' : ' (미확정)'}
+                {info.accepted ? '' : t('card.edge.unconfirmed')}
               </button>
             );
           })}
@@ -184,8 +223,8 @@ export function AnnotationCard(props: CardProps) {
 
       {dependency && !dependency.ready ? (
         <div className="annotation-warning">
-          끝점 노드 {dependency.missingNodeIds.length}개가 아직 확정 그래프에 없습니다.
-          {dependency.unresolvableNodeIds.length > 0 ? ' (제안에도 없어 수락할 수 없습니다)' : ''}
+          {t('card.dependency', { count: dependency.missingNodeIds.length })}
+          {dependency.unresolvableNodeIds.length > 0 ? t('card.dependency.unresolvable') : ''}
         </div>
       ) : null}
 
@@ -193,7 +232,10 @@ export function AnnotationCard(props: CardProps) {
         <ul className="annotation-warning-list">
           {structuralWarnings.map((warning, index) => (
             <li key={index} className={`is-${warning.level}`}>
-              {warning.level === 'error' ? '오류' : '경고'}: {warning.message}
+              {t('card.warning.line', {
+                level: warning.level === 'error' ? t('card.warning.error') : t('card.warning.warning'),
+                message: warning.message,
+              })}
             </li>
           ))}
         </ul>
@@ -213,7 +255,7 @@ export function AnnotationCard(props: CardProps) {
             onChange={(event) => setDraft(event.target.value)}
             rows={3}
             autoFocus
-            aria-label="수정할 텍스트"
+            aria-label={t('card.editor.aria')}
             onKeyDown={(event) => {
               if (event.key === 'Escape') setEditing(false);
               if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -232,17 +274,17 @@ export function AnnotationCard(props: CardProps) {
                 setEditing(false);
               }}
             >
-              수정 후 수락
+              {t('card.acceptEdited')}
             </button>
             <button type="button" onClick={() => setEditing(false)}>
-              취소
+              {t('card.cancel')}
             </button>
           </div>
         </div>
       ) : (
         <div className="annotation-actions">
           {annotation.origin === 'human' ? (
-            <span className="annotation-hint">사람이 만든 항목입니다. 그래프에서 직접 편집·삭제하세요.</span>
+            <span className="annotation-hint">{t('card.humanHint')}</span>
           ) : status === 'pending' ? (
             <>
               <button
@@ -252,36 +294,36 @@ export function AnnotationCard(props: CardProps) {
                 onClick={() => props.onAccept({ withDependencies: true, withConnectableEdges: true })}
                 title={
                   dependency && !dependency.ready
-                    ? '필요한 끝점 노드 제안을 함께 수락합니다'
+                    ? t('card.accept.titleWithNodes')
                     : node
-                      ? '수락하고, 양 끝이 확정된 관계 제안도 함께 수락합니다'
-                      : '관계를 확정 그래프에 추가합니다'
+                      ? t('card.accept.titleNode')
+                      : t('card.accept.titleEdge')
                 }
               >
-                {dependency && !dependency.ready ? '노드와 함께 수락' : '수락'}
+                {dependency && !dependency.ready ? t('card.acceptWithNodes') : t('card.accept')}
               </button>
               {node && node.currentValue.type !== 'RA' ? (
                 <button type="button" onClick={startEdit}>
-                  수정 후 수락
+                  {t('card.acceptEdited')}
                 </button>
               ) : null}
               <button type="button" className="is-danger" onClick={props.onReject}>
-                거절
+                {t('card.reject')}
               </button>
             </>
           ) : (
             <>
               {inGraph && node && node.currentValue.type !== 'RA' ? (
                 <button type="button" onClick={startEdit}>
-                  텍스트 수정
+                  {t('card.editText')}
                 </button>
               ) : null}
               <button type="button" onClick={props.onReset}>
-                미검토로
+                {t('card.reset')}
               </button>
               {inGraph ? (
                 <button type="button" className="is-danger" onClick={props.onReject}>
-                  거절
+                  {t('card.reject')}
                 </button>
               ) : null}
             </>

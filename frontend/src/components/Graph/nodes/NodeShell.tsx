@@ -1,7 +1,8 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { ArgumentNodeType } from '../../../types/argument';
 import type { AnnotationOrigin, AnnotationStatus } from '../../../types/annotation';
-import { STATUS_LABEL } from '../../../types/annotation';
+import { STATUS_KEY } from '../../../types/annotation';
+import { useT } from '../../../i18n';
 import type { SchemeStatus } from '../../../types/scheme';
 
 export interface ArgumentNodeData extends Record<string, unknown> {
@@ -63,14 +64,15 @@ export function NodeShell({
   origin,
   hasEvidence,
 }: NodeShellProps) {
+  const t = useT();
   // 상태 배지: 색뿐 아니라 텍스트로도 구분한다.
   const statusBadge =
     draft && status
-      ? `초안 · ${STATUS_LABEL[status]}`
+      ? t('node.status.draft', { status: t(STATUS_KEY[status]) })
       : status === 'modified'
-        ? '수정 수락'
+        ? t('node.status.modifiedAccepted')
         : origin === 'ai' && status === 'accepted'
-          ? 'AI 수락'
+          ? t('node.status.aiAccepted')
           : null;
 
   const trimmedSummary = summary?.trim();
@@ -83,7 +85,7 @@ export function NodeShell({
   return (
     <div
       className={`arg-node ${className} ${selected ? 'is-selected' : ''} ${draft ? `is-draft is-draft-${status ?? 'pending'}` : ''}`}
-      title={text ? `${text}\n\n(클릭 또는 Enter: 본문 보기 · 수정은 상세 패널의 [수정])` : undefined}
+      title={text ? t('node.title.hint', { text }) : undefined}
     >
       <Handle type="source" position={Position.Top} className="arg-handle arg-handle-source" />
 
@@ -96,16 +98,20 @@ export function NodeShell({
       {statusBadge ? (
         <div className={`arg-node-status is-${status ?? 'pending'}`}>
           {statusBadge}
-          {hasEvidence === false && origin === 'ai' ? <span className="arg-node-noevidence" title="근거 위치 미확인"> · 근거?</span> : null}
+          {hasEvidence === false && origin === 'ai' ? (
+            <span className="arg-node-noevidence" title={t('node.noEvidence.title')}>
+              {t('node.noEvidence')}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
       <div className={`arg-node-text ${trimmedSummary ? 'is-summary' : 'is-fallback'}`}>
-        {display || <span className="arg-node-placeholder">{placeholder ?? '(빈 텍스트)'}</span>}
+        {display || <span className="arg-node-placeholder">{placeholder ?? t('node.placeholder')}</span>}
       </div>
       {trimmedSummary && summaryStale ? (
-        <div className="arg-node-stale" title="요약을 만든 뒤 본문이 바뀌었습니다">
-          요약 갱신 필요
+        <div className="arg-node-stale" title={t('node.stale.title')}>
+          {t('node.stale')}
         </div>
       ) : null}
 

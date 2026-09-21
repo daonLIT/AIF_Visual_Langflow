@@ -22,6 +22,7 @@ import { sameValue, schemeContent } from '../types/scheme';
 import { afterTextEdit, issueAcceptProblem } from './graphRules';
 import { generateEdgeId } from '../utils/generateEdgeId';
 import { validateCase } from '../validation/graphValidator';
+import { t } from '../i18n';
 
 export interface ReviewSnapshot {
   caseData: ArgumentCase;
@@ -199,7 +200,7 @@ function revertEdgeAnnotations(annotations: Annotation[], removedEdgeIds: number
       annotation.acceptedEdgeId !== null &&
       removed.has(annotation.acceptedEdgeId)
     ) {
-      events.push(makeEvent('reset', { annotationId: annotation.id, detail: '끝점 노드가 확정 그래프에서 빠져 미검토로 되돌림' }));
+      events.push(makeEvent('reset', { annotationId: annotation.id, detail: t('review.event.resetEndpoint') }));
       return { ...annotation, status: 'pending', acceptedEdgeId: null, updatedAt: at() };
     }
     return annotation;
@@ -219,7 +220,7 @@ export interface AcceptOptions {
 
 export function acceptAnnotation(snapshot: ReviewSnapshot, id: string, options: AcceptOptions = {}): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  if (!annotation) return { snapshot, events: [], warnings: [], error: t('review.error.notFound') };
   if (annotation.kind === 'node') return acceptNode(snapshot, annotation, options);
   return acceptEdge(snapshot, annotation, options);
 }
@@ -232,7 +233,7 @@ function acceptNode(snapshot: ReviewSnapshot, annotation: NodeAnnotation, option
   if (patch.text !== undefined) patch.text = patch.text.trim();
   const value = applyNodePatch(annotation.currentValue, patch);
   if (!value.text && (value.type === 'I' || value.type === 'ISSUE')) {
-    return { snapshot, events, warnings, error: '빈 텍스트로는 수락할 수 없습니다.' };
+    return { snapshot, events, warnings, error: t('review.error.emptyText') };
   }
   const issueProblem = issueAcceptProblem(snapshot.caseData, annotation.nodeId, value);
   if (issueProblem) return { snapshot, events, warnings, error: issueProblem };
@@ -286,7 +287,7 @@ function acceptEdge(snapshot: ReviewSnapshot, annotation: EdgeAnnotation, option
         snapshot,
         events,
         warnings,
-        error: `끝점 노드가 없어 관계를 수락할 수 없습니다: ${dependency.unresolvableNodeIds.join(', ')}`,
+        error: t('review.error.unresolvableEndpoints', { ids: dependency.unresolvableNodeIds.join(', ') }),
       };
     }
     if (!options.withDependencies) {
@@ -294,7 +295,7 @@ function acceptEdge(snapshot: ReviewSnapshot, annotation: EdgeAnnotation, option
         snapshot,
         events,
         warnings,
-        error: `먼저 끝점 노드 제안을 수락해야 합니다 (${dependency.missingNodeIds.length}개 미수락).`,
+        error: t('review.error.acceptEndpointsFirst', { count: dependency.missingNodeIds.length }),
       };
     }
     for (const nodeAnnotationId of dependency.resolvableAnnotationIds) {
@@ -305,10 +306,10 @@ function acceptEdge(snapshot: ReviewSnapshot, annotation: EdgeAnnotation, option
       events.push(...outcome.events);
     }
     dependency = edgeDependency(result, annotation);
-    if (!dependency.ready) return { snapshot, events: [], warnings, error: '의존 노드를 수락하지 못했습니다.' };
+    if (!dependency.ready) return { snapshot, events: [], warnings, error: t('review.error.dependenciesFailed') };
   }
   const { source, target } = annotation.currentValue;
-  if (source === target) return { snapshot, events, warnings, error: '자기 자신을 가리키는 관계입니다.' };
+  if (source === target) return { snapshot, events, warnings, error: t('review.error.selfEdge') };
   const added = addEdgeToGraph(result, annotation);
   result = added.snapshot;
   const next: EdgeAnnotation = { ...annotation, status: 'accepted', acceptedEdgeId: added.edgeId, updatedAt: at() };
@@ -319,7 +320,7 @@ function acceptEdge(snapshot: ReviewSnapshot, annotation: EdgeAnnotation, option
 
 export function rejectAnnotation(snapshot: ReviewSnapshot, id: string): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  if (!annotation) return { snapshot, events: [], warnings: [], error: t('review.error.notFound') };
   const events: ReviewEvent[] = [];
   const warnings: string[] = [];
   let result = snapshot;
@@ -339,8 +340,8 @@ export function rejectAnnotation(snapshot: ReviewSnapshot, id: string): ReviewOu
         item.status === 'pending' &&
         (item.currentValue.source === annotation.nodeId || item.currentValue.target === annotation.nodeId)
       ) {
-        events.push(makeEvent('reject', { annotationId: item.id, runId: item.runId, detail: '끝점 노드 거절에 따른 연쇄 거절' }));
-        warnings.push(`관계 제안 ${item.id} 도 함께 거절되었습니다.`);
+        events.push(makeEvent('reject', { annotationId: item.id, runId: item.runId, detail: t('review.event.cascadeReject') }));
+        warnings.push(t('review.warning.cascadeReject', { id: item.id }));
         return { ...item, status: 'rejected', updatedAt: at() };
       }
       return item;
@@ -365,9 +366,9 @@ export function rejectAnnotation(snapshot: ReviewSnapshot, id: string): ReviewOu
 /** 미검토로 되돌리기. 확정 그래프에 있던 항목은 제거된다. */
 export function resetAnnotation(snapshot: ReviewSnapshot, id: string): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  if (!annotation) return { snapshot, events: [], warnings: [], error: t('review.error.notFound') };
   if (annotation.origin === 'human') {
-    return { snapshot, events: [], warnings: [], error: '사람이 만든 항목은 미검토 상태가 없습니다. 그래프에서 삭제하세요.' };
+    return { snapshot, events: [], warnings: [], error: t('review.error.humanNoPending') };
   }
   const events: ReviewEvent[] = [];
   let result = snapshot;
@@ -402,10 +403,10 @@ export function resetAnnotation(snapshot: ReviewSnapshot, id: string): ReviewOut
  */
 export function setDraftValue(snapshot: ReviewSnapshot, id: string, patch: NodeFieldsPatch): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation || annotation.kind !== 'node') return { snapshot, events: [], warnings: [], error: '노드 제안이 아닙니다.' };
+  if (!annotation || annotation.kind !== 'node') return { snapshot, events: [], warnings: [], error: t('review.error.notNodeProposal') };
   const value = applyNodePatch(annotation.currentValue, patch);
   if (!value.text.trim() && (value.type === 'I' || value.type === 'ISSUE')) {
-    return { snapshot, events: [], warnings: [], error: '본문은 비울 수 없습니다.' };
+    return { snapshot, events: [], warnings: [], error: t('review.error.emptyBody') };
   }
   const inGraph = isInAcceptedGraph(annotation);
   if (inGraph && patch.issueRef) {
@@ -453,7 +454,7 @@ export function setDraftPosition(snapshot: ReviewSnapshot, id: string, x: number
 
 export function linkEvidence(snapshot: ReviewSnapshot, id: string, span: EvidenceSpan): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  if (!annotation) return { snapshot, events: [], warnings: [], error: t('review.error.notFound') };
   const next: Annotation = { ...annotation, evidence: [...annotation.evidence, span], updatedAt: at() } as Annotation;
   return {
     snapshot: { ...snapshot, annotations: replace(snapshot.annotations, next) },
@@ -464,7 +465,7 @@ export function linkEvidence(snapshot: ReviewSnapshot, id: string, span: Evidenc
 
 export function unlinkEvidence(snapshot: ReviewSnapshot, id: string, index: number): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  if (!annotation) return { snapshot, events: [], warnings: [], error: t('review.error.notFound') };
   const evidence = annotation.evidence.filter((_, i) => i !== index);
   const next = { ...annotation, evidence, updatedAt: at() } as Annotation;
   return {
@@ -482,14 +483,14 @@ export function resolveEvidenceCandidate(
   candidate: { start: number; end: number },
 ): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  if (!annotation) return { snapshot, events: [], warnings: [], error: t('review.error.notFound') };
   const evidence = annotation.evidence.map((span, i) =>
     i === index ? { ...span, start: candidate.start, end: candidate.end, match: 'manual' as const, candidates: [], reviewReason: null } : span,
   );
   const next = { ...annotation, evidence, updatedAt: at() } as Annotation;
   return {
     snapshot: { ...snapshot, annotations: replace(snapshot.annotations, next) },
-    events: [makeEvent('evidence-link', { annotationId: id, runId: annotation.runId, detail: '후보 위치 선택' })],
+    events: [makeEvent('evidence-link', { annotationId: id, runId: annotation.runId, detail: t('review.event.candidateChosen') })],
     warnings: [],
   };
 }
@@ -507,11 +508,11 @@ export interface BulkAcceptPreview {
 /** 본문 수정으로 붙은 근거 재검토 표시를 확인 완료로 지운다. */
 export function clearEvidenceReview(snapshot: ReviewSnapshot, id: string): ReviewOutcome {
   const annotation = findAnnotation(snapshot.annotations, id);
-  if (!annotation) return { snapshot, events: [], warnings: [], error: '제안을 찾을 수 없습니다.' };
+  if (!annotation) return { snapshot, events: [], warnings: [], error: t('review.error.notFound') };
   const next = { ...annotation, evidence: annotation.evidence.map((span) => ({ ...span, reviewReason: null })), updatedAt: at() } as Annotation;
   return {
     snapshot: { ...snapshot, annotations: replace(snapshot.annotations, next) },
-    events: [makeEvent('evidence-link', { annotationId: id, runId: annotation.runId, detail: '근거 재검토 확인' })],
+    events: [makeEvent('evidence-link', { annotationId: id, runId: annotation.runId, detail: t('review.event.evidenceConfirmed') })],
     warnings: [],
   };
 }
@@ -567,9 +568,9 @@ export function importProposals(
     ...snapshot.annotations.filter((a): a is NodeAnnotation => a.kind === 'node').map((a) => a.nodeId),
   ]);
   for (const proposal of proposals) {
-    if (existingIds.has(proposal.id)) return { snapshot, duplicates: new Map(), error: `이미 불러온 제안입니다: ${proposal.id}` };
+    if (existingIds.has(proposal.id)) return { snapshot, duplicates: new Map(), error: t('review.error.alreadyImported', { id: proposal.id }) };
     if (proposal.kind === 'node' && existingNodeIds.has(proposal.nodeId)) {
-      return { snapshot, duplicates: new Map(), error: `노드 ID 충돌: ${proposal.nodeId}` };
+      return { snapshot, duplicates: new Map(), error: t('review.error.nodeIdConflict', { nodeId: proposal.nodeId }) };
     }
   }
   // 명시적 비교: 확정 그래프에 같은 문장의 노드가 있으면 표시한다.

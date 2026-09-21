@@ -7,19 +7,20 @@ import type { ArgumentNodeType } from '../../types/argument';
 import { AnnotationCard } from './AnnotationCard';
 import { BulkAcceptDialog } from './BulkAcceptDialog';
 import { IssueSelectionReport } from './IssueSelectionReport';
+import { useLang, useT, type MessageKey } from '../../i18n';
 
-const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
-  { value: 'all', label: '전체' },
-  { value: 'pending', label: '미검토' },
-  { value: 'accepted', label: '수락' },
-  { value: 'modified', label: '수정 수락' },
-  { value: 'rejected', label: '거절' },
+const STATUS_FILTERS: Array<{ value: StatusFilter; labelKey: MessageKey }> = [
+  { value: 'all', labelKey: 'review.filter.all' },
+  { value: 'pending', labelKey: 'review.filter.pending' },
+  { value: 'accepted', labelKey: 'review.filter.accepted' },
+  { value: 'modified', labelKey: 'review.filter.modified' },
+  { value: 'rejected', labelKey: 'review.filter.rejected' },
 ];
 
-const KIND_FILTERS: Array<{ value: KindFilter; label: string }> = [
-  { value: 'all', label: '노드+관계' },
-  { value: 'node', label: '노드' },
-  { value: 'edge', label: '관계' },
+const KIND_FILTERS: Array<{ value: KindFilter; labelKey: MessageKey }> = [
+  { value: 'all', labelKey: 'review.kind.all' },
+  { value: 'node', labelKey: 'review.kind.node' },
+  { value: 'edge', labelKey: 'review.kind.edge' },
 ];
 
 /** 노드 ID 의 시퀀스 번호로 정렬해 제안 순서를 유지한다. */
@@ -29,6 +30,8 @@ function sequenceOf(id: string): number {
 }
 
 export function AnnotationPanel() {
+  const t = useT();
+  const lang = useLang();
   const caseData = useGraphStore((state) => state.caseData);
   const annotations = useGraphStore((state) => state.annotations);
   const edgeIdHighWater = useGraphStore((state) => state.edgeIdHighWater);
@@ -66,13 +69,15 @@ export function AnnotationPanel() {
 
   const runOptions = useMemo(
     () => [
-      ...(annotations.some((a) => a.origin === 'human') ? [{ runId: 'human', label: '사람 편집' }] : []),
+      ...(annotations.some((a) => a.origin === 'human') ? [{ runId: 'human', label: t('review.run.human') }] : []),
       ...runs.map((run) => ({
         runId: run.runId,
-        label: `${new Date(run.createdAt).toLocaleString()} · ${run.status}${run.mode === 'mock' ? ' (mock)' : ''}${run.stale ? ' · 원문 변경됨' : ''}`,
+        label: `${new Date(run.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'ko-KR')} · ${run.status}${
+          run.mode === 'mock' ? t('review.run.mock') : ''
+        }${run.stale ? t('review.run.staleTag') : ''}`,
       })),
     ],
-    [runs, annotations],
+    [runs, annotations, t, lang],
   );
 
   const visible = useMemo(() => {
@@ -131,26 +136,26 @@ export function AnnotationPanel() {
   if (!caseData) {
     return (
       <aside className="annotation-panel">
-        <div className="judgment-empty">판결문을 입력하고 AI 분석을 실행하면 제안이 여기에 표시됩니다.</div>
+        <div className="judgment-empty">{t('review.empty')}</div>
       </aside>
     );
   }
 
   return (
-    <aside className="annotation-panel" aria-label="AI 제안 검토">
+    <aside className="annotation-panel" aria-label={t('review.aria')}>
       <header className="annotation-header">
-        <h2>AI 제안 검토</h2>
+        <h2>{t('review.title')}</h2>
         <div className="annotation-counts">
-          <span className="badge badge-status is-pending">미검토 {counts.pending}</span>
-          <span className="badge badge-status is-accepted">수락 {counts.accepted}</span>
-          <span className="badge badge-status is-rejected">거절 {counts.rejected}</span>
+          <span className="badge badge-status is-pending">{t('review.count.pending', { count: counts.pending })}</span>
+          <span className="badge badge-status is-accepted">{t('review.count.accepted', { count: counts.accepted })}</span>
+          <span className="badge badge-status is-rejected">{t('review.count.rejected', { count: counts.rejected })}</span>
         </div>
       </header>
 
       {notice ? (
         <div className="annotation-notice" role="status">
           <span>{notice}</span>
-          <button type="button" className="icon-button" onClick={() => setNotice(null)} aria-label="알림 닫기">
+          <button type="button" className="icon-button" onClick={() => setNotice(null)} aria-label={t('review.notice.close')}>
             &#10005;
           </button>
         </div>
@@ -158,7 +163,8 @@ export function AnnotationPanel() {
 
       {latestFailed && (!activeRun || latestFailed.runId === runs[0]?.runId) ? (
         <div className="annotation-error" role="alert">
-          <strong>분석 {latestFailed.status === 'failed' ? '실패' : '중단'}</strong>: {latestFailed.error?.message}
+          <strong>{latestFailed.status === 'failed' ? t('review.run.failed') : t('review.run.interrupted')}</strong>:{' '}
+          {latestFailed.error?.message}
           {latestFailed.error?.details?.length ? (
             <ul>
               {latestFailed.error.details.slice(0, 6).map((detail, index) => (
@@ -166,24 +172,24 @@ export function AnnotationPanel() {
               ))}
             </ul>
           ) : null}
-          <div className="annotation-hint">기존 편집 내용은 그대로 유지됩니다.</div>
+          <div className="annotation-hint">{t('review.run.keepEdits')}</div>
         </div>
       ) : null}
 
       {staleRuns.map((run) => (
         <div key={run.runId} className="annotation-notice is-stale">
-          <span>실행 {run.runId} 결과가 원문 변경 뒤에 도착했습니다. 반영하려면 눌러 주세요.</span>
+          <span>{t('review.stale', { runId: run.runId })}</span>
           <button type="button" onClick={() => importStaleRun(run.runId)}>
-            제안으로 불러오기
+            {t('review.stale.import')}
           </button>
         </div>
       ))}
 
       <div className="annotation-toolbar">
         <label className="annotation-run">
-          실행
+          {t('review.run')}
           <select value={activeRunId ?? ''} onChange={(event) => setActiveRun(event.target.value || null)}>
-            <option value="">모든 실행</option>
+            <option value="">{t('review.run.all')}</option>
             {runOptions.map((option) => (
               <option key={option.runId} value={option.runId}>
                 {option.label}
@@ -191,7 +197,7 @@ export function AnnotationPanel() {
             ))}
           </select>
         </label>
-        <div className="annotation-filters" role="group" aria-label="상태 필터">
+        <div className="annotation-filters" role="group" aria-label={t('review.filter.statusAria')}>
           {STATUS_FILTERS.map((filter) => (
             <button
               key={filter.value}
@@ -200,11 +206,11 @@ export function AnnotationPanel() {
               aria-pressed={statusFilter === filter.value}
               onClick={() => setStatusFilter(filter.value)}
             >
-              {filter.label}
+              {t(filter.labelKey)}
             </button>
           ))}
         </div>
-        <div className="annotation-filters" role="group" aria-label="종류 필터">
+        <div className="annotation-filters" role="group" aria-label={t('review.filter.kindAria')}>
           {KIND_FILTERS.map((filter) => (
             <button
               key={filter.value}
@@ -213,12 +219,12 @@ export function AnnotationPanel() {
               aria-pressed={kindFilter === filter.value}
               onClick={() => setKindFilter(filter.value)}
             >
-              {filter.label}
+              {t(filter.labelKey)}
             </button>
           ))}
           <label className="chip-toggle">
             <input type="checkbox" checked={showRejected} onChange={(event) => setShowRejected(event.target.checked)} />
-            거절도 그래프에 표시
+            {t('review.showRejected')}
           </label>
         </div>
         <div className="annotation-bulk">
@@ -231,9 +237,9 @@ export function AnnotationPanel() {
               if (next) setPreview(next);
             }}
           >
-            미검토 전체 수락…
+            {t('review.bulkOpen')}
           </button>
-          <span className="annotation-hint">세부 쟁점은 확정 그래프에서 중복 없이 최대 3개</span>
+          <span className="annotation-hint">{t('review.bulkHint')}</span>
         </div>
       </div>
 
@@ -241,7 +247,7 @@ export function AnnotationPanel() {
 
       {visible.length === 0 ? (
         <div className="judgment-empty">
-          {annotations.length === 0 ? '아직 제안이 없습니다. 상단의 [AI 분석]을 실행하세요.' : '필터에 맞는 제안이 없습니다.'}
+          {annotations.length === 0 ? t('review.noProposals') : t('review.noMatches')}
         </div>
       ) : (
         <ul className="annotation-list">

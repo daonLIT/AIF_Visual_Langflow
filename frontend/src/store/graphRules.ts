@@ -11,6 +11,7 @@ import { applyNodePatch } from '../types/argument';
 import type { Annotation, NodeAnnotation } from '../types/annotation';
 import { MAX_SELECTED_ISSUES, markSchemeNeedsReview } from '../types/scheme';
 import { textHash } from '../utils/textHash';
+import { t } from '../i18n';
 
 const nowIso = () => new Date().toISOString();
 
@@ -87,8 +88,13 @@ export function afterTextEdit(
   annotations: Annotation[],
   nodeId: string,
 ): { caseData: ArgumentCase; annotations: Annotation[] } {
-  const withEvidence = flagEvidenceForReview(annotations, nodeId, '노드 본문을 수정했습니다. 근거 인용이 여전히 맞는지 확인하세요.');
-  const flagged = flagSchemesForReview(caseData, withEvidence, adjacentRaIds(caseData, withEvidence, nodeId), `연결된 노드 ${nodeId} 의 본문이 바뀜`);
+  const withEvidence = flagEvidenceForReview(annotations, nodeId, t('rules.review.textEdited'));
+  const flagged = flagSchemesForReview(
+    caseData,
+    withEvidence,
+    adjacentRaIds(caseData, withEvidence, nodeId),
+    t('rules.review.neighborTextChanged', { nodeId }),
+  );
   return { caseData: flagged.caseData, annotations: flagged.annotations };
 }
 
@@ -111,9 +117,9 @@ export function issueSelectionProblems(nodes: ArgumentNode[]): string[] {
   const ids = acceptedIssueIds(nodes);
   const problems: string[] = [];
   const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
-  if (duplicates.length > 0) problems.push(`같은 세부 쟁점이 중복 선택됨: ${duplicates.join(', ')}`);
+  if (duplicates.length > 0) problems.push(t('rules.issue.duplicate', { ids: duplicates.join(', ') }));
   const distinct = new Set(ids).size;
-  if (distinct > MAX_SELECTED_ISSUES) problems.push(`세부 쟁점은 최대 ${MAX_SELECTED_ISSUES}개입니다 (현재 ${distinct}개)`);
+  if (distinct > MAX_SELECTED_ISSUES) problems.push(t('rules.issue.tooMany', { max: MAX_SELECTED_ISSUES, count: distinct }));
   return problems;
 }
 
@@ -130,9 +136,11 @@ export function issueOptionState(
 ): IssueOptionState {
   const acceptedNode = caseData.nodes.find((node) => node.id === nodeId);
   const others = acceptedIssueIds(caseData.nodes, nodeId);
-  if (others.includes(issueId)) return { disabled: true, reason: '확정 그래프에 이미 선택됨' };
+  if (others.includes(issueId)) return { disabled: true, reason: t('issue.option.alreadyAccepted') };
   if (acceptedNode) {
-    if (new Set([...others, issueId]).size > MAX_SELECTED_ISSUES) return { disabled: true, reason: `최대 ${MAX_SELECTED_ISSUES}개` };
+    if (new Set([...others, issueId]).size > MAX_SELECTED_ISSUES) {
+      return { disabled: true, reason: t('issue.option.max', { max: MAX_SELECTED_ISSUES }) };
+    }
     return { disabled: false };
   }
   const draft = annotations.find((item): item is NodeAnnotation => item.kind === 'node' && item.nodeId === nodeId);
@@ -146,7 +154,7 @@ export function issueOptionState(
         item.currentValue.type === 'ISSUE' &&
         item.currentValue.issueRef?.issueId === issueId,
     );
-    if (sameRun) return { disabled: true, reason: '같은 분석 결과에 이미 선택됨' };
+    if (sameRun) return { disabled: true, reason: t('issue.option.sameRun') };
   }
   return { disabled: false };
 }
@@ -156,10 +164,10 @@ export function issueAcceptProblem(caseData: ArgumentCase, nodeId: string, value
   if (value.type !== 'ISSUE' || !value.issueRef?.issueId) return null;
   const others = acceptedIssueIds(caseData.nodes, nodeId);
   if (others.includes(value.issueRef.issueId)) {
-    return `세부 쟁점 ${value.issueRef.issueId} 는 확정 그래프에 이미 있습니다 (한 사건에서 중복 선택 불가).`;
+    return t('rules.issue.alreadyAccepted', { issueId: value.issueRef.issueId });
   }
   if (new Set([...others, value.issueRef.issueId]).size > MAX_SELECTED_ISSUES) {
-    return `확정 그래프의 세부 쟁점은 최대 ${MAX_SELECTED_ISSUES}개입니다. 다른 쟁점을 먼저 거절하거나 분류를 바꾸세요.`;
+    return t('rules.issue.maxAccepted', { max: MAX_SELECTED_ISSUES });
   }
   return null;
 }
@@ -187,10 +195,10 @@ export function expectationFor(nodeId: string, content: NodeContent): SummaryReq
 
 /** 이 AI 요약을 지금 반영해도 되는지. 본문이 바뀌었거나 요청 뒤 요약이 바뀌었으면 거절 사유를 준다. */
 export function summaryApplyProblem(current: NodeContent, generated: GeneratedSummary, expected: SummaryRequestExpectation | undefined): string | null {
-  if (textHash(current.text) !== generated.textHash) return '요청 뒤 본문이 바뀌어 반영하지 않았습니다';
-  if (!expected) return '요청 기록이 없습니다';
+  if (textHash(current.text) !== generated.textHash) return t('rules.summary.textChanged');
+  if (!expected) return t('rules.summary.noRequest');
   if ((current.summary ?? null) !== expected.summary || (current.summaryOrigin ?? null) !== expected.summaryOrigin) {
-    return '요청 뒤 요약이 바뀌어(사람 수정 등) 덮어쓰지 않았습니다';
+    return t('rules.summary.summaryChanged');
   }
   return null;
 }
@@ -213,7 +221,7 @@ export function applyGeneratedSummaries(
     const proposal = nextAnnotations.find((candidate): candidate is NodeAnnotation => candidate.kind === 'node' && candidate.nodeId === item.nodeId);
     const current: NodeContent | undefined = node ?? proposal?.currentValue;
     if (!current) {
-      skipped.push({ nodeId: item.nodeId, reason: '노드가 없습니다' });
+      skipped.push({ nodeId: item.nodeId, reason: t('rules.summary.noNode') });
       continue;
     }
     const problem = summaryApplyProblem(current, item, expectedById.get(item.nodeId));

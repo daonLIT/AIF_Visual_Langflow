@@ -303,5 +303,39 @@ class EvidenceVerifyTest(unittest.TestCase):
             self.assertFalse(results[2]["valid"])  # surrogate pair 중간
 
 
+class LanguageTest(unittest.TestCase):
+    """Accept-Language 로 오류 문구 언어가 정해진다 (지원: ko, en · 기본 ko)."""
+
+    def test_error_messages_follow_accept_language(self):
+        with make_client() as client:
+            korean = client.get("/api/analysis-runs/missing").json()["error"]["message"]
+            english = client.get("/api/analysis-runs/missing", headers={"Accept-Language": "en"}).json()["error"]["message"]
+            self.assertEqual(korean, "실행을 찾을 수 없습니다.")
+            self.assertEqual(english, "The run was not found.")
+
+    def test_unknown_language_falls_back_to_korean(self):
+        with make_client() as client:
+            for header in ("fr", "", "en;q=0"):
+                message = client.get("/api/analysis-runs/missing", headers={"Accept-Language": header}).json()["error"]["message"]
+                self.assertEqual(message, "실행을 찾을 수 없습니다.")
+
+    def test_quality_values_pick_the_best_supported_language(self):
+        with make_client() as client:
+            message = client.get(
+                "/api/analysis-runs/missing", headers={"Accept-Language": "fr-CA,fr;q=0.9,en-US;q=0.8,ko;q=0.5"}
+            ).json()["error"]["message"]
+            self.assertEqual(message, "The run was not found.")
+
+    def test_run_failure_message_uses_the_language_of_the_request_that_started_it(self):
+        # 실행 task 는 시작 요청의 컨텍스트를 물려받는다. 기록된 문구는 나중에 다시 만들지 않는다.
+        with make_client(transport=BadOutputTransport()) as client:
+            body = {"text": TEXT, "documentId": "doc1", "documentVersion": 1, "caseId": "SAMPLE"}
+            run_id = client.post("/api/analysis-runs", json=body, headers={"Accept-Language": "en"}).json()["runId"]
+            record = wait_terminal(client, run_id)
+            self.assertEqual(record["error"]["message"], "The graph in the Langflow result is not valid.")
+            again = client.get(f"/api/analysis-runs/{run_id}").json()
+            self.assertEqual(again["error"]["message"], record["error"]["message"])
+
+
 if __name__ == "__main__":
     unittest.main()

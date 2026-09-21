@@ -24,6 +24,7 @@ import { DocumentMatcher, rematchEvidence } from '../utils/evidence';
 import { useGraphStore, nowIso } from './graphStore';
 import { useCatalogStore } from './catalogStore';
 import { applyGeneratedSummaries, expectationFor } from './graphRules';
+import { t } from '../i18n';
 import {
   acceptAnnotation,
   clearEvidenceReview,
@@ -247,7 +248,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       upsertRun({ ...toRunRecord(server, previous), stale: false, imported: false });
       set({
         activeRunId: server.runId,
-        notice: `52개 세부 쟁점 중 판결문에 근거가 있는 항목을 찾지 못해 그래프를 만들지 않았습니다.${reason ? ` 사유: ${reason}` : ''}`,
+        notice: t('annotation.notice.noIssues') + (reason ? t('annotation.notice.noIssues.reason', { reason }) : ''),
       });
       return;
     }
@@ -259,7 +260,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       upsertRun({ ...record, stale: true, imported: false });
       set((s) => ({
         pendingProposals: { ...s.pendingProposals, [server.runId]: proposals },
-        notice: '원문이 바뀐 뒤 분석 결과가 도착했습니다. 검토 패널에서 "제안으로 불러오기"를 눌러 반영할 수 있습니다.',
+        notice: t('annotation.notice.staleResult'),
       }));
       return;
     }
@@ -305,7 +306,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
     const duplicateNotes = new Map(imported.duplicates);
     const stamped = imported.snapshot.annotations.map((annotation) =>
       duplicateNotes.has(annotation.id)
-        ? { ...annotation, note: `기존 노드 ${duplicateNotes.get(annotation.id)} 와 같은 문장` }
+        ? { ...annotation, note: t('annotation.note.duplicate', { nodeId: duplicateNotes.get(annotation.id) ?? '' }) }
         : annotation,
     ) as Annotation[];
     useGraphStore.getState().commit(imported.snapshot.caseData, { annotations: stamped });
@@ -320,12 +321,12 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         statusFilter: 'pending',
         reviewEvents: [
           ...state.reviewEvents,
-          makeEvent('run-imported', { runId: record.runId, detail: `${proposals.length}개 제안` }),
+          makeEvent('run-imported', { runId: record.runId, detail: t('annotation.event.proposals', { count: proposals.length }) }),
         ],
         dirty: true,
         notice:
           duplicateNotes.size > 0
-            ? `${duplicateNotes.size}개 제안이 기존 확정 노드와 같은 문장입니다 (카드에 표시).`
+            ? t('annotation.notice.duplicates', { count: duplicateNotes.size })
             : state.notice,
       };
     });
@@ -360,7 +361,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         handleServerRecord(server);
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) stopPolling();
-        set({ notice: `실행 상태 조회 실패: ${(error as Error).message}` });
+        set({ notice: t('annotation.error.runStatus', { message: (error as Error).message }) });
       }
     };
     pollTimer = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
@@ -398,9 +399,9 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       const hash = await sha256Hex(text);
       set((state) => ({
         document: { ...document, version, hash },
-        reviewEvents: [...state.reviewEvents, makeEvent('document-changed', { detail: `문서 버전 ${version}` })],
+        reviewEvents: [...state.reviewEvents, makeEvent('document-changed', { detail: t('annotation.event.documentVersion', { version }) })],
         dirty: true,
-        notice: '원문이 바뀌어 문서 버전이 올라갔습니다. 위치를 잃은 근거는 "재검토 필요"로 표시됩니다.',
+        notice: t('annotation.notice.documentChanged'),
       }));
     },
 
@@ -413,7 +414,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       const graph = useGraphStore.getState();
       const state = get();
       if (!graph.caseData || !graph.caseData.text.trim()) {
-        graph.setErrorMessage('먼저 판결문을 입력하세요.');
+        graph.setErrorMessage(t('annotation.error.needText'));
         return;
       }
       let document = state.document;
@@ -422,7 +423,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         document = get().document!;
       }
       if (state.runs.some((run) => run.status === 'queued' || run.status === 'running')) {
-        set({ notice: '이미 진행 중인 분석이 있습니다.' });
+        set({ notice: t('annotation.notice.alreadyRunning') });
         return;
       }
       const idempotencyKey = `${document.id}:${document.version}:${document.hash.slice(0, 16)}:${state.runs.length}`;
@@ -440,7 +441,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         else startPolling(server.runId);
       } catch (error) {
         const message = error instanceof ApiError ? `${error.message} (${error.code})` : (error as Error).message;
-        graph.setErrorMessage(`분석 요청 실패: ${message}`);
+        graph.setErrorMessage(t('annotation.error.startFailed', { message }));
       }
     },
 
@@ -458,7 +459,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         const server = await api.cancelRun(runId);
         upsertRun({ ...toRunRecord(server), status: 'cancelled' });
       } catch (error) {
-        set({ notice: `서버 취소 요청 실패: ${(error as Error).message}` });
+        set({ notice: t('annotation.error.cancelFailed', { message: (error as Error).message }) });
       }
     },
 
@@ -466,7 +467,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
       try {
         handleServerRecord(await api.getRun(runId));
       } catch (error) {
-        set({ notice: `실행 조회 실패: ${(error as Error).message}` });
+        set({ notice: t('annotation.error.fetchRunFailed', { message: (error as Error).message }) });
       }
     },
 
@@ -479,13 +480,13 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
     },
 
     importExternalRun(server) {
-      if (server.status !== 'succeeded' || !server.result) return '성공한 실행만 불러올 수 있습니다.';
-      if (server.result.outcome === 'no_issues') return '근거 있는 세부 쟁점이 선택되지 않아 불러올 제안이 없습니다.';
+      if (server.status !== 'succeeded' || !server.result) return t('annotation.import.onlySucceeded');
+      if (server.result.outcome === 'no_issues') return t('annotation.import.noIssues');
       const state = get();
-      if (!useGraphStore.getState().caseData || !state.document) return '먼저 그래프 탭에서 판결문을 입력하세요.';
-      if (state.runs.some((run) => run.runId === server.runId && run.imported)) return '이미 불러온 실행입니다.';
+      if (!useGraphStore.getState().caseData || !state.document) return t('annotation.import.needCase');
+      if (state.runs.some((run) => run.runId === server.runId && run.imported)) return t('annotation.import.already');
       if (server.documentHash !== state.document.hash) {
-        return '테스트 실행에 쓴 원문이 현재 프로젝트의 원문과 달라 불러오지 않았습니다.';
+        return t('annotation.import.textMismatch');
       }
       importRun({ ...toRunRecord(server), documentVersion: state.document.version }, server.result.annotations);
       return null;
@@ -560,22 +561,22 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
           dirty: state.dirty || result.applied.length > 0,
           reviewEvents:
             result.applied.length > 0
-              ? [...state.reviewEvents, makeEvent('summary-generated', { detail: `${result.applied.length}개 노드 AI 요약` })]
+              ? [...state.reviewEvents, makeEvent('summary-generated', { detail: t('annotation.event.summaries', { count: result.applied.length }) })]
               : state.reviewEvents,
           notice:
             skipped.length > 0 || response.missing.length > 0
               ? [
-                  result.applied.length > 0 ? `요약 ${result.applied.length}개를 반영했습니다.` : '',
-                  skipped.length > 0 ? `반영하지 않음 — ${skipped.join(' / ')}` : '',
-                  response.missing.length > 0 ? `모델이 요약하지 못한 노드 ${response.missing.length}개` : '',
+                  result.applied.length > 0 ? t('annotation.notice.summariesApplied', { count: result.applied.length }) : '',
+                  skipped.length > 0 ? t('annotation.notice.summariesSkipped', { reasons: skipped.join(' / ') }) : '',
+                  response.missing.length > 0 ? t('annotation.notice.summariesMissing', { count: response.missing.length }) : '',
                 ]
                   .filter(Boolean)
                   .join(' ')
-              : `요약 ${result.applied.length}개를 반영했습니다.`,
+              : t('annotation.notice.summariesApplied', { count: result.applied.length }),
         }));
       } catch (error) {
         const message = error instanceof ApiError ? `${error.message} (${error.code})` : (error as Error).message;
-        useGraphStore.getState().setErrorMessage(`요약 생성 실패: ${message}`);
+        useGraphStore.getState().setErrorMessage(t('annotation.error.summaryFailed', { message }));
       } finally {
         const done = new Set(items.map((item) => item.nodeId));
         set((state) => ({ summarizing: state.summarizing.filter((id) => !done.has(id)) }));
@@ -595,7 +596,10 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
           ...state.reviewEvents,
           makeEvent('bulk-accept', {
             runId: state.activeRunId ?? undefined,
-            detail: `노드 ${preview.pendingNodeIds.length} / 관계 ${preview.pendingEdgeIds.length}`,
+            detail: t('annotation.event.bulkAccept', {
+              nodes: preview.pendingNodeIds.length,
+              edges: preview.pendingEdgeIds.length,
+            }),
           }),
         ],
         dirty: true,
@@ -662,15 +666,20 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
     async saveToServer() {
       const project = get().buildProjectFile();
       if (!project) {
-        useGraphStore.getState().setErrorMessage('저장할 프로젝트가 없습니다. 판결문을 먼저 입력하세요.');
+        useGraphStore.getState().setErrorMessage(t('annotation.error.nothingToSave'));
         return;
       }
       try {
         const saved = await api.saveProject(project);
-        set({ revision: saved.revision, lastSavedAt: saved.savedAt, dirty: false, notice: `서버에 저장했습니다 (revision ${saved.revision}).` });
+        set({
+          revision: saved.revision,
+          lastSavedAt: saved.savedAt,
+          dirty: false,
+          notice: t('annotation.notice.saved', { revision: saved.revision }),
+        });
       } catch (error) {
         const message = error instanceof ApiError ? `${error.message} (${error.code})` : (error as Error).message;
-        useGraphStore.getState().setErrorMessage(`저장 실패: ${message}`);
+        useGraphStore.getState().setErrorMessage(t('annotation.error.saveFailed', { message }));
       }
     },
 
@@ -680,7 +689,7 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         await get().loadProjectFile(project);
       } catch (error) {
         const message = error instanceof ApiError ? `${error.message} (${error.code})` : (error as Error).message;
-        useGraphStore.getState().setErrorMessage(`불러오기 실패: ${message}`);
+        useGraphStore.getState().setErrorMessage(t('annotation.error.loadFailed', { message }));
       }
     },
 
@@ -723,14 +732,14 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => {
         activeRunId: project.analysisRuns.find((run) => run.imported)?.runId ?? null,
         // v1 파일을 v2 로 올렸거나 이전 형식 필드를 옮겼으면 저장이 필요하다.
         dirty:
-          source.schemaVersion !== PROJECT_SCHEMA_VERSION || annotationsMigrated || imported.warnings.some((warning) => warning.includes('이전')),
+          source.schemaVersion !== PROJECT_SCHEMA_VERSION || annotationsMigrated || imported.legacyConverted,
         lastSavedAt: project.savedAt ?? null,
       });
-      if (annotationsMigrated && !imported.warnings.some((warning) => warning.includes('scheme 카탈로그'))) {
-        set({ notice: '이전 scheme 카탈로그로 저장된 AI 제안의 scheme 을 현재 카탈로그 기준으로 옮겼습니다. 원래 scheme 은 RA 상세의 수정 이력에 있습니다.' });
+      if (annotationsMigrated && !imported.schemeCatalogMigrated) {
+        set({ notice: t('annotation.notice.schemeMigrated') });
       }
       if (hash && hash !== project.document.hash) {
-        set({ notice: '프로젝트 파일의 문서 해시가 원문과 다릅니다. 파일이 손상되었거나 수정되었을 수 있습니다.' });
+        set({ notice: t('annotation.notice.hashMismatch') });
       }
       // 아직 진행 중인 실행이 있으면 폴링 재개
       const active = project.analysisRuns.find((run) => run.status === 'queued' || run.status === 'running');

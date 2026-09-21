@@ -29,6 +29,7 @@ from starlette.routing import Route
 
 from ..services.langflow_client import LangflowError
 from ..services.pipeline.repository import PipelineError
+from ..i18n import t
 
 logger = logging.getLogger("annotation.pipeline")
 
@@ -83,12 +84,12 @@ async def _body(request: Request, model: type[BaseModel]):
     try:
         raw = await request.json()
     except json.JSONDecodeError:
-        return None, _error(400, "BAD_JSON", "JSON 본문을 해석할 수 없습니다.")
+        return None, _error(400, "BAD_JSON", t("api.bad_json"))
     try:
         return model.model_validate(raw), None
     except ValidationError as error:
         details = [f"{'.'.join(str(p) for p in item['loc'])}: {item['msg']}" for item in error.errors()]
-        return None, _error(422, "VALIDATION", "요청 본문이 올바르지 않습니다.", details)
+        return None, _error(422, "VALIDATION", t("api.validation"), details)
 
 
 def _handles_errors(handler):
@@ -146,7 +147,7 @@ async def clone_flow(request: Request) -> Response:
 async def get_draft(request: Request) -> Response:
     draft = await _service(request).get_draft(request.path_params["flow_id"])
     if draft is None:
-        return _error(404, "NOT_FOUND", "저장된 초안이 없습니다.")
+        return _error(404, "NOT_FOUND", t("api.draft_not_found"))
     return JSONResponse(draft)
 
 

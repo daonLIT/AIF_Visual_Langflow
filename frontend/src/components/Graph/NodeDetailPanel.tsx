@@ -8,15 +8,24 @@ import { nodeAnnotationOf } from '../../store/reviewLogic';
 import type { ArgumentNodeType, NodeFieldsPatch } from '../../types/argument';
 import { copyNodeContent, summaryStateOf } from '../../types/argument';
 import type { NodeAnnotation, NodeValue } from '../../types/annotation';
-import { MATCH_LABEL, ORIGIN_LABEL, STATUS_LABEL } from '../../types/annotation';
-import { MAX_SELECTED_ISSUES, sameValue, schemeContent, type IssueRef } from '../../types/scheme';
+import { MATCH_KEY, ORIGIN_KEY, STATUS_KEY } from '../../types/annotation';
+import {
+  MAX_SELECTED_ISSUES,
+  issueCategoryName,
+  issueCriteria,
+  issueLabel,
+  sameValue,
+  schemeContent,
+  type IssueRef,
+} from '../../types/scheme';
 import { SchemePanel, type NeighborNode } from './SchemePanel';
+import { useLang, useT, type MessageKey } from '../../i18n';
 
-const TYPE_TITLE: Record<ArgumentNodeType, string> = {
-  I: '진술 (I)',
-  RA: '추론 (RA)',
-  CA: '반박 (CA)',
-  ISSUE: '쟁점 (ISSUE)',
+const TYPE_TITLE_KEY: Record<ArgumentNodeType, MessageKey> = {
+  I: 'detail.type.i',
+  RA: 'detail.type.ra',
+  CA: 'detail.type.ca',
+  ISSUE: 'detail.type.issue',
 };
 
 export const SUMMARY_SOFT_LIMIT = 40;
@@ -81,6 +90,7 @@ function useNeighbors(nodeId: string | null): { premises: NeighborNode[]; conclu
 }
 
 export function NodeDetailPanel() {
+  const t = useT();
   const selected = useSelectedNode();
   const { setNodes } = useReactFlow();
   const loadCatalogs = useCatalogStore((state) => state.load);
@@ -94,15 +104,21 @@ export function NodeDetailPanel() {
   const close = () => setNodes((nodes) => nodes.map((node) => (node.selected ? { ...node, selected: false } : node)));
 
   return (
-    <aside className="node-detail" aria-label="노드 상세" key={selected.nodeId}>
+    <aside className="node-detail" aria-label={t('detail.aria')} key={selected.nodeId}>
       <NodeDetailBody selected={selected} onClose={close} />
     </aside>
   );
 }
 
-const CHANGE_LABEL = { text: '본문', summary: '요약', schemeApplication: 'scheme', issueRef: '분류' } as const;
+const CHANGE_LABEL_KEY = {
+  text: 'detail.change.text',
+  summary: 'detail.change.summary',
+  schemeApplication: 'detail.change.scheme',
+  issueRef: 'detail.change.issueRef',
+} as const satisfies Record<string, MessageKey>;
 
 function NodeDetailBody({ selected, onClose }: { selected: Resolved; onClose: () => void }) {
+  const t = useT();
   const { value, annotation, accepted, nodeId } = selected;
   const updateNodeFields = useGraphStore((state) => state.updateNodeFields);
   const editDraft = useAnnotationStore((state) => state.editDraft);
@@ -122,7 +138,7 @@ function NodeDetailBody({ selected, onClose }: { selected: Resolved; onClose: ()
   const status = annotation?.status;
   const modifiedKeys =
     annotation && annotation.origin !== 'human'
-      ? (Object.keys(CHANGE_LABEL) as Array<keyof typeof CHANGE_LABEL>).filter((key) =>
+      ? (Object.keys(CHANGE_LABEL_KEY) as Array<keyof typeof CHANGE_LABEL_KEY>).filter((key) =>
           key === 'schemeApplication'
             ? !sameValue(schemeContent(annotation.originalValue.schemeApplication), schemeContent(annotation.currentValue.schemeApplication))
             : !sameValue(annotation.originalValue[key], annotation.currentValue[key]),
@@ -133,22 +149,29 @@ function NodeDetailBody({ selected, onClose }: { selected: Resolved; onClose: ()
     <>
       <header className="node-detail-header">
         <div>
-          <div className="node-detail-type">{TYPE_TITLE[value.type]}</div>
+          <div className="node-detail-type">{t(TYPE_TITLE_KEY[value.type])}</div>
           <div className="node-detail-badges">
             {annotation ? (
-              <span className={`badge badge-origin is-${annotation.origin}`} title={annotation.origin === 'rule' ? 'RA/CA 구조는 규칙으로 만들어졌습니다' : undefined}>
-                {ORIGIN_LABEL[annotation.origin]}
+              <span
+                className={`badge badge-origin is-${annotation.origin}`}
+                title={annotation.origin === 'rule' ? t('detail.origin.rule.title') : undefined}
+              >
+                {t(ORIGIN_KEY[annotation.origin])}
               </span>
             ) : null}
-            {status ? <span className={`badge badge-status is-${status}`}>{accepted ? STATUS_LABEL[status] : `초안 · ${STATUS_LABEL[status]}`}</span> : null}
+            {status ? (
+              <span className={`badge badge-status is-${status}`}>
+                {accepted ? t(STATUS_KEY[status]) : t('detail.status.draft', { status: t(STATUS_KEY[status]) })}
+              </span>
+            ) : null}
             {modifiedKeys.length > 0 ? (
-              <span className="badge badge-note" title="AI 원안과 달라진 항목">
-                변경: {modifiedKeys.map((key) => CHANGE_LABEL[key]).join('·')}
+              <span className="badge badge-note" title={t('detail.changed.title')}>
+                {t('detail.changed', { fields: modifiedKeys.map((key) => t(CHANGE_LABEL_KEY[key])).join('·') })}
               </span>
             ) : null}
           </div>
         </div>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="상세 닫기" title="닫기 (Esc)">
+        <button type="button" className="icon-button" onClick={onClose} aria-label={t('detail.close.aria')} title={t('detail.close.title')}>
           &#10005;
         </button>
       </header>
@@ -166,7 +189,7 @@ function NodeDetailBody({ selected, onClose }: { selected: Resolved; onClose: ()
         <ContentPanel nodeId={nodeId} value={value} annotation={annotation} onSave={save} />
       ) : (
         <div className="node-detail-section">
-          <div className="node-detail-text">{value.text || '(내용 없음)'}</div>
+          <div className="node-detail-text">{value.text || t('detail.noContent')}</div>
         </div>
       )}
 
@@ -175,14 +198,14 @@ function NodeDetailBody({ selected, onClose }: { selected: Resolved; onClose: ()
           {status === 'pending' ? (
             <>
               <button type="button" className="is-primary" onClick={() => accept(annotation.id, { withConnectableEdges: true })}>
-                제안 수락
+                {t('detail.acceptProposal')}
               </button>
               <button type="button" className="is-danger" onClick={() => reject(annotation.id)}>
-                거절
+                {t('detail.reject')}
               </button>
             </>
           ) : (
-            <span className="annotation-hint">거절된 제안입니다. 검토 패널에서 미검토로 되돌릴 수 있습니다.</span>
+            <span className="annotation-hint">{t('detail.rejectedHint')}</span>
           )}
         </footer>
       ) : null}
@@ -201,6 +224,7 @@ function ContentPanel({
   annotation?: NodeAnnotation;
   onSave: (patch: NodeFieldsPatch) => void;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const issueCatalog = useCatalogStore((state) => state.issues);
   const focusEvidence = useAnnotationStore((state) => state.focusEvidence);
@@ -231,16 +255,18 @@ function ContentPanel({
     <>
       <section className="node-detail-section">
         <h3>
-          요약
+          {t('detail.summary')}
           {value.summary ? (
             <span className="node-detail-badges">
-              <span className={`badge badge-origin is-${value.summaryOrigin === 'human' ? 'human' : 'ai'}`}>{value.summaryOrigin === 'human' ? '사람 작성' : 'AI 요약'}</span>
+              <span className={`badge badge-origin is-${value.summaryOrigin === 'human' ? 'human' : 'ai'}`}>
+                {value.summaryOrigin === 'human' ? t('detail.summary.human') : t('detail.summary.ai')}
+              </span>
               {summaryState === 'stale' ? (
-                <span className="badge scheme-status is-needs_review" title="요약을 만든 뒤 본문이 바뀌었습니다">
-                  본문 변경됨
+                <span className="badge scheme-status is-needs_review" title={t('detail.summary.stale.title')}>
+                  {t('detail.summary.stale')}
                 </span>
               ) : (
-                <span className="badge badge-note">최신</span>
+                <span className="badge badge-note">{t('detail.summary.current')}</span>
               )}
             </span>
           ) : null}
@@ -248,60 +274,68 @@ function ContentPanel({
         {value.summary ? (
           <p className="node-detail-summary">{value.summary}</p>
         ) : (
-          <p className="node-detail-empty">요약이 없습니다. 그래프에는 본문 앞부분이 임시로 표시됩니다.</p>
+          <p className="node-detail-empty">{t('detail.summary.empty')}</p>
         )}
         <div className="node-detail-actions">
           <button
             type="button"
             disabled={summarizing || !value.text.trim()}
             onClick={() => void generateSummaries([nodeId])}
-            title="분석 flow 의 요약 설정으로 현재 본문을 요약합니다. 요청 뒤 본문·요약을 고치면 결과를 덮어쓰지 않습니다."
+            title={t('detail.summary.generate.title')}
           >
-            {summarizing ? '요약 생성 중…' : value.summary ? 'AI 요약 다시 생성' : 'AI 요약 생성'}
+            {summarizing
+              ? t('detail.summary.generating')
+              : value.summary
+                ? t('detail.summary.regenerate')
+                : t('detail.summary.generate')}
           </button>
         </div>
       </section>
       <section className="node-detail-section">
-        <h3>본문</h3>
-        <div className="node-detail-text">{value.text || '(본문 없음)'}</div>
+        <h3>{t('detail.text')}</h3>
+        <div className="node-detail-text">{value.text || t('detail.text.empty')}</div>
         {original && original.text !== value.text ? (
           <details className="node-detail-original">
-            <summary>AI 원안 보기</summary>
+            <summary>{t('detail.original')}</summary>
             <div className="node-detail-text">{original.text}</div>
           </details>
         ) : null}
       </section>
       {value.type === 'ISSUE' ? (
         <section className="node-detail-section">
-          <h3>세부 쟁점 (카탈로그)</h3>
+          <h3>{t('detail.issue.title')}</h3>
           {value.issueRef ? (
             <div className="node-detail-issue">
               <div>
-                <span className="node-detail-muted">{issue?.categoryName ?? value.issueRef.categoryId ?? ''}</span>
+                <span className="node-detail-muted">{issueCategoryName(issue) || value.issueRef.categoryId || ''}</span>
                 {issue ? ' › ' : ''}
-                <strong>{issue?.label ?? value.issueRef.issueId}</strong>
+                <strong>{issueLabel(issue) || value.issueRef.issueId}</strong>
                 <span className="node-detail-code">{value.issueRef.issueId}</span>
               </div>
-              {value.issueRef.selectionReason ? <div className="node-detail-text">선택 이유: {value.issueRef.selectionReason}</div> : null}
-              {issue ? (
-                <div className="node-detail-criteria" title="분류 참고 정보(법률 기준 아님)">
-                  비교·판단 기준(참고): {issue.criteria}
+              {value.issueRef.selectionReason ? (
+                <div className="node-detail-text">
+                  {t('detail.issue.reason', { reason: value.issueRef.selectionReason })}
                 </div>
               ) : null}
-              {issue?.retired ? <div className="annotation-warning">현재 카탈로그에서 폐기된 항목입니다.</div> : null}
+              {issue ? (
+                <div className="node-detail-criteria" title={t('detail.issue.criteria.title')}>
+                  {t('detail.issue.criteria', { criteria: issueCriteria(issue) })}
+                </div>
+              ) : null}
+              {issue?.retired ? <div className="annotation-warning">{t('detail.issue.retired')}</div> : null}
             </div>
           ) : (
-            <p className="node-detail-empty">카탈로그 세부 쟁점이 연결되어 있지 않습니다.</p>
+            <p className="node-detail-empty">{t('detail.issue.empty')}</p>
           )}
         </section>
       ) : value.issueRefs && value.issueRefs.length > 0 ? (
         <section className="node-detail-section">
-          <h3>관련 세부 쟁점</h3>
+          <h3>{t('detail.relatedIssues')}</h3>
           <ul className="scheme-premises">
             {value.issueRefs.map((ref) => (
               <li key={`${ref.issueId}-${ref.instanceId}`}>
                 <span className="scheme-role">{ref.issueId}</span>
-                {findIssue(issueCatalog, ref.issueId)?.label ?? '(카탈로그에 없음)'}
+                {issueLabel(findIssue(issueCatalog, ref.issueId)) || t('detail.issue.notInCatalog')}
               </li>
             ))}
           </ul>
@@ -309,13 +343,13 @@ function ContentPanel({
       ) : null}
       {annotation && annotation.evidence.length > 0 ? (
         <section className="node-detail-section">
-          <h3>판결문 근거</h3>
+          <h3>{t('detail.evidence.title')}</h3>
           {needsEvidenceReview ? (
             <div className="annotation-warning" role="status">
               {annotation.evidence.find((span) => span.reviewReason)?.reviewReason}
               <div className="node-detail-actions">
                 <button type="button" onClick={() => confirmEvidenceReview(annotation.id)}>
-                  근거 확인 완료
+                  {t('detail.evidence.confirm')}
                 </button>
               </div>
             </div>
@@ -323,14 +357,18 @@ function ContentPanel({
           <ul className="node-detail-evidence">
             {annotation.evidence.map((span, index) => (
               <li key={index}>
-                <span className={`evidence-badge is-${span.match}`}>{MATCH_LABEL[span.match]}</span>
-                {span.derived ? <span className="badge badge-note" title="인용문이 아니라 노드 문장으로 찾은 위치">문장 매칭</span> : null}
+                <span className={`evidence-badge is-${span.match}`}>{t(MATCH_KEY[span.match])}</span>
+                {span.derived ? (
+                  <span className="badge badge-note" title={t('detail.evidence.derived.title')}>
+                    {t('detail.evidence.derived')}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="evidence-quote"
                   disabled={span.start === null}
                   onClick={() => focusEvidence(span)}
-                  title={span.start === null ? '원문 위치가 확정되지 않았습니다' : '원문 위치로 이동'}
+                  title={span.start === null ? t('detail.evidence.noPosition') : t('detail.evidence.goTo')}
                 >
                   “{span.quote.length > 120 ? `${span.quote.slice(0, 120)}…` : span.quote}”
                 </button>
@@ -341,7 +379,7 @@ function ContentPanel({
       ) : null}
       <div className="node-detail-actions">
         <button type="button" className="is-primary" onClick={() => setEditing(true)}>
-          수정
+          {t('detail.edit')}
         </button>
       </div>
     </>
@@ -359,6 +397,8 @@ function ContentEditor({
   onSave: (patch: NodeFieldsPatch) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
+  const lang = useLang();
   const [text, setText] = useState(value.text);
   const [summary, setSummary] = useState(value.summary ?? '');
   const [issueId, setIssueId] = useState(value.issueRef?.issueId ?? '');
@@ -375,12 +415,14 @@ function ContentEditor({
     const list = activeIssues(issueCatalog);
     const groups = new Map<string, Array<(typeof list)[number] & { state: ReturnType<typeof issueOptionState> }>>();
     for (const item of list) {
-      if (!groups.has(item.categoryName)) groups.set(item.categoryName, []);
+      const category = issueCategoryName(item);
+      if (!groups.has(category)) groups.set(category, []);
       const state = caseData ? issueOptionState(caseData, annotations, nodeId, item.issueId) : { disabled: false };
-      groups.get(item.categoryName)!.push({ ...item, state });
+      groups.get(category)!.push({ ...item, state });
     }
     return [...groups.entries()];
-  }, [issueCatalog, caseData, annotations, nodeId]);
+    // lang 이 바뀌면 분류 이름도 바뀌므로 다시 묶는다.
+  }, [issueCatalog, caseData, annotations, nodeId, lang]);
 
   const textChanged = text.trim() !== value.text;
   const summaryChanged = summary.trim() !== (value.summary ?? '');
@@ -427,54 +469,65 @@ function ContentEditor({
       }}
     >
       <label className="field">
-        <span>본문</span>
+        <span>{t('detail.text')}</span>
         <textarea ref={textRef} value={text} onChange={(event) => setText(event.target.value)} rows={6} required />
       </label>
       {textChanged ? (
         <div className="annotation-hint">
-          본문을 바꾸면 판결문 원문은 그대로이며, 이 노드의 근거와 연결된 RA scheme 이 재검토 대상으로 표시됩니다.
-          {value.summary && !summaryChanged ? ' 기존 요약은 "본문 변경됨"으로 표시됩니다.' : ''}
+          {t('detail.editor.textChanged')}
+          {value.summary && !summaryChanged ? t('detail.editor.summaryStale') : ''}
         </div>
       ) : null}
       <label className="field">
         <span>
-          요약{' '}
+          {t('detail.summary')}{' '}
           <span className={summary.trim().length > SUMMARY_SOFT_LIMIT ? 'field-count is-over' : 'field-count'}>
             {summary.trim().length}/{SUMMARY_SOFT_LIMIT}
           </span>
         </span>
-        <input type="text" value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="그래프에 표시할 짧은 요약 (비우면 본문 앞부분 임시 표시)" />
+        <input
+          type="text"
+          value={summary}
+          onChange={(event) => setSummary(event.target.value)}
+          placeholder={t('detail.editor.summaryPlaceholder')}
+        />
       </label>
       {value.type === 'ISSUE' ? (
         <label className="field">
-          <span>세부 쟁점 (중복 없이 최대 {MAX_SELECTED_ISSUES}개)</span>
+          <span>{t('detail.editor.issueLabel', { max: MAX_SELECTED_ISSUES })}</span>
           <select value={issueId} onChange={(event) => setIssueId(event.target.value)}>
-            <option value="">(분류 없음)</option>
+            <option value="">{t('detail.editor.noIssue')}</option>
             {value.issueRef && !findIssue(issueCatalog, value.issueRef.issueId) ? (
-              <option value={value.issueRef.issueId}>{value.issueRef.issueId} (카탈로그에 없음)</option>
+              <option value={value.issueRef.issueId}>
+                {t('detail.editor.issueMissing', { issueId: value.issueRef.issueId })}
+              </option>
             ) : null}
             {grouped.map(([category, items]) => (
               <optgroup key={category} label={category}>
                 {items.map((item) => (
                   <option key={item.issueId} value={item.issueId} disabled={item.state.disabled && item.issueId !== value.issueRef?.issueId}>
-                    {item.label}
+                    {issueLabel(item)}
                     {item.state.disabled && item.issueId !== value.issueRef?.issueId ? ` — ${item.state.reason}` : ''}
                   </option>
                 ))}
               </optgroup>
             ))}
           </select>
-          {issueId ? <small className="node-detail-criteria">기준(참고): {findIssue(issueCatalog, issueId)?.criteria ?? ''}</small> : null}
+          {issueId ? (
+            <small className="node-detail-criteria">
+              {t('detail.editor.criteria', { criteria: issueCriteria(findIssue(issueCatalog, issueId)) })}
+            </small>
+          ) : null}
         </label>
       ) : null}
       <div className="node-detail-actions">
         <button type="submit" className="is-primary" disabled={!text.trim()}>
-          저장
+          {t('detail.editor.save')}
         </button>
         <button type="button" onClick={onCancel}>
-          취소
+          {t('detail.editor.cancel')}
         </button>
-        <span className="annotation-hint">Ctrl+Enter 저장 · Esc 취소</span>
+        <span className="annotation-hint">{t('detail.editor.shortcuts')}</span>
       </div>
     </form>
   );

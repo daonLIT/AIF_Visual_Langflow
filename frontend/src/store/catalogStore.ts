@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { api } from '../api/client';
 import type { IssueCatalog, IssueCatalogItem, SchemeCatalog, SchemeDefinition } from '../types/scheme';
 import { findSchemeDefinition } from '../types/scheme';
+import { t } from '../i18n';
 
 interface CatalogState {
   issues: IssueCatalog | null;
@@ -32,7 +33,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       issues: issues.status === 'fulfilled' ? issues.value : state.issues,
       schemes: schemes.status === 'fulfilled' ? schemes.value : state.schemes,
       loading: false,
-      error: errors.length > 0 ? `카탈로그를 불러오지 못했습니다: ${errors.join(' / ')}` : null,
+      error: errors.length > 0 ? t('catalog.loadFailed', { errors: errors.join(' / ') }) : null,
     });
   },
 

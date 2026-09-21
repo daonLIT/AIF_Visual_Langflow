@@ -15,6 +15,7 @@ import {
   type SchemeCatalog,
 } from '../types/scheme';
 import { textHash } from '../utils/textHash';
+import { t } from '../i18n';
 import type {
   RawAifEdge,
   RawAifNode,
@@ -28,6 +29,10 @@ export interface ImportResult {
   /** 좌표가 없는 노드가 있어 자동 레이아웃이 필요한지 여부 */
   needsLayout: boolean;
   warnings: string[];
+  /** 이전 형식 필드를 현재 형식으로 옮겼다 (저장이 필요한 상태) */
+  legacyConverted: boolean;
+  /** 이전 scheme 카탈로그 버전을 현재 카탈로그로 옮겼다 */
+  schemeCatalogMigrated: boolean;
 }
 
 export class ImportError extends Error {}
@@ -72,22 +77,24 @@ function edgeKey(fromID: string, toID: string): string {
 
 export function importAifOva(input: unknown, fileName?: string, options: ImportOptions = {}): ImportResult {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    throw new ImportError('최상위 구조가 JSON 객체가 아닙니다.');
+    throw new ImportError(t('import.error.notObject'));
   }
 
   const raw = input as RawCaseJson;
   const aif = raw.AIF;
   if (typeof aif !== 'object' || aif === null) {
-    throw new ImportError('AIF 섹션이 없습니다.');
+    throw new ImportError(t('import.error.noAif'));
   }
   if (!Array.isArray(aif.nodes)) {
-    throw new ImportError('AIF.nodes 가 배열이 아닙니다.');
+    throw new ImportError(t('import.error.nodesNotArray'));
   }
   if (aif.edges !== undefined && !Array.isArray(aif.edges)) {
-    throw new ImportError('AIF.edges 가 배열이 아닙니다.');
+    throw new ImportError(t('import.error.edgesNotArray'));
   }
 
   const warnings: string[] = [];
+  // 경고 문구는 화면 언어에 따라 달라지므로, 상태 판단은 문구가 아니라 이 플래그로 한다.
+  let legacyConverted = false;
   const migratedAt = options.migratedAt ?? new Date().toISOString();
   const schemeMigration = { migrated: 0, needsReview: 0, fromVersions: new Set<number>() };
 
@@ -118,12 +125,12 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
 
   for (const rawNode of aif.nodes as RawAifNode[]) {
     if (!rawNode || typeof rawNode.nodeID !== 'string') {
-      warnings.push('nodeID 가 없는 AIF 노드를 건너뛰었습니다.');
+      warnings.push(t('import.warn.noNodeId'));
       continue;
     }
     if (seenNodeIds.has(rawNode.nodeID)) {
       // 중복이라도 버리지 않는다. 검증 단계(RULE 08)에서 보고된다.
-      warnings.push(`중복된 nodeID: ${rawNode.nodeID}`);
+      warnings.push(t('import.warn.duplicateNodeId', { nodeId: rawNode.nodeID }));
     }
     seenNodeIds.add(rawNode.nodeID);
 
@@ -137,7 +144,10 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
     let schemeApplication: SchemeApplication | undefined;
     if (type === 'RA') {
       schemeApplication = readSchemeApplication(rawNode.schemeApplication) ?? legacySchemeToApplication(rawNode.scheme);
-      if (!rawNode.schemeApplication && schemeApplication) warnings.push(`RA ${rawNode.nodeID}: 이전 형식 scheme 필드를 schemeApplication 으로 옮겼습니다.`);
+      if (!rawNode.schemeApplication && schemeApplication) {
+        legacyConverted = true;
+        warnings.push(t('import.warn.legacyScheme', { nodeId: rawNode.nodeID }));
+      }
       if (schemeApplication) {
         const outcome = migrateSchemeApplication(schemeApplication, options.schemeCatalog ?? null, migratedAt);
         if (outcome.migrated) {
@@ -177,14 +187,14 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
 
   for (const rawEdge of (aif.edges ?? []) as RawAifEdge[]) {
     if (!rawEdge || typeof rawEdge.fromID !== 'string' || typeof rawEdge.toID !== 'string') {
-      warnings.push('fromID/toID 가 없는 AIF 엣지를 건너뛰었습니다.');
+      warnings.push(t('import.warn.noEdgeEnds'));
       continue;
     }
     let id = typeof rawEdge.edgeID === 'number' ? rawEdge.edgeID : Number(rawEdge.edgeID);
     if (!Number.isFinite(id)) {
       fallbackEdgeId += 1;
       id = fallbackEdgeId;
-      warnings.push(`edgeID 가 없는 엣지에 임시 ID ${id} 를 부여했습니다.`);
+      warnings.push(t('import.warn.generatedEdgeId', { id }));
     }
 
     const ovaEdge = ovaEdgeByEndpoints.get(edgeKey(rawEdge.fromID, rawEdge.toID));
@@ -215,7 +225,7 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
       const schemeId = (entry as { schemeID?: unknown })?.schemeID;
       const legacy = typeof nodeId === 'string' ? (rawById.get(nodeId)?.scheme as { schemeId?: unknown } | undefined) : undefined;
       if (typeof schemeId === 'string' && legacy && legacy.schemeId === schemeId) {
-        warnings.push(`schemefulfillments: 이전 편집기가 만든 비표준 항목(${nodeId} → ${schemeId})을 제외했습니다.`);
+        warnings.push(t('import.warn.nonStandardFulfillment', { nodeId: String(nodeId), schemeId }));
         continue;
       }
       kept.push(entry);
@@ -226,7 +236,7 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
         node.schemeApplication = {
           ...readSchemeApplication({ schemeKey: definition.schemeKey, origin: 'human', status: 'suggested' })!,
           catalogVersion: options.schemeCatalog?.schemeCatalogVersion ?? null,
-          notes: `AIF schemefulfillments schemeID ${schemeId} 에서 가져옴`,
+          notes: t('import.note.fromFulfillment', { schemeId: String(schemeId) }),
         };
       }
     }
@@ -234,10 +244,14 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
   }
 
   if (schemeMigration.migrated > 0) {
-    // '이전' 이 들어간 경고는 프로젝트를 저장이 필요한 상태로 표시한다 (annotationStore.loadProjectFile).
+    legacyConverted = true;
     warnings.push(
-      `이전 scheme 카탈로그(v${[...schemeMigration.fromVersions].sort().join(', v')})로 저장된 RA ${schemeMigration.migrated}개를 ` +
-        `v${options.schemeCatalog?.schemeCatalogVersion} 기준으로 옮겼습니다. 재검토 필요 ${schemeMigration.needsReview}개 — 원래 scheme 은 RA 상세의 수정 이력에 있습니다.`,
+      t('import.warn.schemeMigrated', {
+        versions: [...schemeMigration.fromVersions].sort().join(', v'),
+        count: schemeMigration.migrated,
+        target: options.schemeCatalog?.schemeCatalogVersion ?? '?',
+        review: schemeMigration.needsReview,
+      }),
     );
   }
 
@@ -253,6 +267,8 @@ export function importAifOva(input: unknown, fileName?: string, options: ImportO
     case: argumentCase,
     needsLayout: nodes.length > 0 && missingPosition === nodes.length,
     warnings,
+    legacyConverted,
+    schemeCatalogMigrated: schemeMigration.migrated > 0,
   };
 }
 
@@ -261,7 +277,7 @@ export function parseCaseJson(source: string, fileName?: string, options: Import
   try {
     parsed = JSON.parse(source);
   } catch (error) {
-    throw new ImportError(`JSON 파싱 실패: ${(error as Error).message}`);
+    throw new ImportError(t('import.error.parse', { message: (error as Error).message }));
   }
   return importAifOva(parsed, fileName, options);
 }

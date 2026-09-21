@@ -4,6 +4,7 @@ import { useAnnotationStore } from '../../store/annotationStore';
 import { buildSegments, selectionToOffsets, type HighlightLayer } from '../../utils/evidence';
 import type { EvidenceSpan } from '../../types/annotation';
 import { IssueNavigator } from './IssueNavigator';
+import { useT } from '../../i18n';
 
 interface SelectionState {
   text: string;
@@ -32,6 +33,7 @@ function searchLayers(text: string, query: string): HighlightLayer[] {
 }
 
 export function JudgmentPanel() {
+  const t = useT();
   const caseData = useGraphStore((state) => state.caseData);
   const annotations = useGraphStore((state) => state.annotations);
   const addNode = useGraphStore((state) => state.addNode);
@@ -170,19 +172,19 @@ export function JudgmentPanel() {
   if (!caseData) {
     return (
       <aside className="judgment-panel">
-        <div className="judgment-empty">판결문이 아직 없습니다. 상단의 [판결문 입력]을 누르세요.</div>
+        <div className="judgment-empty">{t('judgment.empty')}</div>
       </aside>
     );
   }
 
   return (
-    <aside className="judgment-panel" ref={containerRef} aria-label="판결문 원문">
+    <aside className="judgment-panel" ref={containerRef} aria-label={t('judgment.aria')}>
       <div className="judgment-search">
         <input
           type="search"
           value={query}
-          placeholder="판결문 내 검색"
-          aria-label="판결문 내 검색"
+          placeholder={t('judgment.search')}
+          aria-label={t('judgment.search')}
           onChange={(event) => {
             setQuery(event.target.value);
             setActiveMatch(0);
@@ -207,7 +209,7 @@ export function JudgmentPanel() {
               type="button"
               disabled={matchCount === 0}
               onClick={() => setActiveMatch((currentMatch - 1 + matchCount) % matchCount)}
-              aria-label="이전 검색 결과"
+              aria-label={t('judgment.search.prev')}
             >
               &#8593;
             </button>
@@ -215,15 +217,15 @@ export function JudgmentPanel() {
               type="button"
               disabled={matchCount === 0}
               onClick={() => setActiveMatch((currentMatch + 1) % matchCount)}
-              aria-label="다음 검색 결과"
+              aria-label={t('judgment.search.next')}
             >
               &#8595;
             </button>
           </div>
         ) : null}
-        <label className="chip-toggle" title="모든 제안의 근거 위치를 연하게 표시">
+        <label className="chip-toggle" title={t('judgment.showEvidence.title')}>
           <input type="checkbox" checked={showAllEvidence} onChange={(event) => setShowAllEvidence(event.target.checked)} />
-          근거 표시
+          {t('judgment.showEvidence')}
         </label>
       </div>
 
@@ -231,12 +233,17 @@ export function JudgmentPanel() {
 
       {selectedAnnotation ? (
         <div className="judgment-context" role="status">
-          선택된 제안: {selectedAnnotation.kind === 'node' ? selectedAnnotation.currentValue.text.slice(0, 40) : '관계'}
+          {t('judgment.selectedProposal', {
+            label:
+              selectedAnnotation.kind === 'node'
+                ? selectedAnnotation.currentValue.text.slice(0, 40)
+                : t('judgment.selectedProposal.edge'),
+          })}
           {selectedAnnotation.kind === 'node' && selectedAnnotation.evidence.every((span) => span.start === null)
-            ? ' — 근거 위치 없음. 원문을 드래그해 연결하세요.'
+            ? t('judgment.selectedProposal.noSpan')
             : ''}
           <button type="button" className="link-button" onClick={() => select(null)}>
-            선택 해제
+            {t('judgment.deselect')}
           </button>
         </div>
       ) : null}
@@ -266,7 +273,7 @@ export function JudgmentPanel() {
                 .join(' ')}
               role={clickable ? 'button' : undefined}
               tabIndex={clickable ? 0 : undefined}
-              title={clickable ? '이 근거의 제안 선택' : undefined}
+              title={clickable ? t('judgment.mark.title') : undefined}
               onClick={
                 clickable
                   ? () => {
@@ -297,7 +304,7 @@ export function JudgmentPanel() {
       {selection ? (
         <div className="selection-actions" style={{ top: selection.top, left: selection.left }}>
           <button type="button" className="selection-action" onMouseDown={(event) => event.preventDefault()} onClick={createINodeFromSelection}>
-            + I 노드 만들기
+            {t('judgment.selection.createNode')}
           </button>
           {selectedAnnotation && selectedAnnotation.kind === 'node' && selectedAnnotation.origin !== 'human' ? (
             <button
@@ -305,9 +312,9 @@ export function JudgmentPanel() {
               className="selection-action is-secondary"
               onMouseDown={(event) => event.preventDefault()}
               onClick={linkSelectionAsEvidence}
-              title={selection.start === null ? '선택 범위를 원문 위치로 확정할 수 없어 인용문만 저장됩니다' : undefined}
+              title={selection.start === null ? t('judgment.selection.quoteOnly') : undefined}
             >
-              이 제안의 근거로 연결
+              {t('judgment.selection.linkEvidence')}
             </button>
           ) : null}
         </div>

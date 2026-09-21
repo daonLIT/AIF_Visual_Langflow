@@ -10,13 +10,15 @@ import {
   promptVariables,
 } from '../../pipeline/flowUtils';
 import type { LfFieldSpec, LfNode, LfSourceHandle, PipelineIssue } from '../../types/pipeline';
-import { KIND_LABEL } from '../../types/pipeline';
+import { KIND_KEY } from '../../types/pipeline';
 import { FieldEditor } from './FieldEditor';
+import { useT } from '../../i18n';
 
 /** 언어 모델 컴포넌트에서 먼저 보여줄 설정 */
 const LLM_PRIMARY = ['model_name', 'base_url', 'temperature', 'timeout', 'num_ctx', 'system_message', 'format'];
 
 export function PropertiesPanel() {
+  const t = useT();
   const data = usePipelineStore((state) => state.data);
   const current = usePipelineStore((state) => state.current);
   const selectedNodeId = usePipelineStore((state) => state.selectedNodeId);
@@ -30,14 +32,18 @@ export function PropertiesPanel() {
       <aside className="lf-props">
         <div className="lf-props-empty">
           <h3>{current.flow.name}</h3>
-          <p>컴포넌트를 선택하면 속성을 편집할 수 있습니다.</p>
+          <p>{t('lf.props.empty')}</p>
           <ul>
-            <li>포트 연결: 오른쪽 출력 점 → 왼쪽 입력 점으로 드래그 (형식이 맞는 입력만 허용)</li>
-            <li>연결 해제·삭제: 선택 후 Delete</li>
-            <li>추가: 왼쪽 목록에서 캔버스로 끌어다 놓기</li>
+            <li>{t('lf.props.hint1')}</li>
+            <li>{t('lf.props.hint2')}</li>
+            <li>{t('lf.props.hint3')}</li>
           </ul>
           <p className="lf-muted">
-            컴포넌트 {current.summary.nodeCount}개 · 연결 {current.summary.edgeCount}개 · 비밀 필드 {current.secretFields.length}개(값은 서버에만 있음)
+            {t('lf.props.summary', {
+              nodes: current.summary.nodeCount,
+              edges: current.summary.edgeCount,
+              secrets: current.secretFields.length,
+            })}
           </p>
         </div>
       </aside>
@@ -52,6 +58,7 @@ export function PropertiesPanel() {
 }
 
 function NodeProperties({ node, issues }: { node: LfNode; issues: PipelineIssue[] }) {
+  const t = useT();
   const data = usePipelineStore((state) => state.data)!;
   const current = usePipelineStore((state) => state.current)!;
   const mode = usePipelineStore((state) => state.mode);
@@ -92,17 +99,23 @@ function NodeProperties({ node, issues }: { node: LfNode; issues: PipelineIssue[
   return (
     <>
       <header className="lf-props-header">
-        <span className={`lf-kind is-${kind}`}>{KIND_LABEL[kind]}</span>
+        <span className={`lf-kind is-${kind}`}>{t(KIND_KEY[kind])}</span>
         <input
           className="lf-props-title"
           value={String(node.data.node.display_name ?? '')}
           onChange={(event) => updateNodeInfo(node.id, { display_name: event.target.value })}
-          aria-label="표시 이름"
+          aria-label={t('lf.props.nameAria')}
         />
       </header>
       <div className="lf-props-meta">
         <code>{node.id}</code> · {String(node.data.type)}
-        {isRelay ? <span className="lf-flag is-relay">중계 서버 {node.id === current.relay.inputComponentId ? '입력' : '출력'}</span> : null}
+        {isRelay ? (
+          <span className="lf-flag is-relay">
+            {t('lf.props.relay', {
+              role: node.id === current.relay.inputComponentId ? t('lf.props.relay.input') : t('lf.props.relay.output'),
+            })}
+          </span>
+        ) : null}
       </div>
       {support ? <p className={`lf-support is-${support.level}`}>{support.note}</p> : null}
       {issues.length > 0 ? (
@@ -119,7 +132,7 @@ function NodeProperties({ node, issues }: { node: LfNode; issues: PipelineIssue[
 
       {primary.length > 0 ? (
         <section className="lf-props-section">
-          <h4>모델 설정</h4>
+          <h4>{t('lf.props.modelSettings')}</h4>
           {primary.map(([name, spec]) => (
             <FieldEditor key={name} name={name} spec={spec} connectedFrom={connections.get(name)} onChange={(value) => updateField(node.id, name, value)} />
           ))}
@@ -128,7 +141,7 @@ function NodeProperties({ node, issues }: { node: LfNode; issues: PipelineIssue[
 
       {basic.length > 0 ? (
         <section className="lf-props-section">
-          <h4>{kind === 'llm' ? '기타 설정' : '입력·설정'}</h4>
+          <h4>{kind === 'llm' ? t('lf.props.otherSettings') : t('lf.props.inputSettings')}</h4>
           {basic.map(([name, spec]) => (
             <FieldEditor key={name} name={name} spec={spec} connectedFrom={connections.get(name)} onChange={(value) => updateField(node.id, name, value)} />
           ))}
@@ -138,7 +151,7 @@ function NodeProperties({ node, issues }: { node: LfNode; issues: PipelineIssue[
       {advanced.length > 0 ? (
         <section className="lf-props-section">
           <button type="button" className="link-button" onClick={() => setShowAdvanced((value) => !value)}>
-            {showAdvanced ? '고급 설정 접기' : `고급 설정 ${advanced.length}개 보기`}
+            {showAdvanced ? t('lf.props.hideAdvanced') : t('lf.props.showAdvanced', { count: advanced.length })}
           </button>
           {showAdvanced
             ? advanced.map(([name, spec]) => (
@@ -151,8 +164,14 @@ function NodeProperties({ node, issues }: { node: LfNode; issues: PipelineIssue[
       {fieldSpec(node, 'code') ? <CodeEditor node={node} liveMode={mode === 'live'} busy={!!busy} /> : null}
 
       <div className="lf-props-actions">
-        <button type="button" className="is-danger" disabled={isRelay} onClick={() => deleteNodes([node.id])} title={isRelay ? '중계 서버가 사용하는 컴포넌트입니다' : undefined}>
-          컴포넌트 삭제
+        <button
+          type="button"
+          className="is-danger"
+          disabled={isRelay}
+          onClick={() => deleteNodes([node.id])}
+          title={isRelay ? t('lf.props.delete.blocked') : undefined}
+        >
+          {t('lf.props.delete')}
         </button>
       </div>
     </>
@@ -160,6 +179,7 @@ function NodeProperties({ node, issues }: { node: LfNode; issues: PipelineIssue[
 }
 
 function PromptEditor({ node, connections }: { node: LfNode; connections: Map<string, string[]> }) {
+  const t = useT();
   const updatePrompt = usePipelineStore((state) => state.updatePrompt);
   const updateField = usePipelineStore((state) => state.updateField);
   const stored = String(fieldSpec(node, 'template')?.value ?? '');
@@ -176,7 +196,7 @@ function PromptEditor({ node, connections }: { node: LfNode; connections: Map<st
 
   return (
     <section className="lf-props-section">
-      <h4>프롬프트</h4>
+      <h4>{t('lf.props.prompt')}</h4>
       <textarea
         className="lf-prompt"
         value={text}
@@ -184,30 +204,32 @@ function PromptEditor({ node, connections }: { node: LfNode; connections: Map<st
         onBlur={() => changed && updatePrompt(node.id, text)}
         rows={16}
         spellCheck={false}
-        aria-label="프롬프트 템플릿"
+        aria-label={t('lf.props.promptAria')}
       />
       <div className="lf-field-row">
         <button type="button" disabled={!changed} onClick={() => updatePrompt(node.id, text)}>
-          프롬프트 반영
+          {t('lf.props.promptApply')}
         </button>
         <button type="button" disabled={!changed} onClick={() => setText(stored)}>
-          되돌리기
+          {t('lf.props.promptRevert')}
         </button>
-        <span className="lf-muted">{text.length.toLocaleString()}자</span>
+        <span className="lf-muted">{t('lf.props.charCount', { count: text.length.toLocaleString() })}</span>
       </div>
       {error ? <div className="lf-error">{error}</div> : null}
       <div className="lf-vars">
-        변수:{' '}
-        {variables.length === 0 ? <span className="lf-muted">없음</span> : null}
+        {t('lf.props.variables')}
+        {variables.length === 0 ? <span className="lf-muted">{t('lf.node.none')}</span> : null}
         {variables.map((name) => (
-          <span key={name} className={`lf-var ${connections.has(name) ? 'is-connected' : ''}`} title={connections.get(name)?.join(', ') ?? '연결 없음 (직접 값 사용)'}>
+          <span
+            key={name}
+            className={`lf-var ${connections.has(name) ? 'is-connected' : ''}`}
+            title={connections.get(name)?.join(', ') ?? t('lf.props.noConnection')}
+          >
             {`{${name}}`}
           </span>
         ))}
       </div>
-      <small className="lf-field-info">
-        {'{변수}'} 마다 입력 포트가 생깁니다. JSON 예시처럼 문자 그대로 중괄호가 필요하면 {'{{ }}'} 로 두 번 쓰세요.
-      </small>
+      <small className="lf-field-info">{t('lf.props.promptHint')}</small>
       {customFields
         .filter((name) => !connections.has(name))
         .map((name) => {
@@ -219,6 +241,7 @@ function PromptEditor({ node, connections }: { node: LfNode; connections: Map<st
 }
 
 function CodeEditor({ node, liveMode, busy }: { node: LfNode; liveMode: boolean; busy: boolean }) {
+  const t = useT();
   const updateCode = usePipelineStore((state) => state.updateCode);
   const rebuildComponent = usePipelineStore((state) => state.rebuildComponent);
   const stored = String(fieldSpec(node, 'code')?.value ?? '');
@@ -234,29 +257,39 @@ function CodeEditor({ node, liveMode, busy }: { node: LfNode; liveMode: boolean;
   return (
     <section className="lf-props-section lf-code">
       <button type="button" className="link-button" onClick={() => setOpen((value) => !value)}>
-        {open ? '코드 편집 닫기' : '고급: 컴포넌트 코드 편집'}
+        {open ? t('lf.code.close') : t('lf.code.open')}
       </button>
       {open ? (
         <>
-          <div className="lf-warning">
-            이 코드는 Langflow 서버에서 <strong>실행되는 코드</strong>입니다. 적용하면 다음 분석부터 그대로 실행됩니다. 입력·출력 정의를
-            바꿨다면 [Langflow 로 재구성]으로 포트를 다시 만든 뒤 검증하세요.
-          </div>
-          <textarea className="lf-code-text" value={text} onChange={(event) => setText(event.target.value)} rows={22} spellCheck={false} aria-label="컴포넌트 코드" />
+          <div className="lf-warning">{t('lf.code.warning')}</div>
+          <textarea
+            className="lf-code-text"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            rows={22}
+            spellCheck={false}
+            aria-label={t('lf.code.aria')}
+          />
           <div className="lf-field-row">
             <button type="button" disabled={!changed} onClick={() => updateCode(node.id, text)}>
-              코드 반영
+              {t('lf.code.apply')}
             </button>
             <button type="button" disabled={!changed} onClick={() => setText(stored)}>
-              되돌리기
+              {t('lf.code.revert')}
             </button>
             <button
               type="button"
               disabled={!liveMode || changed || busy}
               onClick={() => void rebuildComponent(node.id)}
-              title={liveMode ? (changed ? '먼저 코드 반영을 누르세요' : 'Langflow 가 코드로 입력·출력 포트를 다시 만듭니다') : 'live 모드에서만 사용할 수 있습니다'}
+              title={
+                liveMode
+                  ? changed
+                    ? t('lf.code.rebuild.applyFirst')
+                    : t('lf.code.rebuild.title')
+                  : t('lf.code.rebuild.liveOnly')
+              }
             >
-              Langflow 로 재구성
+              {t('lf.code.rebuild')}
             </button>
           </div>
         </>

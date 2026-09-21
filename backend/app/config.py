@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from .i18n import t
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BACKEND_ROOT.parent
@@ -115,7 +116,7 @@ class Settings:
     def __post_init__(self) -> None:
         if self.langflow_mode not in LANGFLOW_MODES:
             raise ConfigError(
-                f"LANGFLOW_MODE 값이 올바르지 않습니다: {self.langflow_mode!r} (허용: {', '.join(LANGFLOW_MODES)})"
+                t("config.bad_mode", value=repr(self.langflow_mode), allowed=", ".join(LANGFLOW_MODES))
             )
 
     @property

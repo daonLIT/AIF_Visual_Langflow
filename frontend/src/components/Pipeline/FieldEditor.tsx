@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { isSecretField } from '../../pipeline/flowUtils';
 import type { LfFieldSpec } from '../../types/pipeline';
 import { SECRET_SENTINEL } from '../../types/pipeline';
+import { useT } from '../../i18n';
 
 interface Props {
   name: string;
@@ -17,6 +18,7 @@ function optionLabel(option: unknown): string {
 
 /** Langflow template 필드 하나의 값 편집기. 형식을 모르는 필드는 JSON 으로 편집한다. */
 export function FieldEditor({ name, spec, connectedFrom, onChange }: Props) {
+  const t = useT();
   const label = String(spec.display_name ?? name);
   const info = typeof spec.info === 'string' && spec.info ? spec.info : undefined;
 
@@ -26,7 +28,7 @@ export function FieldEditor({ name, spec, connectedFrom, onChange }: Props) {
         <span className="lf-field-label" title={info}>
           {label}
         </span>
-        <span className="lf-field-connected">연결됨 ← {connectedFrom.join(', ')}</span>
+        <span className="lf-field-connected">{t('lf.field.connected', { sources: connectedFrom.join(', ') })}</span>
       </div>
     );
   }
@@ -45,6 +47,7 @@ export function FieldEditor({ name, spec, connectedFrom, onChange }: Props) {
 }
 
 function FieldInput({ name, spec, onChange }: { name: string; spec: LfFieldSpec; onChange: (value: unknown) => void }) {
+  const t = useT();
   const value = spec.value;
   const type = String(spec.type ?? '');
   const inputType = String(spec._input_type ?? '');
@@ -61,7 +64,7 @@ function FieldInput({ name, spec, onChange }: { name: string; spec: LfFieldSpec;
     return (
       <div className="lf-field-row">
         <select value={options.includes(current) ? current : '__custom__'} onChange={(event) => event.target.value !== '__custom__' && onChange(event.target.value)} aria-label={name}>
-          {!options.includes(current) ? <option value="__custom__">{current || '(직접 입력)'}</option> : null}
+          {!options.includes(current) ? <option value="__custom__">{current || t('lf.field.customOption')}</option> : null}
           {options.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -69,7 +72,13 @@ function FieldInput({ name, spec, onChange }: { name: string; spec: LfFieldSpec;
           ))}
         </select>
         {spec.combobox || !options.includes(current) ? (
-          <input type="text" value={current} onChange={(event) => onChange(event.target.value)} aria-label={`${name} 직접 입력`} placeholder="직접 입력" />
+          <input
+            type="text"
+            value={current}
+            onChange={(event) => onChange(event.target.value)}
+            aria-label={t('lf.field.customAria', { name })}
+            placeholder={t('lf.field.customPlaceholder')}
+          />
         ) : null}
       </div>
     );
@@ -107,19 +116,22 @@ function FieldInput({ name, spec, onChange }: { name: string; spec: LfFieldSpec;
 }
 
 function SecretInput({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const masked = value === SECRET_SENTINEL;
   if (!editing) {
     return (
       <div className="lf-field-row">
-        <span className="lf-secret">{masked ? '•••••• (서버에 보관된 값 유지)' : value ? '(새 값 입력됨)' : '(비어 있음)'}</span>
+        <span className="lf-secret">
+          {masked ? t('lf.secret.kept') : value ? t('lf.secret.new') : t('lf.secret.empty')}
+        </span>
         <button type="button" onClick={() => setEditing(true)}>
-          새 값 입력
+          {t('lf.secret.enter')}
         </button>
         {value ? (
           <button type="button" onClick={() => onChange('')}>
-            비우기
+            {t('lf.secret.clear')}
           </button>
         ) : null}
       </div>
@@ -127,7 +139,13 @@ function SecretInput({ value, onChange }: { value: unknown; onChange: (value: un
   }
   return (
     <div className="lf-field-row">
-      <input type="password" value={draft} onChange={(event) => setDraft(event.target.value)} autoComplete="off" aria-label="비밀 값" />
+      <input
+        type="password"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        autoComplete="off"
+        aria-label={t('lf.secret.aria')}
+      />
       <button
         type="button"
         onClick={() => {
@@ -136,16 +154,17 @@ function SecretInput({ value, onChange }: { value: unknown; onChange: (value: un
           setDraft('');
         }}
       >
-        확인
+        {t('lf.confirm')}
       </button>
       <button type="button" onClick={() => setEditing(false)}>
-        취소
+        {t('lf.cancel')}
       </button>
     </div>
   );
 }
 
 function JsonInput({ value, onChange, name }: { value: unknown; onChange: (value: unknown) => void; name: string }) {
+  const t = useT();
   const [text, setText] = useState(() => JSON.stringify(value ?? null, null, 2));
   const [error, setError] = useState<string | null>(null);
   return (
@@ -172,9 +191,9 @@ function JsonInput({ value, onChange, name }: { value: unknown; onChange: (value
             }
           }}
         >
-          JSON 반영
+          {t('lf.json.apply')}
         </button>
-        {error ? <span className="lf-error">{error}</span> : <small className="lf-field-info">형식을 알 수 없는 필드는 JSON 으로 편집합니다.</small>}
+        {error ? <span className="lf-error">{error}</span> : <small className="lf-field-info">{t('lf.json.hint')}</small>}
       </div>
     </div>
   );

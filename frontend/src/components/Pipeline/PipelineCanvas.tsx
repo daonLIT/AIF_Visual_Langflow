@@ -16,12 +16,14 @@ import { usePipelineStore } from '../../store/pipelineStore';
 import { canConnect, connectedFields, parseHandle } from '../../pipeline/flowUtils';
 import type { LfSourceHandle, LfTargetHandle, PipelineIssue } from '../../types/pipeline';
 import { LfNodeView, type LfFlowNode } from './LfNodeView';
+import { t, useT } from '../../i18n';
 
 const nodeTypes = { lf: LfNodeView };
 
 export const PALETTE_MIME = 'application/x-aif-pipeline-template';
 
 export function PipelineCanvas() {
+  const tr = useT();
   const data = usePipelineStore((state) => state.data);
   const current = usePipelineStore((state) => state.current);
   const version = usePipelineStore((state) => state.version);
@@ -111,8 +113,8 @@ export function PipelineCanvas() {
   if (!data || !current) {
     return (
       <div className="graph-empty">
-        <p>편집할 Langflow flow 를 위에서 선택하세요.</p>
-        <p className="graph-empty-hint">프로덕션 flow 는 보존되고, 적용은 작업용 복제본에만 할 수 있습니다.</p>
+        <p>{tr('lf.canvas.empty')}</p>
+        <p className="graph-empty-hint">{tr('lf.canvas.emptyHint')}</p>
       </div>
     );
   }
@@ -154,7 +156,7 @@ export function PipelineCanvas() {
           const kept = deleting.filter((node) => !relay.includes(node.id));
           if (kept.length !== deleting.length) {
             usePipelineStore.setState({
-              message: { kind: 'error', text: '중계 서버가 사용하는 입력/출력 컴포넌트는 삭제할 수 없습니다.' },
+              message: { kind: 'error', text: t('lf.canvas.relayProtected') },
             });
           }
           const blocked = new Set(deleting.filter((node) => relay.includes(node.id)).map((node) => node.id));

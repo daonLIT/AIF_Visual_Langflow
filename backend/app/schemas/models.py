@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
+from ..i18n import t
 
 MAX_DOCUMENT_CHARS = 200_000
 
@@ -23,9 +24,9 @@ class AnalysisRunCreate(BaseModel):
     @classmethod
     def _text_not_blank(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("판결문 원문이 비어 있습니다.")
+            raise ValueError(t("schema.document_empty"))
         if len(value) > MAX_DOCUMENT_CHARS:
-            raise ValueError(f"판결문이 너무 깁니다 (최대 {MAX_DOCUMENT_CHARS:,}자).")
+            raise ValueError(t("schema.document_too_long", max=f"{MAX_DOCUMENT_CHARS:,}"))
         return value
 
 

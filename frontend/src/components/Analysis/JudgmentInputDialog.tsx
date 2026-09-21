@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGraphStore } from '../../store/graphStore';
 import { useAnnotationStore } from '../../store/annotationStore';
+import { useT } from '../../i18n';
 
 interface Props {
   onClose: () => void;
@@ -11,6 +12,7 @@ interface Props {
  * 이미 프로젝트가 있으면 "원문 교체"(문서 버전 증가) 와 "새 프로젝트" 중 선택한다.
  */
 export function JudgmentInputDialog({ onClose }: Props) {
+  const t = useT();
   const caseData = useGraphStore((state) => state.caseData);
   const newDocument = useAnnotationStore((state) => state.newDocument);
   const replaceDocumentText = useAnnotationStore((state) => state.replaceDocumentText);
@@ -58,8 +60,8 @@ export function JudgmentInputDialog({ onClose }: Props) {
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="judgment-input-title">
         <header className="dialog-header">
-          <h2 id="judgment-input-title">판결문 입력</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="닫기">
+          <h2 id="judgment-input-title">{t('judgment.dialog.title')}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label={t('judgment.dialog.close')}>
             &#10005;
           </button>
         </header>
@@ -67,7 +69,7 @@ export function JudgmentInputDialog({ onClose }: Props) {
         <div className="dialog-body">
           <div className="dialog-row">
             <button type="button" onClick={() => fileRef.current?.click()}>
-              TXT 파일 열기
+              {t('judgment.dialog.openTxt')}
             </button>
             <input
               ref={fileRef}
@@ -80,10 +82,17 @@ export function JudgmentInputDialog({ onClose }: Props) {
                 event.target.value = '';
               }}
             />
-            <span className="dialog-hint">{fileName ? `파일: ${fileName}` : '또는 아래에 붙여넣기'}</span>
+            <span className="dialog-hint">
+              {fileName ? t('judgment.dialog.file', { name: fileName }) : t('judgment.dialog.orPaste')}
+            </span>
             <label className="dialog-inline">
-              사건 ID(선택)
-              <input type="text" value={caseId} onChange={(event) => setCaseId(event.target.value)} placeholder="예: 2026고합123" />
+              {t('judgment.dialog.caseId')}
+              <input
+                type="text"
+                value={caseId}
+                onChange={(event) => setCaseId(event.target.value)}
+                placeholder={t('judgment.dialog.caseIdPlaceholder')}
+              />
             </label>
           </div>
 
@@ -92,37 +101,34 @@ export function JudgmentInputDialog({ onClose }: Props) {
             className="dialog-textarea"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="판결문 원문을 붙여넣으세요. 줄바꿈과 공백은 그대로 보존됩니다."
+            placeholder={t('judgment.dialog.placeholder')}
             spellCheck={false}
           />
-          <div className="dialog-hint">{text.length.toLocaleString()}자</div>
+          <div className="dialog-hint">{t('judgment.dialog.charCount', { count: text.length.toLocaleString() })}</div>
 
           {caseData ? (
             <fieldset className="dialog-modes">
-              <legend>기존 프로젝트가 있습니다</legend>
+              <legend>{t('judgment.dialog.existing')}</legend>
               <label>
                 <input type="radio" name="mode" checked={mode === 'replace'} onChange={() => setMode('replace')} />
-                원문 교체 — 확정 그래프·검토 상태는 유지하고 문서 버전을 올립니다. 위치를 잃은 근거는 재검토 대상이 됩니다.
+                {t('judgment.dialog.replaceOption')}
               </label>
               <label>
                 <input type="radio" name="mode" checked={mode === 'new'} onChange={() => setMode('new')} />
-                새 프로젝트 — 현재 그래프와 검토 상태를 버리고 새로 시작합니다.
+                {t('judgment.dialog.newOption')}
               </label>
             </fieldset>
           ) : null}
 
-          <p className="dialog-note">
-            AI 분석을 누르면 세부 쟁점 카탈로그에서 분석 범위를 고릅니다. v10 flow 는 판결문에 근거가 있는 쟁점 수만큼 가지를 만들며,
-            이전(v9) flow 를 쓰면 쟁점이 3개로 고정됩니다.
-          </p>
+          <p className="dialog-note">{t('judgment.dialog.note')}</p>
         </div>
 
         <footer className="dialog-footer">
           <button type="button" onClick={onClose}>
-            취소
+            {t('judgment.dialog.cancel')}
           </button>
           <button type="button" className="is-primary" disabled={!text.trim() || busy} onClick={() => void submit()}>
-            {mode === 'replace' && caseData ? '원문 교체' : '프로젝트 시작'}
+            {mode === 'replace' && caseData ? t('judgment.dialog.replace') : t('judgment.dialog.create')}
           </button>
         </footer>
       </div>

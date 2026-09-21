@@ -10,6 +10,8 @@ import { useGraphStore } from './store/graphStore';
 import { useAnnotationStore } from './store/annotationStore';
 import { useCatalogStore } from './store/catalogStore';
 import { usePipelineStore } from './store/pipelineStore';
+import { LanguageToggle } from './components/Layout/LanguageToggle';
+import { useLang, useT } from './i18n';
 
 type Pane = 'text' | 'graph' | 'review';
 type View = 'argument' | 'pipeline';
@@ -28,6 +30,8 @@ function useNarrow(): boolean {
 }
 
 function StatusBar() {
+  const t = useT();
+  const lang = useLang();
   const caseData = useGraphStore((state) => state.caseData);
   const validation = useGraphStore((state) => state.validation);
   const selectedNodeIds = useGraphStore((state) => state.selectedNodeIds);
@@ -50,39 +54,43 @@ function StatusBar() {
     <footer className="status-bar">
       {counts ? (
         <>
-          <span>확정 노드 {counts.nodes}</span>
-          <span>엣지 {counts.edges}</span>
-          <span>쟁점 {counts.issues}</span>
-          <span>미검토 제안 {counts.pending}</span>
+          <span>{t('app.status.nodes', { count: counts.nodes })}</span>
+          <span>{t('app.status.edges', { count: counts.edges })}</span>
+          <span>{t('app.status.issues', { count: counts.issues })}</span>
+          <span>{t('app.status.pending', { count: counts.pending })}</span>
           <span>
-            검증:{' '}
             {validation
-              ? `오류 ${validation.errorCount} / 경고 ${validation.warningCount}`
-              : '미실행'}
+              ? t('app.status.validationCounts', { errors: validation.errorCount, warnings: validation.warningCount })
+              : t('app.status.validationNone')}
           </span>
-          {document ? <span>문서 v{document.version}</span> : null}
-          <span>{dirty ? '저장 안 됨' : lastSavedAt ? `저장됨 ${new Date(lastSavedAt).toLocaleTimeString()}` : ''}</span>
-          {selectedNodeIds.length > 0 ? <span>선택 {selectedNodeIds.length}</span> : null}
+          {document ? <span>{t('app.status.documentVersion', { version: document.version })}</span> : null}
+          <span>
+            {dirty
+              ? t('app.status.unsaved')
+              : lastSavedAt
+                ? t('app.status.savedAt', { time: new Date(lastSavedAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'ko-KR') })
+                : ''}
+          </span>
+          {selectedNodeIds.length > 0 ? <span>{t('app.status.selected', { count: selectedNodeIds.length })}</span> : null}
         </>
       ) : (
-        <span>판결문을 입력하거나 파일을 불러오세요.</span>
+        <span>{t('app.status.empty')}</span>
       )}
       <span className="status-spacer" />
-      <span className="status-hint">
-        캔버스 우클릭: 노드 추가 · 노드 클릭: 본문·스킴 보기(수정 버튼으로 편집) · 아래 핸들→위 핸들 드래그: 엣지 · 점선 노드: AI 초안
-      </span>
+      <span className="status-hint">{t('app.status.hint')}</span>
     </footer>
   );
 }
 
 function ErrorToast() {
+  const t = useT();
   const errorMessage = useGraphStore((state) => state.errorMessage);
   const clearError = useGraphStore((state) => state.clearError);
   if (!errorMessage) return null;
   return (
     <div className="error-toast" role="alert">
       <span>{errorMessage}</span>
-      <button type="button" onClick={clearError} aria-label="닫기">
+      <button type="button" onClick={clearError} aria-label={t('app.error.close')}>
         &#10005;
       </button>
     </div>
@@ -90,6 +98,8 @@ function ErrorToast() {
 }
 
 export default function App() {
+  const t = useT();
+  const lang = useLang();
   const undo = useGraphStore((state) => state.undo);
   const redo = useGraphStore((state) => state.redo);
   const select = useAnnotationStore((state) => state.select);
@@ -106,6 +116,11 @@ export default function App() {
   useEffect(() => {
     void loadCatalogs();
   }, [loadCatalogs]);
+
+  // 검증 메시지는 만들어질 때의 언어로 저장되므로, 언어를 바꾸면 다시 검사한다.
+  useEffect(() => {
+    if (useGraphStore.getState().validation) useGraphStore.getState().runValidation();
+  }, [lang]);
 
   useEffect(() => {
     // 논증 그래프 단축키. 파이프라인 탭은 자체 undo/redo 를 쓴다.
@@ -145,19 +160,17 @@ export default function App() {
   }, [dirty, pipelineUnsaved]);
 
   const viewTabs = (
-    <nav className="view-tabs" aria-label="화면 선택">
-      {(
-        [
-          ['argument', '논증 그래프'],
-          ['pipeline', '파이프라인'],
-        ] as Array<[View, string]>
-      ).map(([key, label]) => (
-        <button key={key} type="button" className={view === key ? 'is-active' : ''} aria-pressed={view === key} onClick={() => setView(key)}>
-          {label}
-          {key === 'pipeline' && pipelineDirty ? ' •' : ''}
-        </button>
-      ))}
-    </nav>
+    <div className="top-bar">
+      <nav className="view-tabs" aria-label={t('app.view.aria')}>
+        {(['argument', 'pipeline'] as View[]).map((key) => (
+          <button key={key} type="button" className={view === key ? 'is-active' : ''} aria-pressed={view === key} onClick={() => setView(key)}>
+            {key === 'argument' ? t('app.view.argument') : t('app.view.pipeline')}
+            {key === 'pipeline' && pipelineDirty ? ' •' : ''}
+          </button>
+        ))}
+      </nav>
+      <LanguageToggle />
+    </div>
   );
 
   if (view === 'pipeline') {
@@ -176,12 +189,12 @@ export default function App() {
         {viewTabs}
         <Toolbar />
         {narrow ? (
-          <nav className="pane-tabs" aria-label="패널 선택">
+          <nav className="pane-tabs" aria-label={t('app.pane.aria')}>
             {(
               [
-                ['text', '판결문'],
-                ['graph', '그래프'],
-                ['review', '검토'],
+                ['text', t('app.pane.text')],
+                ['graph', t('app.pane.graph')],
+                ['review', t('app.pane.review')],
               ] as Array<[Pane, string]>
             ).map(([key, label]) => (
               <button
@@ -209,9 +222,9 @@ export default function App() {
                 className="review-toggle"
                 onClick={() => setReviewCollapsed((value) => !value)}
                 aria-expanded={!reviewCollapsed}
-                title={reviewCollapsed ? '검토 패널 열기' : '검토 패널 접기'}
+                title={reviewCollapsed ? t('app.review.expand') : t('app.review.collapse')}
               >
-                {reviewCollapsed ? '◀ 검토' : '검토 ▶'}
+                {reviewCollapsed ? t('app.review.collapsedLabel') : t('app.review.expandedLabel')}
               </button>
             ) : null}
           </section>

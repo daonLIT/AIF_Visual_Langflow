@@ -15,6 +15,7 @@ import httpx
 from ..config import Settings
 from .pipeline.repository import PipelineError
 from .texthash import text_hash
+from ..i18n import t
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
 MAX_ITEMS = 40
@@ -22,14 +23,14 @@ MAX_ITEMS = 40
 
 async def generate_summaries(settings: Settings, config: dict, items: list[dict], http_transport: httpx.AsyncBaseTransport | None = None) -> dict:
     if not settings.is_live:
-        raise PipelineError("UNSUPPORTED_IN_MOCK", "mock 모드에서는 실제 요약을 만들 수 없습니다. live 모드에서 사용하세요.", status=501)
+        raise PipelineError("UNSUPPORTED_IN_MOCK", t("summaries.unsupported_in_mock"), status=501)
     if not items:
         return {"summaries": [], "missing": [], "model": config.get("model")}
     if len(items) > MAX_ITEMS:
-        raise PipelineError("TOO_MANY", f"한 번에 {MAX_ITEMS}개까지 요약할 수 있습니다.", status=400)
+        raise PipelineError("TOO_MANY", t("summaries.too_many", max=MAX_ITEMS), status=400)
     template = str(config.get("promptTemplate") or "")
     if "{nodes_json}" not in template:
-        raise PipelineError("BAD_PROMPT", "Summarizer 프롬프트에 {nodes_json} 변수가 없습니다.", status=409)
+        raise PipelineError("BAD_PROMPT", t("summaries.bad_prompt"), status=409)
     payload_items = [{"node_id": item["nodeId"], "type": item.get("type") or "I", "text": item["text"]} for item in items]
     messages = []
     if str(config.get("systemMessage") or "").strip():
@@ -49,15 +50,15 @@ async def generate_summaries(settings: Settings, config: dict, items: list[dict]
                 },
             )
     except httpx.HTTPError as error:
-        raise PipelineError("OLLAMA", f"Ollama 에 연결할 수 없습니다: {error.__class__.__name__}", status=502) from error
+        raise PipelineError("OLLAMA", t("summaries.ollama_unreachable", name=error.__class__.__name__), status=502) from error
     if response.status_code >= 400:
-        raise PipelineError("OLLAMA", f"Ollama 오류 {response.status_code}: {response.text[:200]}", status=502)
+        raise PipelineError("OLLAMA", t("summaries.ollama_error", status=response.status_code, body=response.text[:200]), status=502)
     content = (response.json().get("message") or {}).get("content") or ""
     match = _FENCE.match(content.strip())
     try:
         answer = json.loads(match.group(1) if match else content)
     except ValueError as error:
-        raise PipelineError("BAD_ANSWER", f"모델 응답이 JSON 이 아닙니다: {error}", status=502) from error
+        raise PipelineError("BAD_ANSWER", t("summaries.bad_answer", error=error), status=502) from error
     by_id = {item["nodeId"]: item for item in items}
     summaries = []
     for entry in answer.get("summaries") or [] if isinstance(answer, dict) else []:

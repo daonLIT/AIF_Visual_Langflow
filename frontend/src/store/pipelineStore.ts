@@ -30,6 +30,7 @@ import type {
   PipelineVersion,
 } from '../types/pipeline';
 import { useAnnotationStore, sha256Hex } from './annotationStore';
+import { t } from '../i18n';
 
 const HISTORY_LIMIT = 50;
 const TEST_POLL_MS = 2000;
@@ -273,7 +274,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
         if (next.status !== 'queued' && next.status !== 'running') stopPolling();
       } catch (error) {
         stopPolling();
-        set({ message: errorMessage(error, '테스트 실행 상태를 가져오지 못했습니다') });
+        set({ message: errorMessage(error, t('lfStore.error.testRunStatus')) });
       }
     };
     pollTimer = window.setInterval(() => void tick(), TEST_POLL_MS);
@@ -293,12 +294,12 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
         const list = await pipelineApi.listFlows();
         set({ flows: list.flows, mode: list.mode, productionFlowId: list.productionFlowId, analysisFlowId: list.analysisFlowId });
       } catch (error) {
-        set({ message: errorMessage(error, 'flow 목록을 가져오지 못했습니다') });
+        set({ message: errorMessage(error, t('lfStore.error.flowList')) });
       }
     },
 
     async openFlow(flowId) {
-      await withBusy('불러오는 중', async () => {
+      await withBusy(t('lfStore.busy.loading'), async () => {
         try {
           const view = await pipelineApi.getFlow(flowId);
           if (view.draft) {
@@ -310,9 +311,9 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
               message: view.draft.remoteChangedSinceDraft
                 ? {
                     kind: 'error',
-                    text: `저장된 초안(${new Date(draft.savedAt).toLocaleString()})을 불러왔지만, 초안을 만든 뒤 Langflow 의 flow 가 바뀌었습니다. 적용하면 충돌로 거절됩니다. [초안 버리기] 후 다시 편집하거나 변경을 확인하세요.`,
+                    text: t('lfStore.draft.staleLoaded', { time: new Date(draft.savedAt).toLocaleString() }),
                   }
-                : { kind: 'info', text: `저장된 초안(${new Date(draft.savedAt).toLocaleString()})을 이어서 편집합니다. Langflow 에는 아직 적용되지 않았습니다.` },
+                : { kind: 'info', text: t('lfStore.draft.loaded', { time: new Date(draft.savedAt).toLocaleString() }) },
             });
           } else {
             adopt(view, { message: null });
@@ -320,7 +321,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
           set({ versions: [] });
           void get().loadTemplates();
         } catch (error) {
-          set({ message: errorMessage(error, 'flow 를 불러오지 못했습니다') });
+          set({ message: errorMessage(error, t('lfStore.error.flowLoad')) });
         }
       });
     },
@@ -343,11 +344,11 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
           // 초안의 기준 시점·해시를 유지해 원격 변경을 덮어쓰지 않게 한다.
           base: { updatedAt: draft.baseUpdatedAt ?? current.flow.updatedAt, hash: draft.baseHash ?? current.hash },
           message: stale
-            ? { kind: 'error', text: '초안을 만든 뒤 Langflow 의 flow 가 바뀌었습니다. 적용하면 충돌로 거절됩니다. 변경 내용을 확인하세요.' }
-            : { kind: 'info', text: '초안을 불러왔습니다.' },
+            ? { kind: 'error', text: t('lfStore.draft.staleNotice') }
+            : { kind: 'info', text: t('lfStore.draft.loadedShort') },
         });
       } catch (error) {
-        set({ message: errorMessage(error, '초안을 불러오지 못했습니다') });
+        set({ message: errorMessage(error, t('lfStore.error.draftLoad')) });
       }
     },
 
@@ -358,16 +359,16 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
         cancelAutosave();
         await pipelineApi.discardDraft(current.flow.id);
         await get().openFlow(current.flow.id);
-        set({ message: { kind: 'info', text: '저장된 초안을 버렸습니다.' } });
+        set({ message: { kind: 'info', text: t('lfStore.draft.discarded') } });
       } catch (error) {
-        set({ message: errorMessage(error, '초안을 버리지 못했습니다') });
+        set({ message: errorMessage(error, t('lfStore.error.draftDiscard')) });
       }
     },
 
     async cloneFlow(name) {
       const { current, data, dirty } = get();
       if (!current) return;
-      await withBusy('복제 중', async () => {
+      await withBusy(t('lfStore.busy.cloning'), async () => {
         try {
           const view = await pipelineApi.clone(current.flow.id, name);
           // 편집 중이던 내용이 있으면 복제본 위에 그대로 옮긴다(컴포넌트 ID 가 같다).
@@ -375,12 +376,12 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
             keepData: dirty ? data : null,
             message: {
               kind: 'success',
-              text: `작업용 flow "${view.flow.name}" 를 만들었습니다.${dirty ? ' 편집 중이던 내용을 옮겨 왔습니다. 검증 후 적용하세요.' : ''}`,
+              text: t('lfStore.cloned', { name: view.flow.name }) + (dirty ? t('lfStore.cloned.moved') : ''),
             },
           });
           await get().loadFlows();
         } catch (error) {
-          set({ message: errorMessage(error, '복제하지 못했습니다') });
+          set({ message: errorMessage(error, t('lfStore.error.clone')) });
         }
       });
     },
@@ -400,7 +401,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
             ...(options.silent ? {} : { serverIssues: result.issues }),
             message: options.silent
               ? latest.message
-              : { kind: 'success', text: `초안을 저장했습니다 (${new Date(result.savedAt).toLocaleTimeString()}). Langflow 에는 아직 적용되지 않았습니다.` },
+              : { kind: 'success', text: t('lfStore.draft.saved', { time: new Date(result.savedAt).toLocaleTimeString() }) },
             current: latest.current && {
               ...latest.current,
               flow: { ...latest.current.flow, hasDraft: true },
@@ -409,29 +410,32 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
           });
           if (latest.data !== data) scheduleAutosave();
         } catch (error) {
-          set({ message: errorMessage(error, options.silent ? '초안 자동 저장 실패' : '초안을 저장하지 못했습니다') });
+          set({ message: errorMessage(error, options.silent ? t('lfStore.error.draftAutosave') : t('lfStore.error.draftSave')) });
         }
       };
       if (options.silent) await run();
-      else await withBusy('초안 저장 중', run);
+      else await withBusy(t('lfStore.busy.savingDraft'), run);
     },
 
     async validate(checkCode = false) {
       const { current, data } = get();
       if (!current || !data) return false;
-      const result = await withBusy('검증 중', async () => {
+      const result = await withBusy(t('lfStore.busy.validating'), async () => {
         try {
           const response = await pipelineApi.validate(current.flow.id, data, checkCode);
           set({
             serverIssues: response.issues,
             message:
               response.errorCount === 0
-                ? { kind: 'success', text: `검증 통과 (경고 ${response.issues.filter((i) => i.level === 'warning').length}개).` }
-                : { kind: 'error', text: `검증 오류 ${response.errorCount}개. 아래 목록을 확인하세요.` },
+                ? {
+                    kind: 'success',
+                    text: t('lfStore.validation.passed', { count: response.issues.filter((i) => i.level === 'warning').length }),
+                  }
+                : { kind: 'error', text: t('lfStore.validation.failed', { count: response.errorCount }) },
           });
           return response.errorCount === 0;
         } catch (error) {
-          set({ message: errorMessage(error, '검증하지 못했습니다') });
+          set({ message: errorMessage(error, t('lfStore.error.validate')) });
           return false;
         }
       });
@@ -443,20 +447,23 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
       if (!current || !data) return false;
       cancelAutosave();
       const payload = test?.text.trim() ? await testPayload(test.text) : null;
-      const result = await withBusy('Langflow 에 적용 중', async () => {
+      const result = await withBusy(t('lfStore.busy.applying'), async () => {
         try {
           const view = await pipelineApi.apply(current.flow.id, data, { updatedAt: baseUpdatedAt, hash: baseHash }, { note, test: payload });
           const applied = view.applied;
           if (!applied?.verified) {
             // 서버가 확인하지 못한 적용은 성공으로 표시하지 않는다.
-            set({ message: { kind: 'error', text: 'Langflow 저장 후 재조회 확인 결과가 없습니다. 적용이 완료되었다고 볼 수 없습니다. 새로고침으로 상태를 확인하세요.' } });
+            set({ message: { kind: 'error', text: t('lfStore.apply.unverified') } });
             return false;
           }
           const warnings = applied.warnings ?? [];
           adopt(view, {
             message: {
               kind: 'success',
-              text: `Langflow 에 적용하고 다시 읽어 저장 내용을 확인했습니다 (실행 해시 ${applied.actualHash.slice(0, 19)}). 적용 전 원격 flow 는 백업되었습니다.${applied.langflowSnapshotError ? ' (Langflow 버전 스냅샷은 만들지 못했습니다)' : ''}${view.testRun ? ' 테스트 실행을 시작했습니다.' : ''}`,
+              text:
+                t('lfStore.apply.done', { hash: applied.actualHash.slice(0, 19) }) +
+                (applied.langflowSnapshotError ? t('lfStore.apply.noSnapshot') : '') +
+                (view.testRun ? t('lfStore.apply.testStarted') : ''),
               details: warnings,
             },
           });
@@ -465,7 +472,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
           await Promise.all([get().loadVersions(), get().loadFlows()]);
           return true;
         } catch (error) {
-          const message = errorMessage(error, '적용하지 못했습니다');
+          const message = errorMessage(error, t('lfStore.error.apply'));
           if (error instanceof ApiError && error.code === 'VALIDATION') set({ serverIssues: error.details as PipelineIssue[] });
           set({ message });
           if (error instanceof ApiError && error.code === 'APPLY_NOT_VERIFIED') void get().loadVersions();
@@ -481,23 +488,23 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
       try {
         set({ versions: (await pipelineApi.versions(current.flow.id)).versions });
       } catch (error) {
-        set({ message: errorMessage(error, '버전 기록을 가져오지 못했습니다') });
+        set({ message: errorMessage(error, t('lfStore.error.versions')) });
       }
     },
 
     async restoreVersion(versionId) {
       const { current } = get();
       if (!current) return;
-      await withBusy('복원 중', async () => {
+      await withBusy(t('lfStore.busy.restoring'), async () => {
         try {
           // 복원은 현재 원격 flow 를 기준으로 한다(편집 중 내용은 버린다).
           cancelAutosave();
           const fresh = await pipelineApi.getFlow(current.flow.id);
           const view = await pipelineApi.restore(current.flow.id, versionId, { updatedAt: fresh.flow.updatedAt, hash: fresh.hash });
-          adopt(view, { message: { kind: 'success', text: '선택한 버전으로 복원해 Langflow 에 적용했습니다. 복원 직전 상태도 백업되었습니다.' } });
+          adopt(view, { message: { kind: 'success', text: t('lfStore.restored') } });
           await get().loadVersions();
         } catch (error) {
-          set({ message: errorMessage(error, '복원하지 못했습니다') });
+          set({ message: errorMessage(error, t('lfStore.error.restore')) });
         }
       });
     },
@@ -508,7 +515,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
         const result = await pipelineApi.componentTemplates(current?.flow.id);
         set({ templates: result.templates, templateWarnings: result.warnings });
       } catch (error) {
-        set({ templateWarnings: [errorMessage(error, '컴포넌트 목록').text] });
+        set({ templateWarnings: [errorMessage(error, t('lfStore.error.templates')).text] });
       }
     },
 
@@ -517,20 +524,23 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
         const result = await pipelineApi.setAnalysisFlow(flowId);
         set({
           analysisFlowId: result.analysisFlowId,
-          message: { kind: 'success', text: flowId ? '이 flow 를 논증 그래프 탭의 AI 분석에 사용합니다.' : '분석 flow 지정을 해제했습니다 (LANGFLOW_FLOW_ID 사용).' },
+          message: {
+            kind: 'success',
+            text: flowId ? t('lfStore.analysisFlow.set') : t('lfStore.analysisFlow.cleared'),
+          },
         });
         await get().loadFlows();
       } catch (error) {
-        set({ message: errorMessage(error, '분석 flow 를 지정하지 못했습니다') });
+        set({ message: errorMessage(error, t('lfStore.error.analysisFlow')) });
       }
     },
 
     async runDiagnostics() {
-      await withBusy('연결 확인 중', async () => {
+      await withBusy(t('lfStore.busy.diagnostics'), async () => {
         try {
           set({ connection: await api.connectionStatus() });
         } catch (error) {
-          set({ message: errorMessage(error, '연결을 확인하지 못했습니다') });
+          set({ message: errorMessage(error, t('lfStore.error.diagnostics')) });
         }
       });
     },
@@ -553,7 +563,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
       const relay = get().current?.relay;
       const blocked = nodeIds.filter((id) => id === relay?.inputComponentId || id === relay?.outputComponentId);
       if (blocked.length > 0) {
-        set({ message: { kind: 'error', text: `중계 서버가 사용하는 입력/출력 컴포넌트는 삭제할 수 없습니다: ${blocked.join(', ')}` } });
+        set({ message: { kind: 'error', text: t('lfStore.error.relayDelete', { ids: blocked.join(', ') }) } });
       }
       const removing = new Set(nodeIds.filter((id) => !blocked.includes(id)));
       if (removing.size === 0) return;
@@ -584,7 +594,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
       if (!data) return false;
       const check = canConnect(data, sourceId, outputName, targetId, fieldName);
       if (!check.ok) {
-        set({ message: { kind: 'error', text: `연결할 수 없습니다: ${check.reason}` } });
+        set({ message: { kind: 'error', text: t('lfStore.error.connect', { reason: check.reason ?? '' }) } });
         return false;
       }
       const source = data.nodes.find((node) => node.id === sourceId)!;
@@ -627,7 +637,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
         return removeDanglingEdges(withNode).data;
       });
       if (removed.length > 0) {
-        set({ message: { kind: 'info', text: `프롬프트에서 사라진 변수 필드와 그 연결을 제거했습니다: ${removed.join(', ')}` } });
+        set({ message: { kind: 'info', text: t('lfStore.variablesRemoved', { names: removed.join(', ') }) } });
       }
     },
 
@@ -648,7 +658,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
       const node = data?.nodes.find((item) => item.id === nodeId);
       const code = node ? fieldSpec(node, 'code')?.value : undefined;
       if (!node || typeof code !== 'string') return;
-      await withBusy('컴포넌트 재구성 중', async () => {
+      await withBusy(t('lfStore.busy.rebuilding'), async () => {
         try {
           const result = await pipelineApi.rebuildComponent(code, node.data.node);
           let removed = 0;
@@ -666,11 +676,14 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
           set({
             message: {
               kind: 'success',
-              text: `코드로 입력·출력을 다시 만들었습니다.${removed > 0 ? ` 없어진 포트의 연결 ${removed}개를 제거했습니다.` : ''} 적용 전에 검증하세요.`,
+              text:
+                t('lfStore.rebuilt') +
+                (removed > 0 ? t('lfStore.rebuilt.removed', { count: removed }) : '') +
+                t('lfStore.rebuilt.tail'),
             },
           });
         } catch (error) {
-          set({ message: errorMessage(error, '컴포넌트를 재구성하지 못했습니다') });
+          set({ message: errorMessage(error, t('lfStore.error.rebuild')) });
         }
       });
     },
@@ -716,17 +729,17 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
       if (!current) return;
       if (testRun && (testRun.status === 'queued' || testRun.status === 'running')) return;
       if (!text.trim()) {
-        set({ message: { kind: 'error', text: '테스트할 판결문 원문이 없습니다.' } });
+        set({ message: { kind: 'error', text: t('lfStore.error.noTestText') } });
         return;
       }
       if (dirty) {
-        set({ message: { kind: 'info', text: '테스트 실행은 Langflow 에 저장된 flow 로 실행됩니다. 편집 중인 변경은 적용한 뒤 테스트하세요.' } });
+        set({ message: { kind: 'info', text: t('lfStore.test.savedFlow') } });
       }
       try {
         const record = await pipelineApi.test(current.flow.id, await testPayload(text));
         followTestRun(record, current.flow.id);
       } catch (error) {
-        set({ message: errorMessage(error, '테스트 실행을 시작하지 못했습니다') });
+        set({ message: errorMessage(error, t('lfStore.error.testStart')) });
       }
     },
 
@@ -737,7 +750,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => {
       set({
         message: problem
           ? { kind: 'error', text: problem }
-          : { kind: 'success', text: '테스트 실행 결과를 논증 그래프 탭의 검토 제안으로 불러왔습니다.' },
+          : { kind: 'success', text: t('lfStore.test.imported') },
       });
     },
 

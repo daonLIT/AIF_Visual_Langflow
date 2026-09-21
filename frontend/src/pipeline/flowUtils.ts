@@ -18,6 +18,7 @@ import type {
   PipelineIssue,
 } from '../types/pipeline';
 import { SECRET_SENTINEL } from '../types/pipeline';
+import { t } from '../i18n';
 
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -120,21 +121,21 @@ export function canConnect(
   targetId: string,
   fieldName: string,
 ): { ok: boolean; reason?: string } {
-  if (sourceId === targetId) return { ok: false, reason: '같은 컴포넌트끼리는 연결할 수 없습니다.' };
+  if (sourceId === targetId) return { ok: false, reason: t('flow.connect.sameNode') };
   const source = data.nodes.find((node) => node.id === sourceId);
   const target = data.nodes.find((node) => node.id === targetId);
-  if (!source || !target) return { ok: false, reason: '컴포넌트를 찾을 수 없습니다.' };
+  if (!source || !target) return { ok: false, reason: t('flow.connect.missingNode') };
   const output = outputsOf(source).find((item) => item.name === outputName);
   const spec = fieldSpec(target, fieldName);
-  if (!output) return { ok: false, reason: `출력 ${outputName} 이 없습니다.` };
-  if (!spec || !acceptsConnection(spec)) return { ok: false, reason: `${fieldName} 은 연결을 받지 않는 필드입니다.` };
+  if (!output) return { ok: false, reason: t('flow.connect.missingOutput', { name: outputName }) };
+  if (!spec || !acceptsConnection(spec)) return { ok: false, reason: t('flow.connect.notConnectable', { name: fieldName }) };
   const inputs = spec.input_types ?? [];
   if (inputs.length > 0 && !outputTypes(output).some((type) => inputs.includes(type))) {
-    return { ok: false, reason: `형식이 맞지 않습니다: ${outputTypes(output).join('/')} → ${inputs.join('/')}` };
+    return { ok: false, reason: t('flow.connect.typeMismatch', { from: outputTypes(output).join('/'), to: inputs.join('/') }) };
   }
   const existing = connectedFields(data, targetId).get(fieldName) ?? [];
-  if (existing.length > 0 && !spec.list) return { ok: false, reason: `${fieldName} 에는 이미 연결이 있습니다(하나만 허용).` };
-  if (createsCycle(data, sourceId, targetId)) return { ok: false, reason: '순환 연결이 됩니다.' };
+  if (existing.length > 0 && !spec.list) return { ok: false, reason: t('flow.connect.alreadyConnected', { name: fieldName }) };
+  if (createsCycle(data, sourceId, targetId)) return { ok: false, reason: t('flow.connect.cycle') };
   return { ok: true };
 }
 
@@ -203,7 +204,7 @@ export function promptVariables(template: string): { variables: string[]; error:
       const close = template.indexOf('}', i + 1);
       const nextOpen = template.indexOf('{', i + 1);
       if (close === -1 || (nextOpen !== -1 && nextOpen < close)) {
-        return { variables, error: "'{' 가 닫히지 않았습니다. 문자 그대로의 중괄호는 {{ }} 로 두 번 쓰세요." };
+        return { variables, error: t('flow.prompt.unclosed') };
       }
       const raw = template.slice(i + 1, close);
       const name = raw.split(/[!:]/, 1)[0];
@@ -216,16 +217,16 @@ export function promptVariables(template: string): { variables: string[]; error:
         i += 2;
         continue;
       }
-      return { variables, error: "짝이 없는 '}' 가 있습니다. 문자 그대로의 중괄호는 {{ }} 로 두 번 쓰세요." };
+      return { variables, error: t('flow.prompt.unmatched') };
     }
     i += 1;
   }
   for (const name of variables) {
-    if (name === '') return { variables, error: '빈 변수 {} 가 있습니다.' };
+    if (name === '') return { variables, error: t('flow.prompt.emptyVariable') };
     if (/^\d/.test(name) || [...name].some((c) => PROMPT_INVALID.has(c))) {
-      return { variables, error: `변수 이름으로 쓸 수 없는 형식입니다: {${name}}. JSON 예시의 중괄호는 {{ }} 로 두 번 쓰세요.` };
+      return { variables, error: t('flow.prompt.badName', { name: `{${name}}` }) };
     }
-    if (PROMPT_RESERVED.has(name)) return { variables, error: `예약된 이름은 변수로 쓸 수 없습니다: ${name}` };
+    if (PROMPT_RESERVED.has(name)) return { variables, error: t('flow.prompt.reserved', { name }) };
   }
   return { variables, error: null };
 }
@@ -338,7 +339,7 @@ export function validateLocal(data: LfFlowData, relay?: { inputComponentId: stri
   const issues: PipelineIssue[] = [];
   const ids = new Set<string>();
   for (const node of data.nodes) {
-    if (ids.has(node.id)) issues.push({ level: 'error', code: 'DUPLICATE_NODE', message: `중복 노드 id: ${node.id}`, nodeId: node.id });
+    if (ids.has(node.id)) issues.push({ level: 'error', code: 'DUPLICATE_NODE', message: t('flow.issue.duplicateNode', { nodeId: node.id }), nodeId: node.id });
     ids.add(node.id);
     if (componentKind(node) === 'prompt') {
       const text = String(fieldSpec(node, 'template')?.value ?? '');
@@ -347,7 +348,13 @@ export function validateLocal(data: LfFlowData, relay?: { inputComponentId: stri
       else
         for (const name of variables)
           if (!fieldSpec(node, name))
-            issues.push({ level: 'error', code: 'PROMPT_FIELD_MISSING', message: `${displayName(node)}: {${name}} 입력 필드가 없습니다.`, nodeId: node.id, field: name });
+            issues.push({
+              level: 'error',
+              code: 'PROMPT_FIELD_MISSING',
+              message: t('flow.issue.promptFieldMissing', { node: displayName(node), name: `{${name}}` }),
+              nodeId: node.id,
+              field: name,
+            });
     }
   }
   const counts = new Map<string, number>();
@@ -357,28 +364,58 @@ export function validateLocal(data: LfFlowData, relay?: { inputComponentId: stri
     const sourceHandle = parseHandle<LfSourceHandle>(edge.data?.sourceHandle ?? edge.sourceHandle);
     const targetHandle = parseHandle<LfTargetHandle>(edge.data?.targetHandle ?? edge.targetHandle);
     if (!source || !target || !sourceHandle || !targetHandle) {
-      issues.push({ level: 'error', code: 'EDGE_ENDPOINT', message: `연결 ${edge.id} 의 끝점이 올바르지 않습니다.`, edgeId: edge.id });
+      issues.push({ level: 'error', code: 'EDGE_ENDPOINT', message: t('flow.issue.edgeEndpoint', { edgeId: edge.id }), edgeId: edge.id });
       continue;
     }
     const output = outputsOf(source).find((item) => item.name === sourceHandle.name);
     const spec = fieldSpec(target, targetHandle.fieldName);
     if (!output || !spec) {
-      issues.push({ level: 'error', code: 'EDGE_HANDLE', message: `연결 ${displayName(source)} → ${displayName(target)}.${targetHandle.fieldName}: 출력 또는 입력 필드가 없습니다.`, edgeId: edge.id, nodeId: target.id });
+      issues.push({
+        level: 'error',
+        code: 'EDGE_HANDLE',
+        message: t('flow.issue.edgeHandle', {
+          source: displayName(source),
+          target: displayName(target),
+          field: targetHandle.fieldName,
+        }),
+        edgeId: edge.id,
+        nodeId: target.id,
+      });
       continue;
     }
     const inputs = spec.input_types ?? [];
     if (inputs.length > 0 && !outputTypes(output).some((type) => inputs.includes(type))) {
-      issues.push({ level: 'error', code: 'EDGE_TYPE', message: `연결 ${displayName(source)} → ${displayName(target)}.${targetHandle.fieldName}: 형식 불일치`, edgeId: edge.id, nodeId: target.id });
+      issues.push({
+        level: 'error',
+        code: 'EDGE_TYPE',
+        message: t('flow.issue.edgeType', {
+          source: displayName(source),
+          target: displayName(target),
+          field: targetHandle.fieldName,
+        }),
+        edgeId: edge.id,
+        nodeId: target.id,
+      });
     }
     const key = `${target.id}::${targetHandle.fieldName}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
     if ((counts.get(key) ?? 0) > 1 && !spec.list) {
-      issues.push({ level: 'error', code: 'FIELD_MULTI_EDGE', message: `${displayName(target)}.${targetHandle.fieldName} 에 연결이 둘 이상입니다.`, nodeId: target.id, field: targetHandle.fieldName });
+      issues.push({
+        level: 'error',
+        code: 'FIELD_MULTI_EDGE',
+        message: t('flow.issue.multiEdge', { target: displayName(target), field: targetHandle.fieldName }),
+        nodeId: target.id,
+        field: targetHandle.fieldName,
+      });
     }
   }
   if (relay) {
-    if (!ids.has(relay.inputComponentId)) issues.push({ level: 'error', code: 'RELAY_INPUT', message: `중계 서버 입력 컴포넌트 ${relay.inputComponentId} 가 없습니다.` });
-    if (!ids.has(relay.outputComponentId)) issues.push({ level: 'error', code: 'RELAY_OUTPUT', message: `중계 서버 출력 컴포넌트 ${relay.outputComponentId} 가 없습니다.` });
+    if (!ids.has(relay.inputComponentId)) {
+      issues.push({ level: 'error', code: 'RELAY_INPUT', message: t('flow.issue.relayInput', { id: relay.inputComponentId }) });
+    }
+    if (!ids.has(relay.outputComponentId)) {
+      issues.push({ level: 'error', code: 'RELAY_OUTPUT', message: t('flow.issue.relayOutput', { id: relay.outputComponentId }) });
+    }
   }
   return issues;
 }
@@ -422,12 +459,14 @@ export function diffFlowData(base: LfFlowData, current: LfFlowData): FlowDiff {
 }
 
 export function describeDiff(diff: FlowDiff): string {
-  if (diff.sameExecution) return diff.nodesMoved.length > 0 ? `위치 이동 ${diff.nodesMoved.length}개 (실행 내용 동일)` : '적용본과 같음';
+  if (diff.sameExecution) {
+    return diff.nodesMoved.length > 0 ? t('flow.diff.moved', { count: diff.nodesMoved.length }) : t('flow.diff.same');
+  }
   const parts = [
-    diff.nodesChanged.length ? `변경 ${diff.nodesChanged.length}` : '',
-    diff.nodesAdded.length ? `추가 ${diff.nodesAdded.length}` : '',
-    diff.nodesRemoved.length ? `삭제 ${diff.nodesRemoved.length}` : '',
-    diff.edgesAdded || diff.edgesRemoved ? `연결 +${diff.edgesAdded} -${diff.edgesRemoved}` : '',
+    diff.nodesChanged.length ? t('flow.diff.changed', { count: diff.nodesChanged.length }) : '',
+    diff.nodesAdded.length ? t('flow.diff.added', { count: diff.nodesAdded.length }) : '',
+    diff.nodesRemoved.length ? t('flow.diff.removed', { count: diff.nodesRemoved.length }) : '',
+    diff.edgesAdded || diff.edgesRemoved ? t('flow.diff.edges', { added: diff.edgesAdded, removed: diff.edgesRemoved }) : '',
   ].filter(Boolean);
-  return `컴포넌트 ${parts.join(' · ')}`;
+  return t('flow.diff.components', { parts: parts.join(' · ') });
 }

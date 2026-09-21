@@ -8,6 +8,7 @@ import { PipelineBottomPanel } from './PipelineBottomPanel';
 import { VersionsDialog } from './VersionsDialog';
 import { ApplyDialog } from './ApplyDialog';
 import { describeDiff } from '../../pipeline/flowUtils';
+import { useLang, useT } from '../../i18n';
 
 /**
  * 파이프라인 탭: 사이트 안에서 실제 Langflow flow data 를 편집하고 저장한다.
@@ -66,6 +67,8 @@ export function PipelineEditor({ active }: { active: boolean }) {
 }
 
 function PipelineToolbar() {
+  const t = useT();
+  const lang = useLang();
   const flows = usePipelineStore((state) => state.flows);
   const mode = usePipelineStore((state) => state.mode);
   const current = usePipelineStore((state) => state.current);
@@ -90,30 +93,38 @@ function PipelineToolbar() {
 
   const flow = current?.flow;
   const production = !!flow?.isProduction;
-  const dirtyText = `적용 안 된 편집${diff ? ` · ${describeDiff(diff)}` : ''} · ${
-    draftSaved ? `초안 저장됨${draftSavedAt ? ` ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}` : '초안 저장 대기'
-  }`;
+  const dirtyText = t('lf.editor.dirty', {
+    diff: diff ? ` · ${describeDiff(diff)}` : '',
+    draft: draftSaved
+      ? draftSavedAt
+        ? t('lf.editor.draftSavedAt', { time: new Date(draftSavedAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'ko-KR') })
+        : t('lf.editor.draftSaved')
+      : t('lf.editor.draftPending'),
+  });
 
   return (
     <header className="pipeline-toolbar">
       <label className="pipeline-flow-select">
         flow
         <select value={flow?.id ?? ''} onChange={(event) => void open(event.target.value)}>
-          <option value="">— 선택 —</option>
+          <option value="">{t('lf.editor.selectFlow')}</option>
           {flows.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.isProduction ? '[프로덕션] ' : item.isWorkingCopy ? '[작업용] ' : ''}
+              {item.isProduction ? t('lf.editor.tagProduction') : item.isWorkingCopy ? t('lf.editor.tagWorking') : ''}
               {item.name}
-              {item.isAnalysisFlow ? ' ★분석' : ''}
-              {item.hasDraft ? ' (초안 있음)' : ''}
+              {item.isAnalysisFlow ? t('lf.editor.tagAnalysis') : ''}
+              {item.hasDraft ? t('lf.editor.tagDraft') : ''}
             </option>
           ))}
         </select>
       </label>
-      <button type="button" onClick={() => void store().reload()} disabled={!!busy} title="Langflow 에서 목록과 현재 flow 를 다시 읽습니다">
-        새로고침
+      <button type="button" onClick={() => void store().reload()} disabled={!!busy} title={t('lf.editor.reload.title')}>
+        {t('lf.editor.reload')}
       </button>
-      <span className={`run-chip ${mode === 'live' ? 'is-succeeded' : ''}`} title={mode === 'mock' ? '실제 Langflow 대신 로컬 사본을 편집합니다' : '실제 Langflow 서버'}>
+      <span
+        className={`run-chip ${mode === 'live' ? 'is-succeeded' : ''}`}
+        title={mode === 'mock' ? t('lf.editor.mock.title') : t('lf.editor.live.title')}
+      >
         {mode ?? '?'}
       </span>
 
@@ -123,71 +134,80 @@ function PipelineToolbar() {
         type="button"
         disabled={!flow || !!busy}
         onClick={() => {
-          const name = window.prompt('작업용 flow 이름', `${flow?.name ?? 'flow'} (작업용)`);
+          const name = window.prompt(
+            t('lf.editor.clonePrompt'),
+            t('lf.editor.cloneDefault', { name: flow?.name ?? 'flow' }),
+          );
           if (name !== null) void store().cloneFlow(name.trim() || undefined);
         }}
-        title="원본을 보존하고 편집·적용할 복제본을 Langflow 에 만듭니다. 편집 중인 내용은 복제본으로 옮겨집니다."
+        title={t('lf.editor.clone.title')}
       >
-        작업용 복제
+        {t('lf.editor.clone')}
       </button>
-      <button type="button" disabled={!flow || !dirty || !!busy} onClick={() => void store().saveDraft()} title="서버에 초안으로 저장 (Langflow 에는 적용하지 않음) · Ctrl+S">
-        초안 저장
+      <button
+        type="button"
+        disabled={!flow || !dirty || !!busy}
+        onClick={() => void store().saveDraft()}
+        title={t('lf.editor.saveDraft.title')}
+      >
+        {t('lf.editor.saveDraft')}
       </button>
       {/* 초안 유무에 따라 버튼을 넣고 빼면 뒤 버튼들이 밀려 잘못 누르기 쉬우므로 항상 두고 비활성화만 한다. */}
       <button
         type="button"
         disabled={!current?.draft || !!busy}
         onClick={() => void store().loadDraft()}
-        title={current?.draft ? '서버에 저장된 초안을 편집기로 불러옵니다' : '저장된 초안이 없습니다'}
+        title={current?.draft ? t('lf.editor.loadDraft.title') : t('lf.editor.noDraft')}
       >
-        초안 불러오기
+        {t('lf.editor.loadDraft')}
       </button>
       <button
         type="button"
         disabled={!current?.draft || !!busy}
-        onClick={() => window.confirm('저장된 초안을 버릴까요?') && void store().discardDraft()}
-        title={current?.draft ? '서버에 저장된 초안을 버립니다' : '저장된 초안이 없습니다'}
+        onClick={() => window.confirm(t('lf.editor.discardDraft.confirm')) && void store().discardDraft()}
+        title={current?.draft ? t('lf.editor.discardDraft.title') : t('lf.editor.noDraft')}
       >
-        초안 버리기
+        {t('lf.editor.discardDraft')}
       </button>
-      <button type="button" disabled={!flow || !!busy} onClick={() => void store().validate(mode === 'live')} title="서버 규칙으로 연결·형식·프롬프트 변수·중계 계약을 검사합니다 (live 모드는 바뀐 코드도 검사)">
-        검증
+      <button
+        type="button"
+        disabled={!flow || !!busy}
+        onClick={() => void store().validate(mode === 'live')}
+        title={t('lf.editor.validate.title')}
+      >
+        {t('lf.editor.validate')}
       </button>
       <button
         type="button"
         className="is-primary"
         disabled={!flow || production || !!busy}
         onClick={() => setApplyOpen(true)}
-        title={
-          production
-            ? '프로덕션 flow 에는 적용할 수 없습니다. 작업용 복제 후 적용하세요.'
-            : '검증 후 Langflow 에 저장하고 다시 읽어 확인합니다. 적용 전 원격 flow 는 백업됩니다.'
-        }
+        title={production ? t('lf.editor.apply.blocked') : t('lf.editor.apply.title')}
       >
-        Langflow 에 적용…
+        {t('lf.editor.apply')}
       </button>
       <button type="button" disabled={!flow} onClick={() => setVersionsOpen(true)}>
-        버전 기록
+        {t('lf.editor.versions')}
       </button>
       <button
         type="button"
         disabled={!flow || !!busy}
         onClick={() => void store().setAnalysisFlow(flow?.id === analysisFlowId && !production ? null : flow!.id)}
-        title="논증 그래프 탭의 AI 분석이 이 flow 를 사용하게 합니다"
+        title={t('lf.editor.useForAnalysis.title')}
       >
-        {flow && flow.id === analysisFlowId ? '분석 flow ★' : '분석에 사용'}
+        {flow && flow.id === analysisFlowId ? t('lf.editor.analysisFlow') : t('lf.editor.useForAnalysis')}
       </button>
 
       <span className="toolbar-divider" />
 
-      <button type="button" disabled={!canUndo} onClick={() => store().undo()} title="실행 취소 (Ctrl+Z)">
-        되돌리기
+      <button type="button" disabled={!canUndo} onClick={() => store().undo()} title={t('lf.editor.undo.title')}>
+        {t('lf.editor.undo')}
       </button>
-      <button type="button" disabled={!canRedo} onClick={() => store().redo()} title="다시 실행 (Ctrl+Shift+Z)">
-        다시 실행
+      <button type="button" disabled={!canRedo} onClick={() => store().redo()} title={t('lf.editor.redo.title')}>
+        {t('lf.editor.redo')}
       </button>
-      <button type="button" disabled={!!busy} onClick={() => void store().runDiagnostics()} title="설정 존재 여부와 별개로 Langflow·분석 flow·Ollama·모델에 실제로 연결되는지 확인합니다">
-        연결 확인
+      <button type="button" disabled={!!busy} onClick={() => void store().runDiagnostics()} title={t('lf.editor.diagnostics.title')}>
+        {t('lf.editor.diagnostics')}
       </button>
       {/* 상태 표시는 남는 폭만 쓰고 넘치면 말줄임한다 — 길이가 바뀌어도 툴바가 줄바꿈되지 않게 한다. */}
       <span className="pipeline-toolbar-status">
@@ -209,6 +229,7 @@ function PipelineToolbar() {
 }
 
 function PipelineBanner() {
+  const t = useT();
   const current = usePipelineStore((state) => state.current);
   const message = usePipelineStore((state) => state.message);
   const connection = usePipelineStore((state) => state.connection);
@@ -218,12 +239,13 @@ function PipelineBanner() {
   return (
     <>
       {flow?.isProduction ? (
-        <div className="pipeline-banner is-protected">
-          프로덕션 flow(LANGFLOW_FLOW_ID)입니다. 편집·초안 저장·검증은 할 수 있지만 Langflow 에 적용하려면 [작업용 복제]로 복제본을 만드세요. 편집
-          중인 내용은 복제본으로 옮겨집니다.
-        </div>
+        <div className="pipeline-banner is-protected">{t('lf.editor.productionBanner')}</div>
       ) : flow?.isWorkingCopy ? (
-        <div className="pipeline-banner">작업용 복제본입니다{flow.sourceFlowId ? ` (원본 ${flow.sourceFlowId})` : ''}. 적용 전 원격 flow 는 자동으로 백업됩니다.</div>
+        <div className="pipeline-banner">
+          {t('lf.editor.workingBanner')}
+          {flow.sourceFlowId ? t('lf.editor.workingBanner.source', { flowId: flow.sourceFlowId }) : ''}
+          {t('lf.editor.workingBanner.tail')}
+        </div>
       ) : null}
       {message ? (
         <div className={`pipeline-banner is-${message.kind}`} role={message.kind === 'error' ? 'alert' : 'status'}>
@@ -235,20 +257,20 @@ function PipelineBanner() {
               ))}
             </ul>
           ) : null}
-          <button type="button" className="icon-button" onClick={clearMessage} aria-label="알림 닫기">
+          <button type="button" className="icon-button" onClick={clearMessage} aria-label={t('lf.editor.closeNotice')}>
             &#10005;
           </button>
         </div>
       ) : null}
       {current?.relay.errors && current.relay.errors.length > 0 ? (
-        <div className="pipeline-banner is-error">중계 입력·출력 컴포넌트 문제: {current.relay.errors.join(' / ')}</div>
+        <div className="pipeline-banner is-error">{t('lf.editor.relayError', { errors: current.relay.errors.join(' / ') })}</div>
       ) : null}
       {connection ? (
         <div className="pipeline-banner">
-          연결 확인 ({connection.mode}):{' '}
+          {t('lf.editor.connection', { mode: connection.mode })}
           {connection.checks.map((check) => (
             <span key={check.name} className={`diag is-${check.ok === null ? 'na' : check.ok ? 'ok' : 'fail'}`} title={check.detail}>
-              {check.name} {check.ok === null ? '–' : check.ok ? '정상' : '실패'}: {check.detail}
+              {check.name} {check.ok === null ? '–' : check.ok ? t('lf.editor.checkOk') : t('lf.editor.checkFailed')}: {check.detail}
             </span>
           ))}
         </div>

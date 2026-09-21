@@ -2,13 +2,15 @@ import { useMemo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { usePipelineStore } from '../../store/pipelineStore';
 import type { ComponentKind, ComponentTemplate } from '../../types/pipeline';
-import { KIND_LABEL } from '../../types/pipeline';
+import { KIND_KEY } from '../../types/pipeline';
+import { useT } from '../../i18n';
 import { PALETTE_MIME } from './PipelineCanvas';
 
 const KIND_ORDER: ComponentKind[] = ['prompt', 'llm', 'custom', 'input', 'output', 'generic'];
 
 /** 추가할 수 있는 컴포넌트 목록. 현재 flow 에 있는 컴포넌트는 설정을 복사한 새 컴포넌트로 추가된다. */
 export function Palette() {
+  const t = useT();
   const templates = usePipelineStore((state) => state.templates);
   const warnings = usePipelineStore((state) => state.templateWarnings);
   const current = usePipelineStore((state) => state.current);
@@ -30,9 +32,15 @@ export function Palette() {
   if (!current) return <aside className="lf-palette" />;
 
   return (
-    <aside className="lf-palette" aria-label="컴포넌트 추가">
-      <h3>컴포넌트</h3>
-      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="검색" aria-label="컴포넌트 검색" />
+    <aside className="lf-palette" aria-label={t('lf.palette.aria')}>
+      <h3>{t('lf.palette.title')}</h3>
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t('lf.palette.search')}
+        aria-label={t('lf.palette.searchAria')}
+      />
       {warnings.map((warning, index) => (
         <div key={index} className="lf-muted lf-small">
           {warning}
@@ -40,7 +48,7 @@ export function Palette() {
       ))}
       {groups.map(([kind, items]) => (
         <section key={kind}>
-          <h4>{KIND_LABEL[kind]}</h4>
+          <h4>{t(KIND_KEY[kind])}</h4>
           <ul>
             {items.map((template) => (
               <li key={template.key}>
@@ -59,10 +67,15 @@ export function Palette() {
                       : { x: 0, y: 0 };
                     addComponent(template.key, position);
                   }}
-                  title={`${template.description || template.type}\n(${template.source === 'flow' ? '현재 flow 의 설정 복사' : 'Langflow 기본 컴포넌트'})`}
+                  title={t('lf.palette.itemTitle', {
+                    description: template.description || template.type,
+                    source: template.source === 'flow' ? t('lf.palette.sourceFlow') : t('lf.palette.sourceDefault'),
+                  })}
                 >
                   <span className="lf-palette-name">{template.displayName}</span>
-                  <span className="lf-palette-source">{template.source === 'flow' ? '복사' : '기본'}</span>
+                  <span className="lf-palette-source">
+                    {template.source === 'flow' ? t('lf.palette.copy') : t('lf.palette.default')}
+                  </span>
                 </button>
               </li>
             ))}

@@ -1705,12 +1705,47 @@ textarea:focus-visible {
 }
 
 /* ---------- 화면 탭 ---------- */
+.top-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 16px;
+  background: #eef0f4;
+  border-bottom: 1px solid var(--border);
+}
+
 .view-tabs {
   display: flex;
   gap: 4px;
   padding: 6px 16px 0;
-  background: #eef0f4;
-  border-bottom: 1px solid var(--border);
+}
+
+/* 한국어 / English 전환 */
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 5px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lang-toggle:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.lang-toggle-icon {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
 }
 
 .view-tabs button {

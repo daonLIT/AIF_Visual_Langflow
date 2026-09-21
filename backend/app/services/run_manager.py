@@ -23,6 +23,7 @@ from ..storage import Database
 from .aif_adapter import InvalidResultError, build_proposal, make_namespace, parse_json_text
 from .catalogs import MAX_SELECTED_ISSUES, IssueCatalog, SchemeCatalog
 from .langflow_client import LangflowClient, LangflowError, RunInput
+from ..i18n import t
 
 logger = logging.getLogger("annotation.runs")
 
@@ -67,7 +68,7 @@ class RunManager:
             record["status"] = "interrupted"
             record["updatedAt"] = now_iso()
             record["finishedAt"] = record["updatedAt"]
-            record["error"] = {"code": "INTERRUPTED", "message": "서버가 재시작되어 실행이 중단되었습니다. 다시 분석하세요.", "details": []}
+            record["error"] = {"code": "INTERRUPTED", "message": t("run.interrupted"), "details": []}
             self.db.save_run(record, self.db.get_run_document(record["runId"]) or "", None)
             count += 1
         if count:
@@ -160,7 +161,7 @@ class RunManager:
         record["status"] = "cancelled"
         record["updatedAt"] = now_iso()
         record["finishedAt"] = record["updatedAt"]
-        record["error"] = {"code": "CANCELLED", "message": "사용자가 취소했습니다. Langflow/Ollama 계산은 계속 진행 중일 수 있습니다.", "details": []}
+        record["error"] = {"code": "CANCELLED", "message": t("run.cancelled"), "details": []}
         self._save(record)
         task = self._tasks.get(run_id)
         if task:
@@ -211,7 +212,7 @@ class RunManager:
                 try:
                     result = await asyncio.wait_for(self.client.analyze(run_input), timeout=self.settings.langflow_timeout_seconds + 5)
                 except asyncio.TimeoutError:
-                    raise LangflowError("TIMEOUT", f"서버 실행 제한 시간({self.settings.langflow_timeout_seconds}s)을 초과했습니다.")
+                    raise LangflowError("TIMEOUT", t("run.timeout", seconds=self.settings.langflow_timeout_seconds))
 
                 # 늦게 도착한 응답: 이미 취소되었으면 반영하지 않는다.
                 current = self.db.get_run(run_id)
@@ -255,7 +256,7 @@ class RunManager:
                 self._fail(run_id, code, str(error), getattr(error, "details", []))
                 return
             logger.exception("run %s failed unexpectedly", run_id)
-            self._fail(run_id, "INTERNAL", f"예상하지 못한 오류: {error.__class__.__name__}", [])
+            self._fail(run_id, "INTERNAL", t("run.unexpected", name=error.__class__.__name__), [])
 
     def _fail(self, run_id: str, code: str, message: str, details: list) -> None:
         record = self.db.get_run(run_id)

@@ -20,6 +20,7 @@ from typing import Any, Protocol
 import httpx
 
 from ..config import Settings
+from ..i18n import t
 
 
 class LangflowError(Exception):
@@ -115,11 +116,11 @@ def extract_output_text(envelope: dict, component_id: str) -> tuple[str, str | N
     반환: (text, session_id). 찾지 못하면 LangflowError.
     """
     if not isinstance(envelope, dict):
-        raise LangflowError("BAD_ENVELOPE", "Langflow 응답이 JSON 객체가 아닙니다.")
+        raise LangflowError("BAD_ENVELOPE", t("lf.envelope_not_object"))
     session_id = envelope.get("session_id") if isinstance(envelope.get("session_id"), str) else None
     outputs = envelope.get("outputs")
     if not isinstance(outputs, list):
-        raise LangflowError("BAD_ENVELOPE", "Langflow 응답에 outputs 배열이 없습니다.")
+        raise LangflowError("BAD_ENVELOPE", t("lf.envelope_no_outputs"))
 
     seen_components: list[str] = []
     for flow_output in outputs:
@@ -159,11 +160,11 @@ def extract_output_text(envelope: dict, component_id: str) -> tuple[str, str | N
                     return text, session_id
             raise LangflowError(
                 "BAD_ENVELOPE",
-                f"출력 컴포넌트 {component_id} 의 응답에서 Message 텍스트를 찾지 못했습니다.",
+                t("lf.no_message_text", component=component_id),
             )
     raise LangflowError(
         "OUTPUT_COMPONENT_NOT_FOUND",
-        f"출력 컴포넌트 {component_id} 가 응답에 없습니다. 응답에 포함된 컴포넌트: {seen_components or '없음'}",
+        t("lf.component_missing", component=component_id, seen=seen_components or t("lf.none")),
     )
 
 
@@ -173,7 +174,7 @@ class LangflowTransport(Protocol):
 
 def raise_for_langflow_status(response: httpx.Response, *, not_found: str) -> None:
     if response.status_code in (401, 403):
-        raise LangflowError("AUTH", "Langflow 인증에 실패했습니다. API 키 설정을 확인하세요.", status=response.status_code)
+        raise LangflowError("AUTH", t("lf.auth_failed"), status=response.status_code)
     if response.status_code == 404:
         raise LangflowError("FLOW_NOT_FOUND", not_found, status=404)
     if response.status_code >= 400:
@@ -183,7 +184,7 @@ def raise_for_langflow_status(response: httpx.Response, *, not_found: str) -> No
             detail = str(body.get("detail") or body.get("message") or "") if isinstance(body, dict) else str(body)
         except ValueError:
             detail = response.text
-        raise LangflowError("HTTP", f"Langflow 오류 {response.status_code}: {detail[:300]}", status=response.status_code)
+        raise LangflowError("HTTP", t("lf.http_error", status=response.status_code, detail=detail[:300]), status=response.status_code)
 
 
 class HttpLangflowTransport:
@@ -195,7 +196,7 @@ class HttpLangflowTransport:
         settings = self.settings
         flow_id = run_input.flow_id or settings.langflow_flow_id
         if not flow_id:
-            raise LangflowError("NOT_CONFIGURED", "LANGFLOW_FLOW_ID 가 설정되지 않았습니다.")
+            raise LangflowError("NOT_CONFIGURED", t("lf.not_configured"))
         url = f"{settings.langflow_base_url}/api/v1/run/{flow_id}"
         payload = build_run_payload(settings, run_input)
         timeout = httpx.Timeout(settings.langflow_timeout_seconds, connect=15.0)
@@ -203,15 +204,15 @@ class HttpLangflowTransport:
             async with httpx.AsyncClient(timeout=timeout, transport=self.http_transport) as client:
                 response = await client.post(url, json=payload, headers=auth_headers(settings))
         except httpx.TimeoutException as error:
-            raise LangflowError("TIMEOUT", f"Langflow 응답 대기 시간({settings.langflow_timeout_seconds}s)을 초과했습니다.") from error
+            raise LangflowError("TIMEOUT", t("lf.timeout", seconds=settings.langflow_timeout_seconds)) from error
         except httpx.HTTPError as error:
-            raise LangflowError("CONNECTION", f"Langflow 서버에 연결할 수 없습니다: {error.__class__.__name__}") from error
+            raise LangflowError("CONNECTION", t("lf.connection", name=error.__class__.__name__)) from error
 
-        raise_for_langflow_status(response, not_found="Flow ID 에 해당하는 flow 를 찾을 수 없습니다.")
+        raise_for_langflow_status(response, not_found=t("lf.flow_not_found_by_id"))
         try:
             return response.json()
         except ValueError as error:
-            raise LangflowError("BAD_ENVELOPE", "Langflow 응답이 JSON 이 아닙니다.") from error
+            raise LangflowError("BAD_ENVELOPE", t("lf.response_not_json")) from error
 
 
 class MockLangflowTransport:
@@ -223,7 +224,7 @@ class MockLangflowTransport:
 
     async def run(self, run_input: RunInput) -> dict:
         if not self.fixture_path.exists():
-            raise LangflowError("NOT_CONFIGURED", f"mock fixture 가 없습니다: {self.fixture_path.name}")
+            raise LangflowError("NOT_CONFIGURED", t("lf.mock_fixture_missing", name=self.fixture_path.name))
         if self.delay_seconds > 0:
             await asyncio.sleep(self.delay_seconds)
         with self.fixture_path.open("r", encoding="utf-8") as handle:

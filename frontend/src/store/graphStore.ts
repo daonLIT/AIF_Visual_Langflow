@@ -17,6 +17,7 @@ import { validateCase } from '../validation/graphValidator';
 import type { ValidationSummary } from '../validation/graphValidator';
 import { generateNodeId } from '../utils/generateNodeId';
 import { generateEdgeId } from '../utils/generateEdgeId';
+import { t } from '../i18n';
 
 const HISTORY_LIMIT = 50;
 
@@ -362,7 +363,7 @@ export const useGraphStore = create<GraphStore>((set, get) => {
         },
         annotationsAfterDelete(annotations, removing, removedEdges),
         affectedRas,
-        '연결된 노드가 삭제되어 전제·결론이 바뀜',
+        t('rules.review.nodeDeleted'),
       );
       commit(flagged.caseData, { annotations: flagged.annotations });
       set({
@@ -389,7 +390,7 @@ export const useGraphStore = create<GraphStore>((set, get) => {
         { ...caseData, edges: [...caseData.edges, edge] },
         annotations,
         raEndpoints(caseData, annotations, source, target),
-        '전제·결론 연결이 추가됨',
+        t('rules.review.edgeAdded'),
       );
       commit(flagged.caseData, { annotations: flagged.annotations });
       set({ edgeIdHighWater: Math.max(edgeIdHighWater, id) });
@@ -407,7 +408,7 @@ export const useGraphStore = create<GraphStore>((set, get) => {
         { ...caseData, edges: caseData.edges.filter((edge) => !removing.has(edge.id)) },
         annotationsAfterDelete(annotations, new Set(), removing),
         affectedRas,
-        '전제·결론 연결이 삭제됨',
+        t('rules.review.edgeRemoved'),
       );
       commit(flagged.caseData, { annotations: flagged.annotations });
       set({
@@ -461,7 +462,7 @@ export const useGraphStore = create<GraphStore>((set, get) => {
         commit({ ...caseData, nodes }, { structural: false });
         set({ fitViewToken: get().fitViewToken + 1 });
       } catch (error) {
-        set({ errorMessage: `자동 레이아웃 실패: ${(error as Error).message}` });
+        set({ errorMessage: t('graph.layoutFailed', { message: (error as Error).message }) });
       } finally {
         set({ isLayouting: false });
       }

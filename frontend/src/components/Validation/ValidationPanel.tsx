@@ -1,7 +1,9 @@
 import { useGraphStore } from '../../store/graphStore';
+import { useT } from '../../i18n';
 
 /** 검증 결과 패널. 항목을 클릭하면 관련 노드로 이동한다. */
 export function ValidationPanel() {
+  const t = useT();
   const validation = useGraphStore((state) => state.validation);
   const open = useGraphStore((state) => state.validationOpen);
   const setOpen = useGraphStore((state) => state.setValidationOpen);
@@ -28,25 +30,25 @@ export function ValidationPanel() {
   return (
     <div className="validation-panel">
       <header className="validation-header">
-        <h2>검증 결과</h2>
-        <button type="button" className="icon-button" onClick={() => setOpen(false)} aria-label="닫기">
+        <h2>{t('validation.title')}</h2>
+        <button type="button" className="icon-button" onClick={() => setOpen(false)} aria-label={t('validation.close')}>
           &#10005;
         </button>
       </header>
 
       <div className="validation-summary">
-        <span>노드 {validation.nodeCount}개 검사</span>
-        <span>엣지 {validation.edgeCount}개 검사</span>
+        <span>{t('validation.nodesChecked', { count: validation.nodeCount })}</span>
+        <span>{t('validation.edgesChecked', { count: validation.edgeCount })}</span>
         <span className={validation.errorCount > 0 ? 'is-error' : 'is-ok'}>
-          오류 {validation.errorCount}
+          {t('validation.errors', { count: validation.errorCount })}
         </span>
         <span className={validation.warningCount > 0 ? 'is-warning' : 'is-ok'}>
-          경고 {validation.warningCount}
+          {t('validation.warnings', { count: validation.warningCount })}
         </span>
       </div>
 
       {validation.results.length === 0 ? (
-        <p className="validation-clean">구조 오류가 발견되지 않았습니다.</p>
+        <p className="validation-clean">{t('validation.clean')}</p>
       ) : (
         <ul className="validation-list">
           {[...errors, ...warnings].map((result, index) => {

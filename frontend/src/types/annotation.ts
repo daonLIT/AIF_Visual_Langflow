@@ -4,6 +4,8 @@
  * - 근거 범위 [start, end) 는 UTF-16 code unit 기준(JS 문자열 인덱스와 동일).
  * - 확정 그래프(caseData)는 accepted/modified 항목만 포함한다. pending/rejected 는 초안 레이어에만 있다.
  */
+import { t, type MessageKey } from '../i18n';
+
 import type { ArgumentNodeType, NodeContent } from './argument';
 import { summaryStateOf } from './argument';
 import type { RawCaseJson } from './rawJson';
@@ -285,7 +287,7 @@ export function migrateNodeValue(value: NodeValue, options: ProjectMigrationOpti
 export function migrateProjectFile(project: ProjectFile, options: ProjectMigrationOptions = {}): ProjectFile {
   const version = (project as { schemaVersion?: unknown }).schemaVersion;
   if (version !== PROJECT_SCHEMA_VERSION && version !== 1) {
-    throw new Error(`지원하지 않는 프로젝트 schemaVersion: ${String(version)}`);
+    throw new Error(t('project.error.schemaVersion', { version: String(version) }));
   }
   // v1 → v2 는 새 필드가 모두 선택 사항이다. v2 파일도 v10 시절 scheme 필드가 있을 수 있어 노드 값을 정리한다.
   const annotations = project.annotations.map((annotation) =>
@@ -317,24 +319,24 @@ export function isEdgeAnnotation(annotation: Annotation): annotation is EdgeAnno
   return annotation.kind === 'edge';
 }
 
-export const STATUS_LABEL: Record<AnnotationStatus, string> = {
-  pending: '미검토',
-  accepted: '수락',
-  modified: '수정 수락',
-  rejected: '거절',
+export const STATUS_KEY: Record<AnnotationStatus, MessageKey> = {
+  pending: 'annotation.status.pending',
+  accepted: 'annotation.status.accepted',
+  modified: 'annotation.status.modified',
+  rejected: 'annotation.status.rejected',
 };
 
-export const ORIGIN_LABEL: Record<AnnotationOrigin, string> = {
-  ai: 'AI',
-  rule: '규칙',
-  human: '사람',
+export const ORIGIN_KEY: Record<AnnotationOrigin, MessageKey> = {
+  ai: 'annotation.origin.ai',
+  rule: 'annotation.origin.rule',
+  human: 'annotation.origin.human',
 };
 
-export const MATCH_LABEL: Record<EvidenceMatchState, string> = {
-  exact: '원문 일치',
-  normalized: '공백 차이 일치',
-  ambiguous: '위치 불명확',
-  unmatched: '원문에 없음',
-  manual: '수동 지정',
-  stale: '재검토 필요',
+export const MATCH_KEY: Record<EvidenceMatchState, MessageKey> = {
+  exact: 'evidence.match.exact',
+  normalized: 'evidence.match.normalized',
+  ambiguous: 'evidence.match.ambiguous',
+  unmatched: 'evidence.match.unmatched',
+  manual: 'evidence.match.manual',
+  stale: 'evidence.match.stale',
 };

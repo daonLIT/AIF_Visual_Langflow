@@ -10,6 +10,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from ..i18n import t
 from ..schemas import PROJECT_SCHEMA_VERSION, AnalysisRunCreate, EvidenceVerifyRequest, ProjectFile, SummariesRequest
 from ..services.evidence_matcher import DocumentMatcher
 from ..services.langflow_client import LangflowError
@@ -24,9 +25,14 @@ def _error(status: int, code: str, message: str, details: list | None = None) ->
     return JSONResponse({"error": {"code": code, "message": message, "details": details or []}}, status_code=status)
 
 
+def catalog_errors(request: Request) -> list[str]:
+    """서버 시작 때 모아 둔 카탈로그 오류를 이 요청의 언어로 만든다."""
+    return [str(item) for item in request.app.state.catalog_errors]
+
+
 def _validation_error(error: ValidationError) -> JSONResponse:
     details = [f"{'.'.join(str(p) for p in item['loc'])}: {item['msg']}" for item in error.errors()]
-    return _error(422, "VALIDATION", "요청 본문이 올바르지 않습니다.", details)
+    return _error(422, "VALIDATION", t("api.validation"), details)
 
 
 async def _json_body(request: Request):
@@ -49,7 +55,7 @@ async def health(request: Request) -> Response:
                 "issueCatalogVersion": catalog.version if catalog else None,
                 "schemeCatalogVersion": request.app.state.scheme_catalog.version if request.app.state.scheme_catalog else None,
                 "schemeCatalogStatus": request.app.state.scheme_catalog.data.get("status") if request.app.state.scheme_catalog else None,
-                "errors": request.app.state.catalog_errors,
+                "errors": catalog_errors(request),
             },
             "activeRuns": len(request.app.state.runs._tasks),
         }
@@ -59,28 +65,28 @@ async def health(request: Request) -> Response:
 async def issue_catalog(request: Request) -> Response:
     catalog = request.app.state.issue_catalog
     if catalog is None:
-        return _error(503, "NO_CATALOG", "쟁점 카탈로그를 불러오지 못했습니다.", request.app.state.catalog_errors)
+        return _error(503, "NO_CATALOG", t("api.no_issue_catalog"), catalog_errors(request))
     return JSONResponse(catalog.data)
 
 
 async def scheme_catalog(request: Request) -> Response:
     catalog = request.app.state.scheme_catalog
     if catalog is None:
-        return _error(503, "NO_CATALOG", "스킴 카탈로그를 불러오지 못했습니다.", request.app.state.catalog_errors)
+        return _error(503, "NO_CATALOG", t("api.no_scheme_catalog"), catalog_errors(request))
     return JSONResponse(catalog.public_data())
 
 
 async def create_run(request: Request) -> Response:
     body = await _json_body(request)
     if body is None:
-        return _error(400, "BAD_JSON", "JSON 본문을 해석할 수 없습니다.")
+        return _error(400, "BAD_JSON", t("api.bad_json"))
     try:
         payload = AnalysisRunCreate.model_validate(body)
     except ValidationError as error:
         return _validation_error(error)
 
     if request.app.state.issue_catalog is None or request.app.state.scheme_catalog is None:
-        return _error(503, "NO_CATALOG", "쟁점·scheme 카탈로그를 불러오지 못해 분석할 수 없습니다.", request.app.state.catalog_errors)
+        return _error(503, "NO_CATALOG", t("api.no_catalogs_for_run"), catalog_errors(request))
     flow_id = payload.flowId or request.app.state.pipeline.analysis_flow_id()
 
     record, created = await request.app.state.runs.submit(
@@ -98,14 +104,14 @@ async def create_run(request: Request) -> Response:
 async def get_run(request: Request) -> Response:
     record = request.app.state.runs.get(request.path_params["run_id"])
     if record is None:
-        return _error(404, "NOT_FOUND", "실행을 찾을 수 없습니다.")
+        return _error(404, "NOT_FOUND", t("api.run_not_found"))
     return JSONResponse(record)
 
 
 async def cancel_run(request: Request) -> Response:
     record = await request.app.state.runs.cancel(request.path_params["run_id"])
     if record is None:
-        return _error(404, "NOT_FOUND", "실행을 찾을 수 없습니다.")
+        return _error(404, "NOT_FOUND", t("api.run_not_found"))
     return JSONResponse(record)
 
 
@@ -121,7 +127,7 @@ async def list_runs(request: Request) -> Response:
 async def get_project(request: Request) -> Response:
     project = request.app.state.db.get_project(request.path_params["project_id"])
     if project is None:
-        return _error(404, "NOT_FOUND", "프로젝트를 찾을 수 없습니다.")
+        return _error(404, "NOT_FOUND", t("api.project_not_found"))
     return JSONResponse(project)
 
 
@@ -129,15 +135,15 @@ async def put_project(request: Request) -> Response:
     project_id = request.path_params["project_id"]
     body = await _json_body(request)
     if body is None:
-        return _error(400, "BAD_JSON", "JSON 본문을 해석할 수 없습니다.")
+        return _error(400, "BAD_JSON", t("api.bad_json"))
     try:
         project = ProjectFile.model_validate(body)
     except ValidationError as error:
         return _validation_error(error)
     if project.projectId != project_id:
-        return _error(400, "ID_MISMATCH", "경로의 projectId 와 본문의 projectId 가 다릅니다.")
+        return _error(400, "ID_MISMATCH", t("api.project_id_mismatch"))
     if document_hash(project.document.text) != project.document.hash:
-        return _error(400, "HASH_MISMATCH", "document.hash 가 원문과 일치하지 않습니다.")
+        return _error(400, "HASH_MISMATCH", t("api.hash_mismatch"))
 
     db = request.app.state.db
     current = db.get_project_revision(project_id)
@@ -146,7 +152,7 @@ async def put_project(request: Request) -> Response:
         return _error(
             409,
             "REVISION_CONFLICT",
-            f"프로젝트가 다른 곳에서 수정되었습니다 (서버 revision {current}, 요청 revision {project.revision}).",
+            t("api.revision_conflict", server=current, requested=project.revision),
         )
     next_revision = (current if current is not None else project.revision) + 1
     saved_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -166,7 +172,7 @@ async def summaries(request: Request) -> Response:
     """요청 시 요약 생성. 분석 flow 의 Summarizer 설정을 쓴다."""
     body = await _json_body(request)
     if body is None:
-        return _error(400, "BAD_JSON", "JSON 본문을 해석할 수 없습니다.")
+        return _error(400, "BAD_JSON", t("api.bad_json"))
     try:
         payload = SummariesRequest.model_validate(body)
     except ValidationError as error:
@@ -174,7 +180,7 @@ async def summaries(request: Request) -> Response:
     pipeline = request.app.state.pipeline
     try:
         if not request.app.state.settings.is_live:
-            raise PipelineError("UNSUPPORTED_IN_MOCK", "mock 모드에서는 실제 요약을 만들 수 없습니다. live 모드에서 사용하세요.", status=501)
+            raise PipelineError("UNSUPPORTED_IN_MOCK", t("summaries.unsupported_in_mock"), status=501)
         config = await pipeline.summarizer_config(payload.flowId or pipeline.analysis_flow_id())
         result = await generate_summaries(request.app.state.settings, config, [item.model_dump() for item in payload.items])
     except PipelineError as error:
@@ -188,7 +194,7 @@ async def verify_evidence(request: Request) -> Response:
     """UI 가 만든 수동 근거 범위 또는 인용문을 서버 규칙으로 재검증한다."""
     body = await _json_body(request)
     if body is None:
-        return _error(400, "BAD_JSON", "JSON 본문을 해석할 수 없습니다.")
+        return _error(400, "BAD_JSON", t("api.bad_json"))
     try:
         payload = EvidenceVerifyRequest.model_validate(body)
     except ValidationError as error:
@@ -204,7 +210,7 @@ async def verify_evidence(request: Request) -> Response:
         elif isinstance(quote, str):
             results.append(matcher.match(quote).to_dict(int(span.get("documentVersion") or 1)))
         else:
-            results.append({"valid": False, "reason": "quote 또는 start/end 가 필요합니다."})
+            results.append({"valid": False, "reason": t("api.evidence_needs_quote")})
     return JSONResponse({"results": results})
 
 

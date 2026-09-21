@@ -28,6 +28,7 @@ from ...config import Settings
 from ...storage import Database
 from ..langflow_client import LangflowError, auth_headers, raise_for_langflow_status
 from .flow_model import component_kind, node_info
+from ...i18n import t
 
 
 class PipelineError(Exception):
@@ -86,22 +87,23 @@ class LangflowFlowRepository:
         self.settings = settings
         self.http_transport = http_transport
 
-    async def _request(self, method: str, path: str, *, json_body=None, params=None, timeout: float = 30.0, not_found: str = "flow 를 찾을 수 없습니다."):
+    async def _request(self, method: str, path: str, *, json_body=None, params=None, timeout: float = 30.0, not_found: str | None = None):
+        not_found = not_found if not_found is not None else t("lf.flow_not_found")
         url = f"{self.settings.langflow_base_url}{path}"
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=10.0), transport=self.http_transport) as client:
                 response = await client.request(method, url, json=json_body, params=params, headers=auth_headers(self.settings))
         except httpx.TimeoutException as error:
-            raise LangflowError("TIMEOUT", f"Langflow 응답 대기 시간({timeout:.0f}s)을 초과했습니다.") from error
+            raise LangflowError("TIMEOUT", t("lf.timeout", seconds=f"{timeout:.0f}")) from error
         except httpx.HTTPError as error:
-            raise LangflowError("CONNECTION", f"Langflow 서버에 연결할 수 없습니다: {error.__class__.__name__}") from error
+            raise LangflowError("CONNECTION", t("lf.connection", name=error.__class__.__name__)) from error
         raise_for_langflow_status(response, not_found=not_found)
         if not response.content:
             return None
         try:
             return response.json()
         except ValueError as error:
-            raise LangflowError("BAD_RESPONSE", f"Langflow 응답이 JSON 이 아닙니다 ({path}).") from error
+            raise LangflowError("BAD_RESPONSE", t("lf.response_not_json_path", path=path)) from error
 
     async def list_flows(self) -> list[dict]:
         body = await self._request(
@@ -113,7 +115,7 @@ class LangflowFlowRepository:
     async def get_flow(self, flow_id: str) -> dict:
         body = await self._request("GET", f"/api/v1/flows/{flow_id}")
         if not isinstance(body, dict) or not isinstance(body.get("data"), dict):
-            raise PipelineError("BAD_FLOW", "Langflow 가 돌려준 flow 에 data 가 없습니다.", status=502)
+            raise PipelineError("BAD_FLOW", t("lf.flow_no_data"), status=502)
         return body
 
     async def create_flow(self, payload: dict) -> dict:
@@ -130,7 +132,7 @@ class LangflowFlowRepository:
             "POST", "/api/v1/custom_component", json_body={"code": code, "frontend_node": frontend_node}, timeout=120.0
         )
         if not isinstance(body, dict) or not isinstance(body.get("data"), dict):
-            raise PipelineError("BAD_COMPONENT", "Langflow 가 컴포넌트 template 을 돌려주지 않았습니다.", status=502)
+            raise PipelineError("BAD_COMPONENT", t("lf.no_component_template"), status=502)
         return body
 
     async def validate_code(self, code: str) -> dict:
@@ -190,7 +192,7 @@ class LocalFlowRepository:
         self.seed()
         flow = self.db.get_local_flow(flow_id)
         if flow is None:
-            raise LangflowError("FLOW_NOT_FOUND", "flow 를 찾을 수 없습니다.", status=404)
+            raise LangflowError("FLOW_NOT_FOUND", t("lf.flow_not_found"), status=404)
         return flow
 
     async def create_flow(self, payload: dict) -> dict:
@@ -216,12 +218,12 @@ class LocalFlowRepository:
     async def rebuild_component(self, code: str, frontend_node: dict | None) -> dict:
         raise PipelineError(
             "UNSUPPORTED_IN_MOCK",
-            "mock 모드에서는 코드로 컴포넌트 입력·출력을 다시 만들 수 없습니다. 코드 텍스트는 저장되지만 필드 구성은 그대로입니다.",
+            t("lf.rebuild_unsupported_in_mock"),
             status=501,
         )
 
     async def validate_code(self, code: str) -> dict:
-        raise PipelineError("UNSUPPORTED_IN_MOCK", "mock 모드에서는 Langflow 코드 검사를 사용할 수 없습니다.", status=501)
+        raise PipelineError("UNSUPPORTED_IN_MOCK", t("lf.code_check_unsupported_in_mock"), status=501)
 
     async def component_templates(self) -> list[dict]:
         templates: dict[str, dict] = {}

@@ -3,6 +3,8 @@
  * 노드·엣지는 Langflow 가 저장한 원래 객체를 그대로 들고 다닌다. 편집기는 필요한 경로만 바꾸고
  * 알 수 없는 필드는 건드리지 않는다. (backend/app/services/pipeline/flow_model.py 와 같은 규칙)
  */
+import type { MessageKey } from '../i18n';
+
 
 export interface LfFieldSpec {
   type?: string;
@@ -229,11 +231,11 @@ export interface ConnectionStatusReport {
 
 export const SECRET_SENTINEL = '__AIF_SECRET_MASKED__';
 
-export const KIND_LABEL: Record<ComponentKind, string> = {
-  input: '입력',
-  prompt: '프롬프트',
-  llm: '언어 모델',
-  custom: '커스텀',
-  output: '출력',
-  generic: '기타',
+export const KIND_KEY: Record<ComponentKind, MessageKey> = {
+  input: 'lf.kind.input',
+  prompt: 'lf.kind.prompt',
+  llm: 'lf.kind.llm',
+  custom: 'lf.kind.custom',
+  output: 'lf.kind.output',
+  generic: 'lf.kind.generic',
 };

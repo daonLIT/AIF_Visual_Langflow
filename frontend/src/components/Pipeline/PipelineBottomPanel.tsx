@@ -4,11 +4,17 @@ import { useGraphStore } from '../../store/graphStore';
 import { IssueSelectionReport } from '../Annotation/IssueSelectionReport';
 import type { AnalysisRunRecord } from '../../types/annotation';
 import type { PipelineIssue } from '../../types/pipeline';
+import { useT, type MessageKey } from '../../i18n';
 
-const LEVEL_LABEL = { error: '오류', warning: '경고', info: '정보' } as const;
+const LEVEL_KEY = {
+  error: 'lf.level.error',
+  warning: 'lf.level.warning',
+  info: 'lf.level.info',
+} as const satisfies Record<string, MessageKey>;
 
 /** 검증 결과 + 테스트 실행 */
 export function PipelineBottomPanel() {
+  const t = useT();
   const [tab, setTab] = useState<'issues' | 'test'>('issues');
   const localIssues = usePipelineStore((state) => state.localIssues);
   const serverIssues = usePipelineStore((state) => state.serverIssues);
@@ -19,10 +25,10 @@ export function PipelineBottomPanel() {
     <section className="lf-bottom">
       <nav className="lf-bottom-tabs">
         <button type="button" className={tab === 'issues' ? 'is-active' : ''} onClick={() => setTab('issues')}>
-          검증 {errorCount > 0 ? `(오류 ${errorCount})` : ''}
+          {errorCount > 0 ? t('lf.bottom.validationErrors', { count: errorCount }) : t('lf.bottom.validation')}
         </button>
         <button type="button" className={tab === 'test' ? 'is-active' : ''} onClick={() => setTab('test')}>
-          테스트 실행 {testRun ? `(${testRun.status})` : ''}
+          {testRun ? t('lf.bottom.testRunStatus', { status: testRun.status }) : t('lf.bottom.testRun')}
         </button>
       </nav>
       <div className="lf-bottom-body">{tab === 'issues' ? <IssueList /> : <TestRun />}</div>
@@ -31,17 +37,18 @@ export function PipelineBottomPanel() {
 }
 
 function IssueList() {
+  const t = useT();
   const localIssues = usePipelineStore((state) => state.localIssues);
   const serverIssues = usePipelineStore((state) => state.serverIssues);
   const select = usePipelineStore((state) => state.select);
 
   const render = (issues: PipelineIssue[]) =>
     issues.length === 0 ? (
-      <li className="lf-muted">없음</li>
+      <li className="lf-muted">{t('lf.bottom.none')}</li>
     ) : (
       issues.map((issue, index) => (
         <li key={`${issue.code}-${index}`} className={`is-${issue.level}`}>
-          <span className={`lf-level is-${issue.level}`}>{LEVEL_LABEL[issue.level]}</span>
+          <span className={`lf-level is-${issue.level}`}>{t(LEVEL_KEY[issue.level])}</span>
           {issue.nodeId ? (
             <button type="button" className="link-button" onClick={() => select(issue.nodeId!)}>
               {issue.message}
@@ -56,18 +63,21 @@ function IssueList() {
   return (
     <div className="lf-issue-columns">
       <div>
-        <h4>편집기 즉시 검사</h4>
+        <h4>{t('lf.bottom.editorChecks')}</h4>
         <ul className="lf-issue-list">{render(localIssues)}</ul>
       </div>
       <div>
-        <h4>서버 검증 {serverIssues === null ? '(편집 후 미실행)' : ''}</h4>
-        <ul className="lf-issue-list">{serverIssues === null ? <li className="lf-muted">[검증]을 누르면 서버 규칙으로 확인합니다.</li> : render(serverIssues)}</ul>
+        <h4>{serverIssues === null ? t('lf.bottom.serverChecks.stale') : t('lf.bottom.serverChecks')}</h4>
+        <ul className="lf-issue-list">
+          {serverIssues === null ? <li className="lf-muted">{t('lf.bottom.serverHint')}</li> : render(serverIssues)}
+        </ul>
       </div>
     </div>
   );
 }
 
 function TestRun() {
+  const t = useT();
   const current = usePipelineStore((state) => state.current);
   const dirty = usePipelineStore((state) => state.dirty);
   const testRun = usePipelineStore((state) => state.testRun);
@@ -86,17 +96,26 @@ function TestRun() {
       <div className="lf-test-input">
         <label className="chip-toggle">
           <input type="checkbox" checked={useDocument && !!documentText} disabled={!documentText} onChange={(event) => setUseDocument(event.target.checked)} />
-          논증 그래프 탭의 판결문 사용 {documentText ? `(${documentText.length.toLocaleString()}자)` : '(입력된 판결문 없음)'}
+          {documentText
+            ? t('lf.bottom.useDocument', { count: documentText.length.toLocaleString() })
+            : t('lf.bottom.noDocument')}
         </label>
         {!useDocument || !documentText ? (
-          <textarea value={custom} onChange={(event) => setCustom(event.target.value)} rows={4} placeholder="테스트할 판결문 원문" aria-label="테스트 원문" />
+          <textarea
+            value={custom}
+            onChange={(event) => setCustom(event.target.value)}
+            rows={4}
+            placeholder={t('lf.test.placeholder')}
+            aria-label={t('lf.test.aria')}
+          />
         ) : null}
         <div className="lf-field-row">
           <button type="button" className="is-primary" disabled={!current || !text.trim() || !!running} onClick={() => void startTestRun({ text })}>
-            이 flow 로 테스트 실행
+            {t('lf.bottom.run')}
           </button>
           <span className="lf-muted">
-            Langflow 에 저장된 “{current?.flow.name}” 을 실행합니다{dirty ? ' — 편집 중인 변경은 먼저 적용해야 반영됩니다' : ''}.
+            {t('lf.bottom.runNote', { name: current?.flow.name ?? '' })}
+            {dirty ? t('lf.bottom.runNote.dirty') : ''}.
           </span>
         </div>
       </div>
@@ -104,9 +123,10 @@ function TestRun() {
       {testRun ? (
         <div className={`lf-test-result is-${testRun.status}`}>
           <div>
-            실행 {testRun.runId} · <strong>{testRun.status}</strong>
-            {record?.mode === 'mock' ? ' · mock 응답' : ''}
-            {running ? ` · 시작 ${new Date(testRun.startedAt).toLocaleTimeString()}` : ''}
+            {t('lf.bottom.runLine', { runId: testRun.runId })}
+            <strong>{testRun.status}</strong>
+            {record?.mode === 'mock' ? t('lf.bottom.mock') : ''}
+            {running ? t('lf.bottom.started', { time: new Date(testRun.startedAt).toLocaleTimeString() }) : ''}
           </div>
           {record?.error ? (
             <div className="lf-error">
@@ -121,21 +141,30 @@ function TestRun() {
             </div>
           ) : null}
           {record?.pipeline ? (
-            <div className="lf-muted" title="이 실행에 고정된 flow 버전">
-              고정 버전: {record.pipeline.flowName ?? record.pipeline.flowId} · 해시 {(record.pipeline.flowHash ?? '?').slice(0, 19)}
-              {record.pipeline.snapshot ? ` · 실행용 스냅샷 ${record.pipeline.runFlowId}` : ''}
+            <div className="lf-muted" title={t('lf.bottom.pinnedTitle')}>
+              {t('lf.bottom.pinned', {
+                name: record.pipeline.flowName ?? record.pipeline.flowId ?? '',
+                hash: (record.pipeline.flowHash ?? '?').slice(0, 19),
+              })}
+              {record.pipeline.snapshot ? t('lf.bottom.snapshot', { id: record.pipeline.runFlowId ?? '' }) : ''}
               {record.pipeline.models?.length
-                ? ` · 모델 ${record.pipeline.models.map((model) => String(model.model_name ?? '?')).join(', ')}`
+                ? t('lf.bottom.models', {
+                    models: record.pipeline.models.map((model) => String(model.model_name ?? '?')).join(', '),
+                  })
                 : ''}
             </div>
           ) : null}
           {record?.result ? (
             <>
               {record.result.outcome === 'no_issues' ? (
-                <div>근거 있는 세부 쟁점이 없어 그래프를 만들지 않았습니다.</div>
+                <div>{t('lf.bottom.noIssues')}</div>
               ) : (
                 <div>
-                  노드 {record.result.summary.nodeCount} · 관계 {record.result.summary.edgeCount} · 쟁점 {record.result.summary.issueCount}
+                  {t('lf.bottom.counts', {
+                    nodes: record.result.summary.nodeCount,
+                    edges: record.result.summary.edgeCount,
+                    issues: record.result.summary.issueCount,
+                  })}
                 </div>
               )}
               <IssueSelectionReport
@@ -143,7 +172,7 @@ function TestRun() {
               />
               {record.result.outcome !== 'no_issues' ? (
                 <button type="button" onClick={importTestRun}>
-                  검토 제안으로 불러오기
+                  {t('lf.bottom.import')}
                 </button>
               ) : null}
             </>

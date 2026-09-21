@@ -2,17 +2,19 @@ import { useEffect, useState } from 'react';
 import { useGraphStore } from '../../store/graphStore';
 import { useAnnotationStore } from '../../store/annotationStore';
 import type { AnalysisRunRecord, RunStatus } from '../../types/annotation';
+import { useT, type MessageKey } from '../../i18n';
 
-const STATUS_LABEL: Record<RunStatus, string> = {
-  queued: '대기 중',
-  running: '분석 중',
-  succeeded: '완료',
-  failed: '실패',
-  cancelled: '취소됨',
-  interrupted: '중단됨',
+const STATUS_KEY: Record<RunStatus, MessageKey> = {
+  queued: 'run.status.queued',
+  running: 'run.status.running',
+  succeeded: 'run.status.succeeded',
+  failed: 'run.status.failed',
+  cancelled: 'run.status.cancelled',
+  interrupted: 'run.status.interrupted',
 };
 
 function useElapsed(run: AnalysisRunRecord | undefined): string {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   const active = run && (run.status === 'queued' || run.status === 'running');
   useEffect(() => {
@@ -24,7 +26,9 @@ function useElapsed(run: AnalysisRunRecord | undefined): string {
   const start = new Date(run.startedAt ?? run.createdAt).getTime();
   const end = run.finishedAt ? new Date(run.finishedAt).getTime() : now;
   const seconds = Math.max(0, Math.round((end - start) / 1000));
-  return seconds >= 60 ? `${Math.floor(seconds / 60)}분 ${seconds % 60}초` : `${seconds}초`;
+  return seconds >= 60
+    ? t('run.elapsed.minutes', { minutes: Math.floor(seconds / 60), seconds: seconds % 60 })
+    : t('run.elapsed.seconds', { seconds });
 }
 
 /**
@@ -32,6 +36,7 @@ function useElapsed(run: AnalysisRunRecord | undefined): string {
  * flow 가 판결문을 읽고 52개 중 최대 3개를 자동 선택한다. 완료율은 제공되지 않아 경과 시간만 표시한다.
  */
 export function AnalysisStatus() {
+  const t = useT();
   const caseData = useGraphStore((state) => state.caseData);
   const runs = useAnnotationStore((state) => state.runs);
   const startAnalysis = useAnnotationStore((state) => state.startAnalysis);
@@ -48,20 +53,16 @@ export function AnalysisStatus() {
         type="button"
         disabled={!hasText || !!active}
         onClick={() => void startAnalysis()}
-        title={
-          hasText
-            ? 'Langflow 로 판결문을 분석합니다: 52개 세부 쟁점 중 최대 3개 자동 선택 → 쟁점별 논증 추출 → 요약 → RA scheme 제안'
-            : '먼저 판결문을 입력하세요'
-        }
+        title={hasText ? t('analysis.start.title') : t('analysis.start.needText')}
       >
-        {runs.some((run) => run.imported) ? '다시 분석' : 'AI 분석'}
+        {runs.some((run) => run.imported) ? t('analysis.restart') : t('analysis.start')}
       </button>
       {active ? (
         <span className="run-chip is-active" role="status" aria-live="polite">
           <span className="run-spinner" aria-hidden="true" />
-          {STATUS_LABEL[active.status]} · {elapsed}
+          {t(STATUS_KEY[active.status])} · {elapsed}
           <button type="button" className="link-button" onClick={() => void cancelAnalysis(active.runId)}>
-            취소
+            {t('analysis.cancel')}
           </button>
         </span>
       ) : latest ? (
@@ -72,14 +73,21 @@ export function AnalysisStatus() {
             latest.error
               ? [latest.error.message, ...(latest.error.details ?? [])].join('\n')
               : latest.pipeline
-                ? `flow ${latest.pipeline.flowName ?? latest.pipeline.flowId ?? '?'} · 해시 ${(latest.pipeline.flowHash ?? '?').slice(0, 19)}${latest.pipeline.snapshot ? ' · 실행용 스냅샷' : ''}`
+                ? t('analysis.flowTitle', {
+                    flow: latest.pipeline.flowName ?? latest.pipeline.flowId ?? '?',
+                    hash: (latest.pipeline.flowHash ?? '?').slice(0, 19),
+                  }) + (latest.pipeline.snapshot ? t('analysis.flowSnapshot') : '')
                 : undefined
           }
         >
-          {STATUS_LABEL[latest.status]}
-          {latest.status === 'succeeded' && latest.outcome === 'no_issues' ? ' · 근거 있는 세부 쟁점 없음' : ''}
+          {t(STATUS_KEY[latest.status])}
+          {latest.status === 'succeeded' && latest.outcome === 'no_issues' ? t('analysis.noIssues') : ''}
           {latest.status === 'succeeded' && latest.outcome !== 'no_issues' && latest.summary
-            ? ` · 노드 ${latest.summary.nodeCount} / 관계 ${latest.summary.edgeCount} / 쟁점 ${latest.summary.issueCount}`
+            ? t('analysis.counts', {
+                nodes: latest.summary.nodeCount,
+                edges: latest.summary.edgeCount,
+                issues: latest.summary.issueCount,
+              })
             : ''}
           {latest.status === 'failed' && latest.error ? ` · ${latest.error.code}` : ''}
           {latest.mode === 'mock' ? ' · mock' : ''}

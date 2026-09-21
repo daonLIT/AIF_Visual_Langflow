@@ -16,6 +16,7 @@ import type {
 } from '../types/pipeline';
 import type { RawCaseJson } from '../types/rawJson';
 import type { IssueCatalog, SchemeCatalog } from '../types/scheme';
+import { currentLang, t } from '../i18n';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -74,10 +75,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      // 서버 오류·경고 문구를 지금 화면 언어로 받는다.
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': currentLang(), ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new ApiError(0, 'NETWORK', '중계 서버에 연결할 수 없습니다. backend 가 실행 중인지 확인하세요.');
+    throw new ApiError(0, 'NETWORK', t('api.error.network'));
   }
   const text = await response.text();
   let body: unknown = null;
@@ -85,7 +87,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       body = JSON.parse(text);
     } catch {
-      throw new ApiError(response.status, 'BAD_RESPONSE', '서버 응답을 해석할 수 없습니다.');
+      throw new ApiError(response.status, 'BAD_RESPONSE', t('api.error.badResponse'));
     }
   }
   if (!response.ok) {
@@ -93,7 +95,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(
       response.status,
       error?.code ?? `HTTP_${response.status}`,
-      error?.message ?? `서버 오류 (${response.status})`,
+      error?.message ?? t('api.error.status', { status: response.status }),
       error?.details ?? [],
     );
   }
