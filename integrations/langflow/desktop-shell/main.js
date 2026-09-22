@@ -14,7 +14,7 @@
 //   AIF_SHELL_PROBE     p0 | p1 | p2 이면 자동 점검을 돌리고 결과 JSON(과 캡처)을 남긴 뒤 종료 (1 은 p0)
 //   AIF_SHELL_PROBE_OUT 점검 결과 파일 경로
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -49,6 +49,28 @@ function rememberView(url) {
   } catch {
     // 기록하지 못해도 동작에는 지장 없다
   }
+}
+
+// 화면 빌드가 바뀌면 HTTP 캐시를 비운다. 예전 index.html·JS 가 캐시에 남으면 지워진 코드 조각(아이콘 등)을
+// 요청하게 되고, 서버는 그 자리에 index.html 을 돌려줘 화면 일부가 비어 버린다.
+const BUILD_MARK_FILE = path.join(app.getPath("userData"), "last-build-mark.txt");
+
+async function clearCacheIfBuildChanged() {
+  let mark;
+  try {
+    mark = (await (await fetch(new URL("/aif-build-mark.txt", LANGFLOW_URL))).text()).trim();
+  } catch {
+    return; // 표식을 못 읽으면 캐시를 그대로 둔다
+  }
+  let last = "";
+  try {
+    last = fs.readFileSync(BUILD_MARK_FILE, "utf8").trim();
+  } catch {
+    // 처음 실행
+  }
+  if (mark === last) return;
+  await session.defaultSession.clearCache();
+  fs.writeFileSync(BUILD_MARK_FILE, mark);
 }
 
 function startPath() {
@@ -698,6 +720,7 @@ app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
+  await clearCacheIfBuildChanged();
   const win = createWindow();
   await win.loadURL(new URL(startPath(), LANGFLOW_URL).toString());
   void flushNow();

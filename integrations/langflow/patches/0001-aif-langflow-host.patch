@@ -465,7 +465,7 @@ index 0000000..31baf65
 +});
 diff --git a/src/frontend/src/aif/aif-host.css b/src/frontend/src/aif/aif-host.css
 new file mode 100644
-index 0000000..0162449
+index 0000000..6056acb
 --- /dev/null
 +++ b/src/frontend/src/aif/aif-host.css
 @@ -0,0 +1,11 @@
@@ -474,7 +474,7 @@ index 0000000..0162449
 +  flex: 1;
 +  min-width: 0;
 +  height: 100%;
-+  background: #f5f6f8;
++  background: var(--bg);
 +}
 +
 +.aif-langflow-host .top-bar-title {

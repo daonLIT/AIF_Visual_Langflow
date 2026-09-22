@@ -39,3 +39,6 @@ integrations/langflow/.profile/
 # 배포 설정·백업(비밀값·원문 포함)
 deploy/.env
 deploy/backups/
+
+# 개발 문서 
+docs/

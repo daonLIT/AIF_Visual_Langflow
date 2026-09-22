@@ -23,6 +23,40 @@
   --warning: #b7791f;
   --ok: #1f7a5a;
 
+  /* 보조 색 (다크 모드 값은 파일 끝) */
+  --on-accent: #fff;
+  --accent-strong: #2749ad;
+  --text-soft: #3d4350;
+  --surface-subtle: #fbfbfd;
+  --surface-sunken: #f8f9fb;
+  --chrome: #eef0f4;
+  --chrome-strong: #e3e6ec;
+  --neutral: #eceef2;
+  --neutral-soft: #eef2f7;
+  --neutral-text: #475569;
+  --handle: #8b94a6;
+  --mark: #ffe9a8;
+  --mark-active: #ffc53d;
+  --mark-evidence: #eaf3ff;
+  --mark-evidence-line: #7d9be6;
+  --mark-evidence-modified: #e4f5ec;
+  --mark-evidence-selected: #cfe0ff;
+  --info-soft: #e6f0ff;
+  --info-border: #b9c8f3;
+  --warning-faint: #fff8e6;
+  --warning-soft: #fff3d6;
+  --warning-bg: #fff4e0;
+  --warning-tint: #fdf1dc;
+  --warning-border: #f1d99a;
+  --warning-text: #8a5a00;
+  --warning-text-soft: #7a5a12;
+  --warning-text-strong: #5c3d00;
+  --draft-bg: #fffdf6;
+  --danger-border: #efb8b1;
+  --danger-text: #7a2318;
+  --ok-soft: #e6f4ea;
+  --ok-text: #1e7a3c;
+
   font-family: 'Pretendard', 'Malgun Gothic', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 14px;
   color: var(--text);
@@ -113,7 +147,7 @@
 :where(.aif-root) .pane-tabs button.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :where(.aif-root) .review-toggle {
@@ -191,11 +225,11 @@
 :where(.aif-root) .toolbar-actions button.is-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :where(.aif-root) .toolbar-actions button.is-primary:hover:not(:disabled) {
-  background: #2749ad;
+  background: var(--accent-strong);
 }
 
 :where(.aif-root) .toolbar-divider {
@@ -268,12 +302,13 @@
 }
 
 :where(.aif-root) .judgment-text mark {
-  background: #ffe9a8;
+  background: var(--mark);
+  color: inherit; /* 브라우저 기본 검정 글자는 다크 모드에서 보이지 않는다 */
   padding: 0 1px;
 }
 
 :where(.aif-root) .judgment-text mark.is-active {
-  background: #ffc53d;
+  background: var(--mark-active);
 }
 
 :where(.aif-root) .selection-action {
@@ -281,7 +316,7 @@
   z-index: 20;
   padding: 6px 12px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
@@ -292,7 +327,7 @@
 
 :where(.aif-root) .issue-navigator {
   border-bottom: 1px solid var(--border);
-  background: #fbfbfd;
+  background: var(--surface-subtle);
 }
 
 :where(.aif-root) .issue-navigator-header {
@@ -374,7 +409,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--issue);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
 }
@@ -470,7 +505,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--issue);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -537,7 +572,7 @@
 }
 
 :where(.aif-root) .arg-handle-target {
-  background: #8b94a6;
+  background: var(--handle);
 }
 
 /* ---------- 컨텍스트 메뉴 ---------- */
@@ -691,7 +726,7 @@
   border-radius: 4px;
   font-size: 10px;
   font-weight: 700;
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :where(.aif-root) .validation-badge.is-error {
@@ -763,7 +798,7 @@
   gap: 12px;
   padding: 10px 16px;
   background: var(--error);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
@@ -949,7 +984,7 @@
 :where(.aif-root) .annotation-bulk button.is-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :where(.aif-root) .dialog-inline {
@@ -989,10 +1024,10 @@
   margin: 0;
   padding: 8px 10px;
   font-size: 12px;
-  background: #fff8e6;
-  border: 1px solid #f1d99a;
+  background: var(--warning-faint);
+  border: 1px solid var(--warning-border);
   border-radius: 6px;
-  color: #7a5a12;
+  color: var(--warning-text-soft);
 }
 
 :where(.aif-root) .dialog-modes {
@@ -1085,12 +1120,12 @@
 
 :where(.aif-root) .annotation-notice {
   background: var(--accent-soft);
-  border: 1px solid #b9c8f3;
+  border: 1px solid var(--info-border);
 }
 
 :where(.aif-root) .annotation-notice.is-stale {
-  background: #fff8e6;
-  border-color: #f1d99a;
+  background: var(--warning-faint);
+  border-color: var(--warning-border);
 }
 
 :where(.aif-root) .annotation-notice button:not(.icon-button) {
@@ -1105,8 +1140,8 @@
 :where(.aif-root) .annotation-error {
   flex-direction: column;
   background: var(--ca-soft);
-  border: 1px solid #efb8b1;
-  color: #7a2318;
+  border: 1px solid var(--danger-border);
+  color: var(--danger-text);
 }
 
 :where(.aif-root) .annotation-error ul {
@@ -1120,7 +1155,7 @@
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  background: #fbfbfd;
+  background: var(--surface-subtle);
 }
 
 :where(.aif-root) .annotation-run {
@@ -1159,7 +1194,7 @@
 :where(.aif-root) .chip.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :where(.aif-root) .chip-toggle {
@@ -1265,7 +1300,7 @@
 }
 
 :where(.aif-root) .badge-origin.is-rule {
-  background: #eef0f4;
+  background: var(--chrome);
   color: var(--text-muted);
 }
 
@@ -1275,8 +1310,8 @@
 }
 
 :where(.aif-root) .badge-status.is-pending {
-  background: #fff3d6;
-  color: #8a5a00;
+  background: var(--warning-soft);
+  color: var(--warning-text);
 }
 
 :where(.aif-root) .badge-status.is-accepted,
@@ -1286,7 +1321,7 @@
 }
 
 :where(.aif-root) .badge-status.is-rejected {
-  background: #eef0f4;
+  background: var(--chrome);
   color: var(--text-muted);
   text-decoration: line-through;
 }
@@ -1313,8 +1348,8 @@
 }
 
 :where(.aif-root) .badge-note {
-  background: #fff8e6;
-  color: #7a5a12;
+  background: var(--warning-faint);
+  color: var(--warning-text-soft);
 }
 
 :where(.aif-root) .annotation-title {
@@ -1392,7 +1427,7 @@
 
 :where(.aif-root) .annotation-actions button.is-danger {
   color: var(--error);
-  border-color: #efb8b1;
+  border-color: var(--danger-border);
 }
 
 :where(.aif-root) .annotation-editor {
@@ -1450,14 +1485,14 @@
 }
 
 :where(.aif-root) .evidence-badge.is-normalized {
-  background: #e6f0ff;
+  background: var(--info-soft);
   color: var(--accent);
 }
 
 :where(.aif-root) .evidence-badge.is-ambiguous,
 :where(.aif-root) .evidence-badge.is-stale {
-  background: #fff3d6;
-  color: #8a5a00;
+  background: var(--warning-soft);
+  color: var(--warning-text);
 }
 
 :where(.aif-root) .evidence-badge.is-unmatched {
@@ -1510,19 +1545,19 @@
 /* 원문 하이라이트 */
 
 :where(.aif-root) .judgment-text mark.is-evidence {
-  background: #eaf3ff;
-  border-bottom: 1px dotted #7d9be6;
+  background: var(--mark-evidence);
+  border-bottom: 1px dotted var(--mark-evidence-line);
   cursor: pointer;
 }
 
 :where(.aif-root) .judgment-text mark.is-evidence.is-accepted,
 :where(.aif-root) .judgment-text mark.is-evidence.is-modified {
-  background: #e4f5ec;
+  background: var(--mark-evidence-modified);
   border-bottom-color: var(--ra);
 }
 
 :where(.aif-root) .judgment-text mark.is-evidence-selected {
-  background: #cfe0ff;
+  background: var(--mark-evidence-selected);
   border-bottom: 2px solid var(--accent);
   cursor: pointer;
 }
@@ -1533,11 +1568,11 @@
 }
 
 :where(.aif-root) .judgment-text mark.is-search {
-  background: #ffe9a8;
+  background: var(--mark);
 }
 
 :where(.aif-root) .judgment-text mark.is-search.is-active {
-  background: #ffc53d;
+  background: var(--mark-active);
 }
 
 :where(.aif-root) .judgment-context {
@@ -1572,7 +1607,7 @@
   border-style: dashed;
   border-width: 2px;
   border-color: var(--warning);
-  background: #fffdf6;
+  background: var(--draft-bg);
 }
 
 :where(.aif-root) .arg-node.is-draft-rejected {
@@ -1593,8 +1628,8 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  background: #fff3d6;
-  color: #8a5a00;
+  background: var(--warning-soft);
+  color: var(--warning-text);
 }
 
 :where(.aif-root) .arg-node-status.is-accepted,
@@ -1604,7 +1639,7 @@
 }
 
 :where(.aif-root) .arg-node-status.is-rejected {
-  background: #eef0f4;
+  background: var(--chrome);
   color: var(--text-muted);
 }
 
@@ -1667,13 +1702,13 @@
 :where(.aif-root) .pipeline :is(.pipeline-toolbar, .pipeline-banner, .lf-palette, .lf-props, .lf-bottom, .dialog) button.is-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :where(.aif-root) .node-detail button.is-primary:hover:not(:disabled),
 :where(.aif-root) .pipeline :is(.pipeline-toolbar, .pipeline-banner, .lf-palette, .lf-props, .lf-bottom, .dialog) button.is-primary:hover:not(:disabled) {
-  background: #2749ad;
-  border-color: #2749ad;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 :where(.aif-root) .node-detail button.is-danger,
@@ -1705,7 +1740,7 @@
   justify-content: space-between;
   gap: 12px;
   padding-right: 16px;
-  background: #eef0f4;
+  background: var(--chrome);
   border-bottom: 1px solid var(--border);
 }
 
@@ -1746,7 +1781,7 @@
   border-bottom: none;
   border-radius: 8px 8px 0 0;
   padding: 7px 18px;
-  background: #e3e6ec;
+  background: var(--chrome-strong);
   color: var(--text-muted);
   font-weight: 600;
 }
@@ -1759,7 +1794,7 @@
 
 /* ---------- 요약 / 스킴 노드 ---------- */
 :where(.aif-root) .arg-node-text.is-fallback {
-  color: #3d4350;
+  color: var(--text-soft);
 }
 
 :where(.aif-root) .arg-node-subbadge {
@@ -1868,7 +1903,7 @@
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
-  background: #f8f9fb;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
@@ -2032,7 +2067,7 @@
 }
 
 :where(.aif-root) .scheme-role.is-missing {
-  background: #fff4e0;
+  background: var(--warning-bg);
   color: var(--warning);
 }
 
@@ -2083,7 +2118,7 @@
 
 :where(.aif-root) .cq-answer {
   margin-top: 2px;
-  color: #3d4350;
+  color: var(--text-soft);
 }
 
 :where(.aif-root) .cq-edit {
@@ -2104,7 +2139,7 @@
 
 :where(.aif-root) .annotation-summary {
   font-size: 12px;
-  color: #3d4350;
+  color: var(--text-soft);
   margin: 2px 0;
 }
 
@@ -2169,7 +2204,7 @@
   align-items: baseline;
   padding: 3px 0;
   font-size: 12.5px;
-  border-bottom: 1px dotted #eceef2;
+  border-bottom: 1px dotted var(--neutral);
 }
 
 :where(.aif-root) .scope-label {
@@ -2186,7 +2221,7 @@
   margin: 6px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fafbfd;
+  background: var(--surface-subtle);
 }
 
 :where(.aif-root) .coverage.has-problems {
@@ -2222,7 +2257,7 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
-  background: #eceef2;
+  background: var(--neutral);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -2240,7 +2275,7 @@
 
 :where(.aif-root) .coverage-chip.is-skipped,
 :where(.aif-root) .coverage-chip.is-warning {
-  background: #fff4e0;
+  background: var(--warning-bg);
   color: var(--warning);
 }
 
@@ -2371,12 +2406,12 @@
 }
 
 :where(.aif-root) .pipeline-banner.is-protected {
-  background: #fff4e0;
+  background: var(--warning-bg);
 }
 
 :where(.aif-root) .pipeline-banner.is-error {
   background: var(--ca-soft);
-  color: #7d231a;
+  color: var(--danger-text);
 }
 
 :where(.aif-root) .pipeline-banner.is-success {
@@ -2528,12 +2563,12 @@
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;
-  background: #eceef2;
+  background: var(--neutral);
   color: var(--text-muted);
 }
 
 :where(.aif-root) .lf-kind.is-prompt {
-  background: #fdf1dc;
+  background: var(--warning-tint);
   color: var(--pipeline-prompt);
 }
 
@@ -2557,7 +2592,7 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: #fff4e0;
+  background: var(--warning-bg);
   color: var(--warning);
 }
 
@@ -2777,7 +2812,7 @@
 :where(.aif-root) .lf-var {
   padding: 1px 6px;
   border-radius: 4px;
-  background: #eceef2;
+  background: var(--neutral);
   font-family: ui-monospace, Consolas, monospace;
 }
 
@@ -2792,7 +2827,7 @@
 }
 
 :where(.aif-root) .lf-warning {
-  background: #fff4e0;
+  background: var(--warning-bg);
   border: 1px solid var(--warning);
   border-radius: 6px;
   padding: 6px 8px;
@@ -2935,19 +2970,19 @@
   padding: 0 4px;
   border-radius: 3px;
   font-size: 10px;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--warning);
 }
 :where(.aif-root) .badge.scheme-status.is-suggested {
-  background: #eef2f7;
-  color: #475569;
+  background: var(--neutral-soft);
+  color: var(--neutral-text);
 }
 :where(.aif-root) .badge.scheme-status.is-confirmed {
-  background: #e6f4ea;
-  color: #1e7a3c;
+  background: var(--ok-soft);
+  color: var(--ok-text);
 }
 :where(.aif-root) .badge.scheme-status.is-needs_review {
-  background: #fdf1dc;
+  background: var(--warning-tint);
   color: var(--warning);
 }
 :where(.aif-root) .node-detail-section h3 .node-detail-badges {
@@ -3048,9 +3083,9 @@
   align-items: center;
   gap: 8px 12px;
   padding: 8px 14px;
-  background: #fdf1dc;
+  background: var(--warning-tint);
   border-bottom: 1px solid var(--warning);
-  color: #5c3d00;
+  color: var(--warning-text-strong);
 }
 :where(.aif-root) .save-conflict-actions {
   display: flex;
@@ -3066,4 +3101,92 @@
 :where(.aif-root) .save-conflict button.is-danger {
   color: var(--error);
   border-color: var(--error);
+}
+
+/* =====================================================================
+   다크 모드: 호스트 문서에 .dark 가 있으면 적용한다(Langflow 는 body 에 .dark 를 단다).
+   색 변수만 바꾼다. 파일 끝에 두어 위의 :where(.aif-root) 변수보다 뒤에 온다.
+   ===================================================================== */
+
+:where(.dark .aif-root) {
+  color-scheme: dark;
+
+  --bg: #18181b;
+  --surface: #222226;
+  --border: #34343b;
+  --border-strong: #4b4b54;
+  --text: #e6e7ea;
+  --text-muted: #a1a3ab;
+  --accent: #7c9cff;
+  --accent-soft: #1f2a4a;
+  --issue: #b08cff;
+  --issue-soft: #2c2342;
+  --ra: #4cc59a;
+  --ra-soft: #163129;
+  --ca: #f07b6e;
+  --ca-soft: #3b201d;
+  --error: #f07b6e;
+  --warning: #e0a94c;
+  --ok: #4cc59a;
+
+  --on-accent: #111318;
+  --accent-strong: #a3b8ff;
+  --text-soft: #c9cbd1;
+  --surface-subtle: #1d1d21;
+  --surface-sunken: #1b1b1f;
+  --chrome: #1d1d21;
+  --chrome-strong: #2d2d33;
+  --neutral: #2d2d33;
+  --neutral-soft: #2a2d34;
+  --neutral-text: #b4b8c2;
+  --handle: #7a8294;
+  --mark: #5a4a16;
+  --mark-active: #8a6a10;
+  --mark-evidence: #1e2c48;
+  --mark-evidence-line: #6f8fe0;
+  --mark-evidence-modified: #173327;
+  --mark-evidence-selected: #2a4170;
+  --info-soft: #1e2a44;
+  --info-border: #3a4f86;
+  --warning-faint: #2e2718;
+  --warning-soft: #3a2f16;
+  --warning-bg: #332a17;
+  --warning-tint: #372c18;
+  --warning-border: #6b5424;
+  --warning-text: #e8bd6a;
+  --warning-text-soft: #e0bf7c;
+  --warning-text-strong: #f0cf8a;
+  --draft-bg: #26241d;
+  --danger-border: #7a3a33;
+  --danger-text: #f3a197;
+  --ok-soft: #173327;
+  --ok-text: #6fd6a4;
+
+  --pipeline-prompt: #e0a94c;
+  --pipeline-llm: #7c9cff;
+  --pipeline-custom: #b08cff;
+  --pipeline-io: #4cc59a;
+
+  /* React Flow 캔버스·미니맵·컨트롤 */
+  --xy-background-color: #141417;
+  --xy-background-pattern-dots-color: #3c3c44;
+  --xy-edge-stroke: #6c6f7a;
+  --xy-edge-stroke-selected: #a9adb8;
+  --xy-connectionline-stroke: #8b8f9a;
+  --xy-node-color: var(--text);
+  --xy-node-background-color: var(--surface);
+  --xy-node-border: 1px solid var(--border-strong);
+  --xy-handle-background-color: var(--handle);
+  --xy-handle-border-color: var(--surface);
+  --xy-selection-background-color: rgba(124, 156, 255, 0.08);
+  --xy-selection-border: 1px dotted rgba(124, 156, 255, 0.7);
+  --xy-minimap-background-color: #1b1b1f;
+  --xy-minimap-mask-background-color: rgba(10, 10, 12, 0.6);
+  --xy-minimap-node-background-color: #3a3a42;
+  --xy-controls-button-background-color: #26262b;
+  --xy-controls-button-background-color-hover: #33333a;
+  --xy-controls-button-color: #e6e7ea;
+  --xy-controls-button-color-hover: #ffffff;
+  --xy-controls-button-border-color: #3a3a42;
+  --xy-attribution-background-color: rgba(150, 150, 150, 0.2);
 }
