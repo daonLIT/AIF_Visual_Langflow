@@ -380,8 +380,8 @@ PROMPTS = {"selector": SELECTOR_PROMPT, "extractor": BRANCH_PROMPT, "summarizer"
 # 예전에는 v9 flow 의 Main Claim LLM 노드 값을 그대로 베꼈고 num_ctx 는 아예 옮기지 않아,
 # 어떤 모델/컨텍스트로 돌았는지가 flow 파일 안에만 남았다. 여기로 모아 커밋에 남게 한다.
 #
-# 추론은 서버(spark-a164, 210.115.229.70)의 Ollama 로 하고, SSH 터널로 이 PC 의 localhost 에 붙인다.
-#   ssh -N -L 11434:localhost:11434 litailab01@210.115.229.70
+# 추론은 GPU 서버의 Ollama 로 하고, SSH 터널로 이 PC 의 localhost 에 붙인다.
+#   ssh -N -L 11434:localhost:11434 <사용자>@<GPU 서버>
 # 터널을 쓰므로 base_url 은 localhost 그대로다(서버 Ollama 를 공용망에 열지 않는다).
 OLLAMA_BASE_URL = "http://localhost:11434"
 # 서버에 올라간 Gemma 4 26B (25.8B Q4_K_M). 원래 컨텍스트는 262144 이고 num_ctx 는 아래 단계별 값으로 넘긴다.
