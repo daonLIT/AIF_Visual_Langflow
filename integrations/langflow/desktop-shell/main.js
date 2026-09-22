@@ -11,7 +11,7 @@
 //   AIF_LANGFLOW_START  서버가 응답하지 않을 때 실행할 PowerShell 스크립트 (선택)
 //   AIF_API_BASE, AIF_SITE_URL, AIF_REVIEW_TOKEN, AIF_PUBLISH_TOKEN
 //                       연결 설정(메뉴 'AIF 연결 설정')보다 우선하는 값. 개발·자동 점검용
-//   AIF_SHELL_PROBE     p0 | p1 | p2 이면 자동 점검을 돌리고 결과 JSON(과 캡처)을 남긴 뒤 종료 (1 은 p0)
+//   AIF_SHELL_PROBE     p0 | p1 | p2 | p2b | p3 | p3r | p4 이면 자동 점검을 돌리고 결과 JSON(과 캡처)을 남긴 뒤 종료 (1 은 p0)
 //   AIF_SHELL_PROBE_OUT 점검 결과 파일 경로
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell } = require("electron");
@@ -312,7 +312,8 @@ function writeProbe(mode, backend, steps, extra = {}) {
   return out;
 }
 
-// P1: Langflow 안의 AIF 화면에서 예제 사건의 원문·그래프·상세를 띄우고, Flow 화면 스타일이 바뀌지 않는지 본다.
+// P1: Langflow 안의 AIF 화면(사건 목록 → 사건 열기)에서 원문·그래프·상세가 뜨고, Flow 화면 스타일이 바뀌지 않는지 본다.
+// 연결된 중앙 서버에 사건이 하나 이상 있어야 한다. 첫 사건을 열어 보기만 하고 저장하지 않는다.
 async function probeP1(win, mode) {
   const { wc, js, sleep, waitFor, steps, step, waitPath } = probeTools(win);
   const consoleErrors = [];
@@ -328,30 +329,37 @@ async function probeP1(win, mode) {
     fs.writeFileSync(path.join(outDir, `p1-${name}.png`), img.toPNG());
     return img.toBitmap();
   };
+  const openFirstProject = async () => {
+    await js(`document.querySelector('[data-testid="aif-menu-button"]').click()`);
+    if (!(await waitFor('[data-testid="aif-project-list"] tbody tr .link-button', 20000))) {
+      throw new Error("사건 목록이 비어 있거나 서버에 연결되지 않음");
+    }
+    await js(`document.querySelector('[data-testid="aif-project-list"] tbody tr .link-button').click()`);
+    const projectId = decodeURIComponent((await waitPath("/aif/projects/")).slice("/aif/projects/".length));
+    if (!(await waitFor(`[data-loaded-project="${projectId}"]`, 30000))) throw new Error("사건이 화면에 로드되지 않음");
+    for (let i = 0; i < 50 && !(await js(`document.querySelectorAll('.aif-root .react-flow__node').length`)); i++) await sleep(200);
+    return projectId;
+  };
+  // Langflow 테마(body.dark). 전후 테마가 다르면 캡처 비교가 의미 없으므로 따로 알린다.
+  const theme = () => js(`document.getElementById("body")?.classList.contains("dark") ? "dark" : "light"`);
   let flowsBefore = null;
   let flowsAfter = null;
+  let themeBefore = null;
+  let projectId = null;
   await step("flows 화면 로드", async () => {
     if (!(await waitFor('[data-testid="app-header"]'))) throw new Error("헤더 없음");
     flowsBefore = await shot("flows-before");
-    return await js("location.pathname");
+    themeBefore = await theme();
+    return { path: await js("location.pathname"), theme: themeBefore };
   });
-  await step("헤더 AIF → 검토 화면", async () => {
-    await js(`document.querySelector('[data-testid="aif-menu-button"]').click()`);
-    if (!(await waitFor('[data-testid="aif-workbench-page"] .toolbar'))) throw new Error("AIF 화면 안 열림");
-    return await js("location.pathname");
-  });
-  await step("예제 열기 → 원문·그래프", async () => {
-    const clicked = await js(
-      `(() => { const b = [...document.querySelectorAll('.aif-root .toolbar button')].find((x) => x.textContent.trim() === '예제 열기' || x.textContent.trim() === 'Open example'); b?.click(); return !!b; })()`,
-    );
-    if (!clicked) throw new Error("예제 열기 버튼 없음");
-    for (let i = 0; i < 50 && !(await js(`document.querySelectorAll('.aif-root .react-flow__node').length`)); i++) await sleep(200);
+  await step("헤더 AIF → 사건 목록 → 첫 사건 열기 → 원문·그래프", async () => {
+    projectId = await openFirstProject();
     const nodes = await js(`document.querySelectorAll('.aif-root .react-flow__node').length`);
     const textLen = await js(`(document.querySelector('.aif-root .pane-text')?.innerText || '').length`);
     if (!nodes) throw new Error("그래프 노드 없음");
     if (textLen < 200) throw new Error("원문이 보이지 않음");
-    await shot("workbench-sample");
-    return { nodes, textLen };
+    await shot("workbench-project");
+    return { projectId, nodes, textLen };
   });
   await step("노드 클릭 → 상세 패널", async () => {
     await js(`document.querySelector('.aif-root .react-flow__node')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
@@ -360,28 +368,27 @@ async function probeP1(win, mode) {
     return await js(`document.querySelector('.aif-root .node-detail h2, .aif-root .node-detail header')?.textContent?.trim() ?? ''`);
   });
   await step("Flow 목록 복귀 → 스타일 비교", async () => {
-    // 로고는 "/" 로 간다. 테스트 DB 에 Flow 가 없으면 Langflow 는 "/" 에서 첫 화면을 보여 준다(첫 캡처와 같은 화면).
     await js(`document.querySelector('[data-testid="icon-ChevronLeft"]').click()`);
     await waitPath("/");
-    if (await js(`!!document.querySelector('[data-testid="aif-workbench-page"]')`)) throw new Error("AIF 화면이 남아 있음");
+    if (await js(`!!document.querySelector('.aif-root')`)) throw new Error("AIF 화면이 남아 있음");
     if (!(await waitFor('[data-testid="app-header"]'))) throw new Error("헤더 없음");
     flowsAfter = await shot("flows-after");
+    const themeAfter = await theme();
+    if (themeAfter !== themeBefore) throw new Error(`Langflow 테마가 바뀜 (${themeBefore} → ${themeAfter}). 테마 설정을 확인하고 다시 돌린다`);
     let diff = 0;
     for (let i = 0; i < flowsBefore.length; i += 4) {
       if (flowsBefore[i] !== flowsAfter[i] || flowsBefore[i + 1] !== flowsAfter[i + 1] || flowsBefore[i + 2] !== flowsAfter[i + 2]) diff++;
     }
-    return { diffPixels: diff, total: flowsBefore.length / 4 };
+    const total = flowsBefore.length / 4;
+    // 메모리 비트맵은 글자 가장자리 몇 픽셀이 다를 수 있다(P1 당시 29px). 0.01% 를 넘으면 스타일이 샌 것으로 본다.
+    if (diff > total * 0.0001) throw new Error(`Flow 화면이 달라짐: ${diff}px / ${total}px (p1-flows-before·after.png 비교)`);
+    return { diffPixels: diff, total, theme: themeAfter };
   });
-  await step("다시 AIF → 편집 상태 유지", async () => {
-    await js(`document.querySelector('[data-testid="aif-menu-button"]').click()`);
-    if (!(await waitFor('[data-testid="aif-workbench-page"] .toolbar'))) throw new Error("AIF 화면 안 열림");
-    for (let i = 0; i < 25 && !(await js(`document.querySelectorAll('.aif-root .react-flow__node').length`)); i++) await sleep(200);
-    return { nodes: await js(`document.querySelectorAll('.aif-root .react-flow__node').length`) };
-  });
-  await step("AIF 화면 새로고침", async () => {
+  await step("다시 열고 새로고침", async () => {
+    const again = await openFirstProject();
     wc.reload();
     await new Promise((r) => wc.once("did-finish-load", r));
-    if (!(await waitFor('[data-testid="aif-workbench-page"] .toolbar'))) throw new Error("새로고침 후 화면 없음");
+    if (!(await waitFor(`[data-loaded-project="${again}"]`, 30000))) throw new Error("새로고침 후 사건이 로드되지 않음");
     return await js("location.pathname");
   });
   writeProbe("p1", mode, steps, { consoleErrors });

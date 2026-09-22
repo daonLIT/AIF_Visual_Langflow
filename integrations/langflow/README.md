@@ -251,6 +251,13 @@ Electron 셸 창 (Langflow 포크 화면)
 
 점검 결과 JSON 은 `.profile/p4-evidence/` 에 있다. 시험용 설치·런타임 폴더(`%LOCALAPPDATA%\aifp4`)는 점검 뒤 지웠다.
 
+### p1 점검 갱신 (2026-09-22)
+
+`AIF_SHELL_PROBE=p1` 을 지금 화면 흐름에 맞게 고쳤다: 헤더 AIF → 사건 목록 → 첫 사건 열기(원문·그래프) → 노드 상세 → 로고로 Flow 목록 복귀해 캡처 비교 → 다시 열고 새로고침.
+연결된 중앙 서버에 사건이 하나 이상 있어야 하고, 열어 보기만 하며 저장하지 않는다.
+캡처 비교는 전후 Langflow 테마가 다르면 실패로 알리고(테마 설정이 섞이면 화면 전체가 달라 보인다), 차이가 0.01% 를 넘으면 실패로 본다.
+결과: 5단계 통과, Flow 화면 차이 38px / 1,155,640px, 콘솔 오류는 Langflow 자체의 `Duplicate request: /api/v1/projects/` 1건.
+
 ### 사람이 직접 확인 (2026-09-22)
 
 개발 모드 셸 + 로컬 중앙 서버 8000 에서 기존 사건을 열어 직접 조작했다. 모두 이상 없음.
@@ -268,7 +275,6 @@ Electron 셸 창 (Langflow 포크 화면)
 - 설치본을 HTTPS 공개 서버에 연결한 Desktop↔서버 E2E. 로컬 CA 인증서는 Electron 이 거부하므로 로컬 http 중앙 서버로만 확인했다. 게시·검토 E2E 는 P2·P3 에서 같은 코드로 확인했다.
 - 다른 PC(공식 Desktop·Ollama 가 없는 PC)에서의 설치. 이 PC 에서 빈 프로필·빈 런타임 폴더로 대신했다.
 - 기존 공식 Desktop 의 Flow 를 이 앱으로 옮기는 기능은 만들지 않았다. Langflow 의 Flow 내보내기·가져오기(JSON)를 쓴다.
-- `AIF_SHELL_PROBE=p1` 은 P1 당시 화면 구조(헤더 AIF → 검토 화면)에 맞춘 점검이다. P2 이후 헤더가 사건 목록으로 가므로 지금은 일부 단계가 맞지 않는다. 설치본 점검은 p4 를 쓴다.
 
 ## 실행 방법
 
@@ -305,7 +311,7 @@ npx electron .
 # 4. Langflow 에서 langflow\TopDown_Judgment_to_AIF_v11_Desktop.json 을 가져와 판결문을 붙여 넣고 출력 노드를 실행한다.
 #    끝나면 오른쪽 아래 패널의 [이 결과 보기].
 
-# 자동 점검: p0(테스트 페이지·재시작) / p1(검토 화면·스타일 격리) / p2(실제 실행·게시·열기) / p2b(서버 단절 후 재전송)
+# 자동 점검: p0(테스트 페이지·재시작) / p1(사건 열기·스타일 격리, 서버에 사건 필요) / p2(실제 실행·게시·열기) / p2b(서버 단절 후 재전송)
 #           p3(Desktop 검토·저장 → 웹 로그인 확인 → 409) / p3r(재시작 복원, p3 다음에)
 #   p3 는 AIF_P3_WEB_URL(기본 http://localhost:5173), AIF_P3_WEB_USER, AIF_P3_WEB_PASSWORD 도 쓴다.
 #   p2·p2b 는 연결 설정 대신 환경변수 AIF_API_BASE, AIF_REVIEW_TOKEN, AIF_PUBLISH_TOKEN 을 쓸 수 있다.
