@@ -253,7 +253,7 @@ argumentation schemes.
 
 # Premise bindings (map premise ids such as N1, N2 to role_id values of the chosen scheme)
 - Every role has a template (premiseRoles[].template). Bind a premise to a role only when the premise text itself
-  states what that template says. A premise phrased as a question cannot fill a role. Do not put a specific fact
+  states what that template says. A template may be only a short role name; then judge from the scheme description. A premise phrased as a question cannot fill a role. Do not put a specific fact
   into a role that needs a general rule or generalization (for example "A is generally a sign of B").
 - Bind each premise to at most one role. Never list the same premise id under two roles. An RA with one premise
   fills at most one role.
@@ -264,6 +264,8 @@ argumentation schemes.
 # Critical questions
 - Answer only critical questions of the chosen scheme that the premise, conclusion or evidence texts actually
   address. Omit the others instead of guessing.
+- Some schemes list no critical questions (criticalQuestions is empty). For those, return an empty
+  critical_question_responses. Do not invent question ids.
 - status: "satisfied" = the judgment answers the question in a way that supports the inference; "challenged" =
   the judgment gives a reason that weakens the inference; "open" = the judgment raises it without resolving it.
 - answer: one short Korean sentence saying what the judgment says. Do not add facts, investigations or legal

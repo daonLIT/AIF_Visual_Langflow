@@ -13,8 +13,14 @@ test("bridge forwards only the review API", () => {
   assert.ok(allowed("PUT", "/api/projects/project-abc"));
   assert.ok(allowed("GET", "/api/catalogs/schemes"));
   assert.ok(allowed("POST", "/api/evidence/verify"));
+  // 그래프 화면에서 직접 만든 scheme
+  assert.ok(allowed("POST", "/api/catalogs/schemes/custom"));
+  assert.ok(allowed("PUT", "/api/catalogs/schemes/custom/custom-ab12cd34"));
   for (const [method, p] of [
     ["POST", "/api/integrations/langflow/results"], // 게시는 Flow(게시 토큰)만
+    ["DELETE", "/api/catalogs/schemes/custom/custom-ab12cd34"], // 지우기는 없다(폐기로만)
+    ["PUT", "/api/catalogs/schemes/custom/witness_testimony"], // 정본 scheme 은 바꿀 수 없다
+    ["PUT", "/api/catalogs/schemes/custom/custom-XYZ"],
     ["DELETE", "/api/projects/x"],
     ["GET", "/api/pipelines"],
     ["POST", "/api/analysis-runs"],

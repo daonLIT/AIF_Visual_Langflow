@@ -34,6 +34,8 @@ logger = logging.getLogger("annotation.auth")
 
 SCOPES = (
     "catalog:read",
+    # 그래프 화면에서 scheme 을 직접 만들고 고치는 권한. 정본 카탈로그 파일은 바꾸지 못한다.
+    "catalog:write",
     "results:publish",
     "projects:read",
     "projects:write",
@@ -44,6 +46,7 @@ SCOPES = (
 
 # (메서드, 경로 정규식) → 필요한 권한. 위에서부터 처음 맞는 규칙을 쓴다.
 ROUTE_SCOPES: list[tuple[frozenset[str], re.Pattern, str]] = [
+    (frozenset({"POST", "PUT"}), re.compile(r"^/api/catalogs/schemes/custom(/.*)?$"), "catalog:write"),
     (frozenset({"GET"}), re.compile(r"^/api/catalogs/(issues|schemes)$"), "catalog:read"),
     (frozenset({"GET"}), re.compile(r"^/api/integrations/langflow/context$"), "catalog:read"),
     (frozenset({"POST"}), re.compile(r"^/api/integrations/langflow/results$"), "results:publish"),

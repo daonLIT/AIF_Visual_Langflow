@@ -2079,6 +2079,29 @@
   margin-bottom: 4px;
 }
 
+/* 직접 만드는 scheme 폼: 역할 한 줄은 이름·형식 문장·지우기 */
+:where(.aif-root) .custom-scheme-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:where(.aif-root) .custom-scheme-role {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+:where(.aif-root) .custom-scheme-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
 :where(.aif-root) .scheme-role-text {
   font-size: 12px;
   line-height: 1.4;

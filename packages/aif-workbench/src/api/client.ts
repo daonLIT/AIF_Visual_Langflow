@@ -16,7 +16,7 @@ import type {
   PipelineVersion,
 } from '../types/pipeline';
 import type { RawCaseJson } from '../types/rawJson';
-import type { IssueCatalog, SchemeCatalog } from '../types/scheme';
+import type { CustomSchemeInput, CustomSchemeResult, IssueCatalog, SchemeCatalog } from '../types/scheme';
 import { currentLang, t } from '../i18n';
 import { workbenchHost } from '../host';
 
@@ -117,6 +117,17 @@ export const api = {
 
   issueCatalog: () => request<IssueCatalog>('/api/catalogs/issues'),
   schemeCatalog: () => request<SchemeCatalog>('/api/catalogs/schemes'),
+
+  /** 사용자가 그래프 화면에서 만든 scheme 을 목록에 추가한다. 응답에 갱신된 카탈로그가 들어 있다. */
+  createCustomScheme: (payload: CustomSchemeInput) =>
+    request<CustomSchemeResult>('/api/catalogs/schemes/custom', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /** 정의를 고치거나(이름·설명·전제 역할을 함께 보낸다) AI 사용 허용·폐기 상태만 바꾼다. */
+  updateCustomScheme: (schemeKey: string, payload: Partial<CustomSchemeInput> & { retired?: boolean }) =>
+    request<CustomSchemeResult>(`/api/catalogs/schemes/custom/${encodeURIComponent(schemeKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
   connectionStatus: () => request<ConnectionStatusReport>('/api/connections/status'),
 
   /** 분석 실행. 쟁점은 사용자가 고르지 않는다: flow 가 52개 세부 쟁점 중 최대 3개를 자동 선택한다. */

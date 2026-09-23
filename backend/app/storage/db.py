@@ -118,6 +118,24 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);
 """,
     ),
+    (
+        6,
+        "사용자가 만든 scheme (정본 카탈로그 파일에 섞지 않고 따로 둔다)",
+        """
+CREATE TABLE IF NOT EXISTS custom_schemes (
+    scheme_key TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    updated_by TEXT NOT NULL,
+    enabled_for_ai INTEGER NOT NULL DEFAULT 1,
+    retired INTEGER NOT NULL DEFAULT 0,
+    definition TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_custom_schemes_updated ON custom_schemes(updated_at);
+""",
+    ),
 ]
 LATEST_SCHEMA = MIGRATIONS[-1][0]
 
@@ -294,6 +312,79 @@ class Database:
             }
             for row in rows
         ]
+
+    # ---- 사용자가 만든 scheme ----
+    @staticmethod
+    def _custom_scheme_row(row: sqlite3.Row) -> dict:
+        return {
+            "schemeKey": row["scheme_key"],
+            "revision": int(row["revision"]),
+            "createdAt": row["created_at"],
+            "updatedAt": row["updated_at"],
+            "createdBy": row["created_by"],
+            "updatedBy": row["updated_by"],
+            "enabledForAi": bool(row["enabled_for_ai"]),
+            "retired": bool(row["retired"]),
+            "definition": json.loads(row["definition"]),
+        }
+
+    def list_custom_schemes(self) -> list[dict]:
+        """폐기한 것까지 모두. 과거 그래프가 쓰던 scheme 의 이름이 사라지지 않게 지우지 않는다."""
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM custom_schemes ORDER BY created_at").fetchall()
+        return [self._custom_scheme_row(row) for row in rows]
+
+    def get_custom_scheme(self, scheme_key: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM custom_schemes WHERE scheme_key = ?", (scheme_key,)).fetchone()
+        return self._custom_scheme_row(row) if row else None
+
+    def insert_custom_scheme(self, scheme_key: str, definition: dict, *, enabled_for_ai: bool, by: str, at: str) -> dict:
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO custom_schemes(scheme_key, revision, created_at, updated_at, created_by, updated_by,
+                                           enabled_for_ai, retired, definition)
+                VALUES (?, 1, ?, ?, ?, ?, ?, 0, ?)
+                """,
+                (scheme_key, at, at, by, by, 1 if enabled_for_ai else 0, json.dumps(definition, ensure_ascii=False)),
+            )
+            self._conn.commit()
+        return self.get_custom_scheme(scheme_key)
+
+    def update_custom_scheme(
+        self,
+        scheme_key: str,
+        *,
+        definition: dict | None = None,
+        enabled_for_ai: bool | None = None,
+        retired: bool | None = None,
+        by: str,
+        at: str,
+    ) -> dict | None:
+        """준 값만 바꾸고 revision 을 1 올린다. 없는 key 면 None."""
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM custom_schemes WHERE scheme_key = ?", (scheme_key,)).fetchone()
+            if row is None:
+                return None
+            self._conn.execute(
+                """
+                UPDATE custom_schemes
+                   SET revision = revision + 1, updated_at = ?, updated_by = ?,
+                       enabled_for_ai = ?, retired = ?, definition = ?
+                 WHERE scheme_key = ?
+                """,
+                (
+                    at,
+                    by,
+                    row["enabled_for_ai"] if enabled_for_ai is None else (1 if enabled_for_ai else 0),
+                    row["retired"] if retired is None else (1 if retired else 0),
+                    row["definition"] if definition is None else json.dumps(definition, ensure_ascii=False),
+                    scheme_key,
+                ),
+            )
+            self._conn.commit()
+        return self.get_custom_scheme(scheme_key)
 
     # ---- auth sessions ----
     def create_session(self, session_hash: str, username: str, principal: str, scopes: list[str], csrf_token: str, created_at: str, expires_at: str) -> None:

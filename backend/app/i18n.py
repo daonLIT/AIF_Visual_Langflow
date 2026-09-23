@@ -122,6 +122,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         'ko': '쟁점·scheme 카탈로그를 불러오지 못해 분석할 수 없습니다.',
         'en': 'The issue and scheme catalogues could not be loaded, so the analysis cannot run.',
     },
+    'api.custom_scheme_not_found': {
+        'ko': '직접 만든 스킴을 찾을 수 없습니다.',
+        'en': 'The user-defined scheme was not found.',
+    },
+    'api.custom_scheme_name_taken': {
+        'ko': '같은 이름의 스킴이 이미 있습니다: {name}',
+        'en': 'A scheme with the same name already exists: {name}',
+    },
     'api.run_not_found': {
         'ko': '실행을 찾을 수 없습니다.',
         'en': 'The run was not found.',
@@ -202,6 +210,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         'ko': '판결문 원문. 줄바꿈·공백을 그대로 보존한다.',
         'en': 'The judgment text. Line breaks and spacing are preserved.',
     },
+    'schema.custom_scheme_blank': {
+        'ko': '이름과 설명은 비워 둘 수 없습니다.',
+        'en': 'The name and the description cannot be empty.',
+    },
+    'schema.custom_scheme_role_empty': {
+        'ko': '전제 역할 이름은 비워 둘 수 없습니다.',
+        'en': 'A premise role name cannot be empty.',
+    },
+    'schema.custom_scheme_role_duplicate': {
+        'ko': '전제 역할 이름이 서로 같습니다.',
+        'en': 'Two premise roles have the same name.',
+    },
+    'schema.custom_scheme_partial': {
+        'ko': '정의를 바꿀 때는 이름·설명·전제 역할을 함께 보내야 합니다.',
+        'en': 'When changing the definition, send the name, the description and the premise roles together.',
+    },
     'config.bad_mode': {
         'ko': 'LANGFLOW_MODE 값이 올바르지 않습니다: {value} (허용: {allowed})',
         'en': 'LANGFLOW_MODE is not valid: {value} (allowed: {allowed})',
@@ -242,6 +266,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     'catalog.no_schemes': {
         'ko': '스킴 카탈로그에 schemes 가 없습니다.',
         'en': 'The scheme catalogue has no schemes.',
+    },
+    'catalog.custom_verification': {
+        'ko': '사용자가 만든 도식 — Walton 목록에 없다',
+        'en': 'Made by a user - not in the Walton list',
     },
     'catalog.bad_scheme_key': {
         'ko': '스킴 카탈로그의 schemeKey 가 비었거나 예약어입니다: {key}',

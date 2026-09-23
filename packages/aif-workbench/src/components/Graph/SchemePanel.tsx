@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { findScheme, useCatalogStore } from '../../store/catalogStore';
+import { findScheme, selectableSchemes, useCatalogStore } from '../../store/catalogStore';
 import type { ArgumentNodeType } from '../../types/argument';
 import {
   CQ_STATUS_KEY,
@@ -370,6 +370,181 @@ function groupSchemes(schemes: SchemeDefinition[]): Array<[string, SchemeDefinit
   return [...groups.entries()];
 }
 
+/** scheme 종류 드롭다운의 '새로 만들기' 항목. 실제 schemeKey 와 겹치지 않는 값이어야 한다. */
+const NEW_SCHEME_OPTION = '__new__';
+const emptyRole = () => ({ label: '', template: '' });
+
+/**
+ * 직접 만드는 scheme 폼. 이름·설명·전제 역할만 받는다(비판적 질문과 결론 형식은 서버가 기본값으로 채운다).
+ * 저장하면 서버 카탈로그에 들어가 다음 분석부터 AI 도 이 scheme 을 고를 수 있다.
+ */
+function CustomSchemeForm({
+  initial,
+  onDone,
+  onCancel,
+}: {
+  /** 고치는 경우의 원래 정의 (새로 만들 때는 없음) */
+  initial?: SchemeDefinition;
+  onDone: (schemeKey: string) => void;
+  onCancel: () => void;
+}) {
+  const t = useT();
+  const createCustomScheme = useCatalogStore((state) => state.createCustomScheme);
+  const updateCustomScheme = useCatalogStore((state) => state.updateCustomScheme);
+  const [nameKo, setNameKo] = useState(initial?.nameKo ?? '');
+  const [nameEn, setNameEn] = useState(initial && initial.name !== initial.nameKo ? initial.name : '');
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [roles, setRoles] = useState<Array<{ label: string; template: string }>>(
+    initial ? initial.premiseRoles.map((role) => ({ label: role.label, template: role.template === role.label ? '' : role.template })) : [emptyRole()],
+  );
+  const [enabledForAi, setEnabledForAi] = useState(initial?.enabledForAi ?? true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const filled = roles.filter((role) => role.label.trim());
+  const ready = !!nameKo.trim() && !!description.trim() && filled.length > 0;
+
+  const save = async () => {
+    if (!ready || saving) return;
+    setSaving(true);
+    setError(null);
+    const input = {
+      nameKo: nameKo.trim(),
+      nameEn: nameEn.trim() || null,
+      description: description.trim(),
+      premiseRoles: filled.map((role) => ({ label: role.label.trim(), template: role.template.trim() || null })),
+      enabledForAi,
+    };
+    try {
+      if (initial) {
+        await updateCustomScheme(initial.schemeKey, input);
+        onDone(initial.schemeKey);
+      } else {
+        onDone(await createCustomScheme(input));
+      }
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <fieldset className="field custom-scheme-form">
+      <legend>{initial ? t('customScheme.editTitle') : t('customScheme.newTitle')}</legend>
+      <p className="node-detail-muted">{t('customScheme.help')}</p>
+
+      <label className="field">
+        <span>{t('customScheme.name')}</span>
+        <input type="text" value={nameKo} onChange={(event) => setNameKo(event.target.value)} maxLength={120} autoFocus />
+      </label>
+      <label className="field">
+        <span>{t('customScheme.nameEn')}</span>
+        <input type="text" value={nameEn} onChange={(event) => setNameEn(event.target.value)} maxLength={120} placeholder={t('customScheme.nameEn.placeholder')} />
+      </label>
+      <label className="field">
+        <span>{t('customScheme.description')}</span>
+        <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} maxLength={2000} placeholder={t('customScheme.description.placeholder')} />
+      </label>
+
+      <fieldset className="field">
+        <legend>{t('customScheme.roles')}</legend>
+        <p className="node-detail-muted">{t('customScheme.roles.help')}</p>
+        {roles.map((role, index) => (
+          <div key={index} className="custom-scheme-role">
+            <input
+              type="text"
+              value={role.label}
+              onChange={(event) => setRoles((current) => current.map((item, at) => (at === index ? { ...item, label: event.target.value } : item)))}
+              placeholder={t('customScheme.role.label')}
+              aria-label={t('customScheme.role.labelAria', { index: index + 1 })}
+              maxLength={60}
+            />
+            <input
+              type="text"
+              value={role.template}
+              onChange={(event) => setRoles((current) => current.map((item, at) => (at === index ? { ...item, template: event.target.value } : item)))}
+              placeholder={t('customScheme.role.template')}
+              aria-label={t('customScheme.role.templateAria', { index: index + 1 })}
+              maxLength={400}
+            />
+            <button
+              type="button"
+              className="is-danger"
+              onClick={() => setRoles((current) => (current.length > 1 ? current.filter((_, at) => at !== index) : current))}
+              disabled={roles.length <= 1}
+              aria-label={t('customScheme.role.remove')}
+            >
+              −
+            </button>
+          </div>
+        ))}
+        {roles.length < 8 ? (
+          <button type="button" onClick={() => setRoles((current) => [...current, emptyRole()])}>
+            {t('customScheme.role.add')}
+          </button>
+        ) : null}
+      </fieldset>
+
+      <label className="chip-toggle">
+        <input type="checkbox" checked={enabledForAi} onChange={(event) => setEnabledForAi(event.target.checked)} />
+        {t('customScheme.enabledForAi')}
+      </label>
+      <small className="node-detail-muted">{t('customScheme.enabledForAi.help')}</small>
+
+      {error ? <p className="annotation-warning">{error}</p> : null}
+      <div className="node-detail-actions">
+        <button type="button" className="is-primary" onClick={save} disabled={!ready || saving}>
+          {saving ? t('customScheme.saving') : initial ? t('customScheme.apply') : t('customScheme.create')}
+        </button>
+        <button type="button" onClick={onCancel} disabled={saving}>
+          {t('schemeEditor.cancel')}
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+/** 직접 만든 scheme 을 골랐을 때: AI 사용 허용 토글과 고치기. 카탈로그 자체를 바꾸므로 RA 저장과 별개로 바로 반영된다. */
+function CustomSchemeControls({ definition, onEdit }: { definition: SchemeDefinition; onEdit: () => void }) {
+  const t = useT();
+  const updateCustomScheme = useCatalogStore((state) => state.updateCustomScheme);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = async (enabledForAi: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await updateCustomScheme(definition.schemeKey, { enabledForAi });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="custom-scheme-controls">
+      <span className="badge badge-note">{t('customScheme.badge')}</span>
+      <label className="chip-toggle">
+        <input
+          type="checkbox"
+          checked={definition.enabledForAi !== false}
+          disabled={busy || definition.retired}
+          onChange={(event) => void toggle(event.target.checked)}
+        />
+        {t('customScheme.enabledForAi')}
+      </label>
+      <button type="button" onClick={onEdit} disabled={busy}>
+        {t('customScheme.edit')}
+      </button>
+      {definition.retired ? <span className="node-detail-muted">{t('customScheme.retired')}</span> : null}
+      {error ? <span className="annotation-warning">{error}</span> : null}
+    </div>
+  );
+}
+
 function SchemeEditor({
   application,
   premises,
@@ -400,11 +575,37 @@ function SchemeEditor({
       ? base.conclusionNodeIds.filter((id) => conclusions.some((node) => node.nodeId === id))
       : conclusions.map((node) => node.nodeId),
   );
+  // 직접 만들기·고치기 폼을 열어 둔 동안은 아래 항목을 감춘다(무엇을 저장하는지 헷갈리지 않게).
+  const [customForm, setCustomForm] = useState<{ initial?: SchemeDefinition } | null>(null);
 
   const definition = findScheme(catalog, schemeKey);
   // 카탈로그 이름은 언어에 따라 달라지므로 lang 도 의존성에 넣는다.
-  const grouped = useMemo(() => groupSchemes(catalog?.schemes ?? []), [catalog, lang]);
+  // 폐기한 사용자 scheme 은 고를 수 없지만, 지금 이 RA 가 쓰고 있다면 목록에 남겨 둔다.
+  const grouped = useMemo(
+    () => groupSchemes(selectableSchemes(catalog).concat(definition?.retired ? [definition] : [])),
+    [catalog, lang, definition],
+  );
   const classified = schemeKey !== UNCLASSIFIED && schemeKey !== CUSTOM;
+  const customDefinition = definition?.custom ? definition : undefined;
+
+  if (customForm) {
+    return (
+      <div className="node-detail-editor">
+        <CustomSchemeForm
+          initial={customForm.initial}
+          onDone={(key) => {
+            setCustomForm(null);
+            if (key === schemeKey) return;
+            setSchemeKey(key);
+            // 새로 고른 scheme 의 역할·비판적 질문은 뜻이 달라 물려받지 않는다.
+            setRoles(key === base.schemeKey ? initialRoles : {});
+            setQuestions(key === base.schemeKey ? initialQuestions : {});
+          }}
+          onCancel={() => setCustomForm(null)}
+        />
+      </div>
+    );
+  }
 
   const submit = () => {
     const validRoles = new Set(definition?.premiseRoles.map((role) => role.roleId) ?? []);
@@ -459,6 +660,10 @@ function SchemeEditor({
           value={schemeKey}
           onChange={(event) => {
             const next = event.target.value;
+            if (next === NEW_SCHEME_OPTION) {
+              setCustomForm({});
+              return;
+            }
             setSchemeKey(next);
             // 같은 CQ 번호·역할 이름이라도 scheme 마다 뜻이 다르므로 원래 scheme 이 아니면 비운다.
             if (next === base.schemeKey) {
@@ -482,10 +687,14 @@ function SchemeEditor({
               ))}
             </optgroup>
           ))}
+          {/* 목록에 없는 도식은 여기서 바로 만들어 넣는다. 만들면 카탈로그에 남아 다음 분석부터 AI 도 고를 수 있다. */}
+          <option value={NEW_SCHEME_OPTION}>{t('schemeEditor.newScheme')}</option>
         </select>
         {definition ? <small className="node-detail-muted">{schemeDescription(definition)}</small> : null}
         {catalog?.status === 'draft' ? <small className="node-detail-muted">{t('schemeEditor.draftCatalog')}</small> : null}
       </label>
+
+      {customDefinition ? <CustomSchemeControls definition={customDefinition} onEdit={() => setCustomForm({ initial: customDefinition })} /> : null}
 
       {schemeKey === CUSTOM ? (
         <label className="field">

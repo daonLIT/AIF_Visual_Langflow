@@ -11,7 +11,16 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from ..i18n import t
-from ..schemas import PROJECT_SCHEMA_VERSION, AnalysisRunCreate, EvidenceVerifyRequest, ProjectFile, SummariesRequest
+from ..schemas import (
+    PROJECT_SCHEMA_VERSION,
+    AnalysisRunCreate,
+    CustomSchemeCreate,
+    CustomSchemeUpdate,
+    EvidenceVerifyRequest,
+    ProjectFile,
+    SummariesRequest,
+)
+from ..services.catalogs import build_custom_definition, merged_scheme_catalog, new_custom_scheme_key
 from ..services.evidence_matcher import DocumentMatcher
 from ..services.langflow_client import LangflowError
 from ..services.pipeline.repository import PipelineError
@@ -38,7 +47,8 @@ def _validation_error(error: ValidationError) -> JSONResponse:
 async def _json_body(request: Request):
     try:
         return await request.json()
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # UTF-8 이 아닌 본문도 잘못된 요청이다(서버 오류가 아니다).
         return None
 
 
@@ -73,10 +83,96 @@ async def issue_catalog(request: Request) -> Response:
 
 
 async def scheme_catalog(request: Request) -> Response:
-    catalog = request.app.state.scheme_catalog
+    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, request.app.state.db)
     if catalog is None:
         return _error(503, "NO_CATALOG", t("api.no_scheme_catalog"), catalog_errors(request))
     return JSONResponse(catalog.public_data())
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _name_taken(db, name: str, *, except_key: str | None = None) -> bool:
+    """같은 이름의 scheme 이 이미 있는지. 이름이 같으면 목록에서 고를 때 구분할 수 없다."""
+    for record in db.list_custom_schemes():
+        if record["retired"] or record["schemeKey"] == except_key:
+            continue
+        if record["definition"].get("nameKo", "").strip() == name:
+            return True
+    return False
+
+
+async def create_custom_scheme(request: Request) -> Response:
+    """사용자가 그래프 화면에서 만든 scheme 을 목록에 추가한다."""
+    body = await _json_body(request)
+    if body is None:
+        return _error(400, "BAD_JSON", t("api.bad_json"))
+    try:
+        payload = CustomSchemeCreate.model_validate(body)
+    except ValidationError as error:
+        return _validation_error(error)
+    db = request.app.state.db
+    if _name_taken(db, payload.nameKo):
+        return _error(409, "NAME_TAKEN", t("api.custom_scheme_name_taken", name=payload.nameKo))
+    definition = build_custom_definition(
+        new_custom_scheme_key(),
+        name_ko=payload.nameKo,
+        name_en=payload.nameEn,
+        description=payload.description,
+        premise_roles=[role.model_dump() for role in payload.premiseRoles],
+    )
+    record = db.insert_custom_scheme(
+        definition["schemeKey"],
+        definition,
+        enabled_for_ai=payload.enabledForAi,
+        by=request.state.principal.principal if getattr(request.state, "principal", None) else "unknown",
+        at=_now(),
+    )
+    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, db)
+    return JSONResponse({"schemeKey": record["schemeKey"], "catalog": catalog.public_data() if catalog else None}, status_code=201)
+
+
+async def update_custom_scheme(request: Request) -> Response:
+    """이름·설명·전제 역할을 고치거나, AI 사용 허용·폐기 상태만 바꾼다."""
+    body = await _json_body(request)
+    if body is None:
+        return _error(400, "BAD_JSON", t("api.bad_json"))
+    try:
+        payload = CustomSchemeUpdate.model_validate(body)
+        fields = payload.definition_fields()
+    except ValidationError as error:
+        return _validation_error(error)
+    except ValueError as error:
+        return _error(422, "VALIDATION", str(error))
+    db = request.app.state.db
+    scheme_key = request.path_params["scheme_key"]
+    existing = db.get_custom_scheme(scheme_key)
+    if existing is None:
+        return _error(404, "NOT_FOUND", t("api.custom_scheme_not_found"))
+    definition = None
+    if fields is not None:
+        name_ko, name_en, description, roles = fields
+        if _name_taken(db, name_ko, except_key=scheme_key):
+            return _error(409, "NAME_TAKEN", t("api.custom_scheme_name_taken", name=name_ko))
+        definition = build_custom_definition(
+            scheme_key,
+            name_ko=name_ko,
+            name_en=name_en,
+            description=description,
+            premise_roles=[role.model_dump() for role in roles],
+            previous=existing["definition"],
+        )
+    db.update_custom_scheme(
+        scheme_key,
+        definition=definition,
+        enabled_for_ai=payload.enabledForAi,
+        retired=payload.retired,
+        by=request.state.principal.principal if getattr(request.state, "principal", None) else "unknown",
+        at=_now(),
+    )
+    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, db)
+    return JSONResponse({"schemeKey": scheme_key, "catalog": catalog.public_data() if catalog else None})
 
 
 async def create_run(request: Request) -> Response:
@@ -221,6 +317,8 @@ routes = [
     Route("/api/health", health, methods=["GET"]),
     Route("/api/catalogs/issues", issue_catalog, methods=["GET"]),
     Route("/api/catalogs/schemes", scheme_catalog, methods=["GET"]),
+    Route("/api/catalogs/schemes/custom", create_custom_scheme, methods=["POST"]),
+    Route("/api/catalogs/schemes/custom/{scheme_key}", update_custom_scheme, methods=["PUT"]),
     Route("/api/analysis-runs", create_run, methods=["POST"]),
     Route("/api/analysis-runs", list_runs, methods=["GET"]),
     Route("/api/analysis-runs/{run_id}", get_run, methods=["GET"]),

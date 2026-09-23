@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from ..config import Settings
 from ..storage import Database
 from .aif_adapter import InvalidResultError, build_proposal, make_namespace, parse_json_text
-from .catalogs import MAX_SELECTED_ISSUES, IssueCatalog, SchemeCatalog
+from .catalogs import MAX_SELECTED_ISSUES, IssueCatalog, SchemeCatalog, merged_scheme_catalog
 from .langflow_client import LangflowClient, LangflowError, RunInput
 from ..i18n import t
 
@@ -194,6 +194,7 @@ class RunManager:
                 self._save(record)
                 text = self.db.get_run_document(run_id) or ""
 
+                schemes = merged_scheme_catalog(self.scheme_catalog, self.db)
                 pinned = await self.pipeline.pin_run_flow(record.get("flowId")) if self.pipeline else None
                 record["pipeline"] = pinned
                 self._save(record)
@@ -203,8 +204,9 @@ class RunManager:
                     case_id=record.get("caseId") or None,
                     issue_catalog=self.issue_catalog.input_items() if self.issue_catalog else [],
                     issue_catalog_version=self.issue_catalog.version if self.issue_catalog else None,
-                    scheme_catalog=self.scheme_catalog.input_items() if self.scheme_catalog else [],
-                    scheme_catalog_version=self.scheme_catalog.version if self.scheme_catalog else None,
+                    # 사용자가 만든 scheme 도 모델이 고를 수 있게 합친 목록을 보낸다(AI 사용을 끈 것과 폐기한 것은 빠진다).
+                    scheme_catalog=schemes.input_items() if schemes else [],
+                    scheme_catalog_version=schemes.version if schemes else None,
                     flow_id=(pinned or {}).get("runFlowId") or record.get("flowId"),
                     input_component_id=((pinned or {}).get("relay") or {}).get("inputComponentId"),
                     output_component_id=((pinned or {}).get("relay") or {}).get("outputComponentId"),
@@ -230,7 +232,7 @@ class RunManager:
                     namespace=current["namespace"],
                     created_at=now_iso(),
                     issue_catalog=self.issue_catalog,
-                    scheme_catalog=self.scheme_catalog,
+                    scheme_catalog=schemes,
                 )
                 current["status"] = "succeeded"
                 current["result"] = proposal.to_dict()

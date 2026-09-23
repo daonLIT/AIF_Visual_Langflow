@@ -24,6 +24,7 @@ import { applyNodePatch, summaryStateOf, type ArgumentCase } from '@aif/workbenc
 import {
   MAX_SELECTED_ISSUES,
   confirmScheme,
+  isCustomSchemeKey,
   humanSchemeEdit,
   migrateSchemeApplication,
   schemeShortName,
@@ -421,6 +422,28 @@ check('v2 미분류는 버전만 올림', unclassifiedV2.application.catalogVers
 const unknownVersion = migrateSchemeApplication(v2App({ schemeKey: 'lack_of_evidence', catalogVersion: null }), catalogV3, at);
 check('카탈로그 버전을 모르면 추측하지 않음', !unknownVersion.migrated && unknownVersion.application.schemeKey === 'lack_of_evidence');
 check('대응표 없는 카탈로그면 그대로', !migrateSchemeApplication(v2App({ schemeKey: 'lack_of_evidence' }), schemes, at).migrated);
+
+// 사용자가 그래프 화면에서 만든 scheme: 카탈로그 버전이 올라도 이행 대상이 아니다(정본 카탈로그와 별개로 산다).
+check('사용자 scheme key 판별', isCustomSchemeKey('custom-ab12cd34') && !isCustomSchemeKey('custom') && !isCustomSchemeKey('sign'));
+const customApp = migrateSchemeApplication(
+  v2App({
+    schemeKey: 'custom-ab12cd34',
+    premiseBindings: [{ roleId: 'r1', nodeIds: ['p'] }],
+    criticalQuestionResponses: [{ questionId: 'CQ1', status: 'satisfied', answer: '답' }],
+  }),
+  catalogV3,
+  at,
+);
+check(
+  '사용자 scheme 은 버전만 올리고 역할·CQ 응답을 그대로 둔다',
+  customApp.migrated &&
+    !customApp.needsReview &&
+    customApp.application.schemeKey === 'custom-ab12cd34' &&
+    customApp.application.catalogVersion === 3 &&
+    customApp.application.status === 'confirmed' &&
+    customApp.application.premiseBindings[0]?.roleId === 'r1' &&
+    customApp.application.criticalQuestionResponses.length === 1,
+);
 
 const judgment2 = JSON.parse(readFileSync(resolve(root, '../test_outputs/02_judgment2/aif_graph.json'), 'utf8'));
 const imported2 = importAifOva(judgment2, 'judgment2.json', { schemeCatalog: catalogV3, migratedAt: at });

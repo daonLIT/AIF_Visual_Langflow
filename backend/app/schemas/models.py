@@ -103,6 +103,63 @@ class SummariesRequest(BaseModel):
     flowId: str | None = Field(None, max_length=128)
 
 
+# ---- 사용자가 만든 scheme ----
+# 비판적 질문과 결론 역할은 받지 않는다(서버가 기본값으로 채운다). 이름·설명·전제 역할만 받는다.
+class CustomSchemeRole(BaseModel):
+    label: str = Field(..., min_length=1, max_length=60)
+    # 형식 문장. 비우면 역할 이름을 그대로 쓴다.
+    template: str | None = Field(None, max_length=400)
+
+    @field_validator("label")
+    @classmethod
+    def _label_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(t("schema.custom_scheme_role_empty"))
+        return value.strip()
+
+
+class CustomSchemeCreate(BaseModel):
+    nameKo: str = Field(..., min_length=1, max_length=120)
+    nameEn: str | None = Field(None, max_length=120)
+    description: str = Field(..., min_length=1, max_length=2_000)
+    premiseRoles: list[CustomSchemeRole] = Field(..., min_length=1, max_length=8)
+    enabledForAi: bool = True
+
+    @field_validator("nameKo", "description")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(t("schema.custom_scheme_blank"))
+        return value.strip()
+
+    @field_validator("premiseRoles")
+    @classmethod
+    def _roles_distinct(cls, value: list[CustomSchemeRole]) -> list[CustomSchemeRole]:
+        labels = [role.label for role in value]
+        if len(set(labels)) != len(labels):
+            raise ValueError(t("schema.custom_scheme_role_duplicate"))
+        return value
+
+
+class CustomSchemeUpdate(BaseModel):
+    """준 값만 바꾼다. 정의를 바꾸려면 이름·설명·전제 역할을 함께 보내야 한다(일부만 바꾸는 것은 받지 않는다)."""
+
+    nameKo: str | None = Field(None, min_length=1, max_length=120)
+    nameEn: str | None = Field(None, max_length=120)
+    description: str | None = Field(None, min_length=1, max_length=2_000)
+    premiseRoles: list[CustomSchemeRole] | None = Field(None, min_length=1, max_length=8)
+    enabledForAi: bool | None = None
+    retired: bool | None = None
+
+    def definition_fields(self) -> tuple[str, str | None, str, list[CustomSchemeRole]] | None:
+        """정의를 바꾸는 요청이면 (nameKo, nameEn, description, premiseRoles). 상태만 바꾸는 요청이면 None."""
+        if self.nameKo is None and self.description is None and self.premiseRoles is None:
+            return None
+        if self.nameKo is None or self.description is None or self.premiseRoles is None:
+            raise ValueError(t("schema.custom_scheme_partial"))
+        return (self.nameKo.strip(), self.nameEn, self.description.strip(), self.premiseRoles)
+
+
 # ---- 외부 결과 게시 (Langflow Desktop → 중앙 서버) ----
 EXTERNAL_RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$"
 MAX_RESULT_NODES = 2_000

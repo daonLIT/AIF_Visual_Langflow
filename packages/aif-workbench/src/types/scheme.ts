@@ -12,6 +12,15 @@ export type SchemeOrigin = 'ai' | 'human';
 
 export const UNCLASSIFIED = 'unclassified';
 export const CUSTOM = 'custom';
+/**
+ * 사용자가 직접 만든 scheme 의 key 접두사 (서버 backend/app/services/catalogs.py 의 CUSTOM_KEY_PREFIX 와 같다).
+ * 정본 카탈로그 파일의 key 와 섞이지 않고, 카탈로그 버전 이행(migrations)이 건드리지 않아야 해서 구분한다.
+ */
+export const CUSTOM_KEY_PREFIX = 'custom-';
+
+export function isCustomSchemeKey(key: string | null | undefined): boolean {
+  return typeof key === 'string' && key.startsWith(CUSTOM_KEY_PREFIX);
+}
 /** 확정 그래프의 세부 쟁점 수 상한. 몇 개를 고를지는 판결문이 정하고 이 값은 천장일 뿐이다(정답 범위 1~4). */
 export const MAX_SELECTED_ISSUES = 3;
 /** 카탈로그의 이 group 은 Walton 논증 도식이 아니라 쟁점 그래프의 구조 관계다(쟁점 판단·쟁점 종합). */
@@ -117,8 +126,19 @@ export interface SchemeDefinition {
   aifdbSchemeId: number | null;
   /** 형식·비판적 질문의 출처 */
   sourceNote?: string;
-  /** source-checked: 공개 자료와 대조함, needs-book-check: 원서 대조 필요 */
+  /** source-checked: 공개 자료와 대조함, needs-book-check: 원서 대조 필요, user-defined: 사용자가 만듦 */
   verification?: string;
+  // ---- 사용자가 만든 scheme 일 때만 (서버 DB 에서 온다) ----
+  custom?: boolean;
+  /** AI 가 다음 분석에서 이 scheme 을 고를 수 있는지 */
+  enabledForAi?: boolean;
+  /** 더 쓰지 않는 scheme. 목록에서는 숨기지만 과거 그래프의 이름 표시에 계속 쓰인다. */
+  retired?: boolean;
+  revision?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 /** 이전 카탈로그 key 한 개의 전환 규칙 (backend/catalog/scheme_catalog_migrations.json) */
@@ -153,6 +173,25 @@ export interface SchemeCatalog {
   schemes: SchemeDefinition[];
   /** 서버가 카탈로그와 함께 내보내는 이전 버전 대응표 */
   migrations?: SchemeCatalogMigration[];
+  /** 사용자가 만든 scheme 이 바뀐 횟수의 합. 카탈로그 버전과 달리 이행 기준이 아니라 기록용이다. */
+  customSchemesRevision?: number;
+}
+
+/** 사용자가 새 scheme 을 만들 때 서버로 보내는 값. 비판적 질문과 결론 역할은 서버가 기본값으로 채운다. */
+export interface CustomSchemeInput {
+  nameKo: string;
+  /** 영어 화면용 이름. 비우면 한국어 이름을 쓴다. */
+  nameEn?: string | null;
+  description: string;
+  /** 형식 문장(template)을 비우면 역할 이름을 그대로 쓴다. */
+  premiseRoles: Array<{ label: string; template?: string | null }>;
+  enabledForAi?: boolean;
+}
+
+export interface CustomSchemeResult {
+  schemeKey: string;
+  /** 새 scheme 이 들어간 카탈로그 전체 (다시 불러오지 않아도 되게 서버가 함께 준다) */
+  catalog: SchemeCatalog | null;
 }
 
 export interface IssueCatalogItem {
@@ -454,7 +493,8 @@ export function migrateSchemeApplication(application: SchemeApplication, catalog
     if (!migration) break;
     const toCurrent = migration.toVersion === catalog.schemeCatalogVersion;
     const existsInTarget = (key: string) => !toCurrent || !!findSchemeDefinition(catalog, key);
-    const reserved = reservedKeys.includes(current.schemeKey);
+    // 사용자가 만든 scheme 은 정본 카탈로그 버전과 무관하므로 예약 key 처럼 그대로 둔다.
+    const reserved = reservedKeys.includes(current.schemeKey) || isCustomSchemeKey(current.schemeKey);
     // 대응표에 없는 key: 새 카탈로그에 있으면 그대로, 없으면 미분류
     const rule: SchemeMigrationRule = reserved
       ? { action: 'keep' }

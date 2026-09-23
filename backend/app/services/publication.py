@@ -25,7 +25,7 @@ from ..i18n import t
 from ..schemas import PROJECT_SCHEMA_VERSION, LangflowResultPublish, ProjectFile
 from ..storage.db import Database, PublicationConflict
 from .aif_adapter import InvalidResultError, build_proposal, make_namespace
-from .catalogs import MAX_SELECTED_ISSUES, IssueCatalog, SchemeCatalog
+from .catalogs import MAX_SELECTED_ISSUES, IssueCatalog, SchemeCatalog, merged_scheme_catalog
 from .run_manager import document_hash, now_iso
 
 logger = logging.getLogger("annotation.publication")
@@ -74,6 +74,10 @@ class PublicationService:
         self.issue_catalog = issue_catalog
         self.scheme_catalog = scheme_catalog
 
+    def schemes(self) -> SchemeCatalog | None:
+        """사용자가 만든 scheme 을 얹은 카탈로그. version·sha256 은 정본 파일 값 그대로다."""
+        return merged_scheme_catalog(self.scheme_catalog, self.db)
+
     # ---- 실행 컨텍스트 (Desktop Flow 가 실행 시작 때 읽는다) ----
     def context(self) -> dict | None:
         if self.issue_catalog is None or self.scheme_catalog is None:
@@ -83,7 +87,7 @@ class PublicationService:
             "issueCatalog": self.issue_catalog.input_items(),
             "issueCatalogVersion": self.issue_catalog.version,
             "issueCatalogSha256": self.issue_catalog.sha256,
-            "schemeCatalog": self.scheme_catalog.input_items(),
+            "schemeCatalog": self.schemes().input_items(),
             "schemeCatalogVersion": self.scheme_catalog.version,
             "schemeCatalogSha256": self.scheme_catalog.sha256,
             "maxSelectedIssues": MAX_SELECTED_ISSUES,
@@ -161,7 +165,8 @@ class PublicationService:
                 namespace=namespace,
                 created_at=created_at,
                 issue_catalog=self.issue_catalog,
-                scheme_catalog=self.scheme_catalog,
+                # 사용자가 만든 scheme key 도 올바른 값으로 보게 합친 카탈로그를 넘긴다.
+                scheme_catalog=self.schemes(),
             )
         except InvalidResultError as error:
             return PublishOutcome(
