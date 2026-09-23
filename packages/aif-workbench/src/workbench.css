@@ -3065,6 +3065,14 @@
 :where(.aif-root) .project-list-note {
   color: var(--text-muted);
 }
+/* 목록 아래의 "N건 중 M건" 과 [더 보기] */
+:where(.aif-root) .project-list-more {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 4px;
+}
+
 :where(.aif-root) .project-list-note.is-error {
   color: var(--error);
 }

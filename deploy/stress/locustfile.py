@@ -65,6 +65,11 @@ if INSECURE:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # 검토자들이 같이 저장할 사건. Publisher 가 처음 게시한 것을 쓴다.
 _shared: dict[str, str] = {}
+# (사건, revision) → 그 revision 을 받은 가상 사용자. 두 사람이 같은 revision 을 받으면
+# 한쪽 저장이 조용히 사라졌다는 뜻이다(409 로 막혔어야 한다).
+_granted: dict[tuple[str, int], int] = {}
+# 동시 저장 집계. 충돌이 실제로 일어났는지 봐야 "덮어쓰기가 없다" 는 결과가 뜻을 가진다.
+_saves = {"saved": 0, "conflict": 0, "overwritten": 0}
 
 
 @events.test_start.add_listener
@@ -78,6 +83,18 @@ def _require_credentials(environment, **_):
     if missing:
         print(f"[설정 없음] {', '.join(missing)} 가 필요하다. deploy/stress/README.md 참고.")
         environment.runner.quit()
+
+
+@events.test_stop.add_listener
+def _report_saves(environment, **_):
+    """동시 저장 결과. 409 가 충분히 나왔는데 덮어쓰기가 0 이어야 정합성이 지켜진 것이다."""
+    total = _saves["saved"] + _saves["conflict"]
+    if not total:
+        return
+    print(
+        f"[동시 저장] 성공 {_saves['saved']}건 / 충돌 409 {_saves['conflict']}건 "
+        f"({_saves['conflict'] / total * 100:.0f}%) / 덮어쓰기 {_saves['overwritten']}건"
+    )
 
 
 class _Base(HttpUser):
@@ -243,9 +260,16 @@ class Reviewer(_Base):
                 saved = response.json().get("revision")
                 if saved != self.document["revision"] + 1:
                     response.failure(f"revision 이 어긋났다: {self.document['revision']} → {saved}")
+                # 같은 (사건, revision) 을 두 사람이 받으면 한쪽 저장이 덮어써진 것이다.
+                owner = _granted.setdefault((self.project_id, saved), id(self))
+                if owner != id(self):
+                    _saves["overwritten"] += 1
+                    response.failure(f"revision {saved} 을 두 사용자가 같이 받았다 — 저장이 덮어써졌다")
+                _saves["saved"] += 1
                 self.document["revision"] = saved
             elif response.status_code == 409:
                 # 다른 사람이 먼저 저장했다. 화면과 같게 다시 읽어 온다.
+                _saves["conflict"] += 1
                 response.success()
                 self.document = None
             elif response.status_code == 403:
@@ -256,6 +280,15 @@ class Reviewer(_Base):
 
     def _pick(self) -> str | None:
         if SHARED_PROJECT:
+            # 모두가 한 사건을 저장하게 한다. 게시된 사건이 아직 없으면 목록 맨 앞 사건을 같이 쓴다.
+            if "projectId" not in _shared:
+                with self.client.get("/api/projects?limit=1", name="21 사건 목록", catch_response=True) as response:
+                    if response.status_code != 200:
+                        response.failure(f"HTTP {response.status_code}")
+                        return None
+                    items = response.json().get("projects") or []
+                    if items:
+                        _shared.setdefault("projectId", items[0]["projectId"])
             return _shared.get("projectId")
         if self.project_id:
             return self.project_id

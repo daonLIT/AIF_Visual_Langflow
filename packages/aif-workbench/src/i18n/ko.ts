@@ -849,6 +849,8 @@ export const ko = {
   'projects.loading': '불러오는 중…',
   'projects.empty': '저장된 사건이 없습니다. Langflow 에서 Flow 를 실행하면 결과가 여기에 저장됩니다.',
   'projects.noMatch': '검색 결과가 없습니다.',
+  'projects.shownOfTotal': '{total}건 중 {shown}건 보는 중',
+  'projects.loadMore': '{count}건 더 보기',
   'projects.col.title': '사건명',
   'projects.col.caseId': '사건번호',
   'projects.col.source': '실행 출처',

@@ -212,7 +212,7 @@ class PublishConcurrencyTest(unittest.TestCase):
             thread.join()
         self.assertEqual(sorted(r.status for r in results), [200] * 5 + [201])
         self.assertEqual(len({r.body["projectId"] for r in results}), 1)
-        self.assertEqual(len(db.list_projects()), 1)
+        self.assertEqual(db.list_projects()[1], 1)
 
     def test_failure_mid_transaction_leaves_nothing(self):
         db = Database(":memory:")

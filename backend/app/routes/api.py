@@ -21,6 +21,7 @@ from ..schemas import (
     SummariesRequest,
 )
 from ..services.catalogs import build_custom_definition, merged_scheme_catalog, new_custom_scheme_key
+from ..storage.db import DEFAULT_PROJECT_LIMIT, MAX_PROJECT_LIMIT
 from ..services.evidence_matcher import DocumentMatcher
 from ..services.langflow_client import LangflowError
 from ..services.pipeline.repository import PipelineError
@@ -263,8 +264,30 @@ async def put_project(request: Request) -> Response:
     return JSONResponse({"projectId": project_id, "revision": next_revision, "savedAt": saved_at})
 
 
+def _int_param(request: Request, name: str, default: int) -> int:
+    raw = request.query_params.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 async def list_projects(request: Request) -> Response:
-    return JSONResponse({"projects": request.app.state.db.list_projects()})
+    """사건 목록 한 쪽. 사건이 늘어도 응답이 커지지 않게 limit·offset 으로 끊어서 준다."""
+    limit = _int_param(request, "limit", DEFAULT_PROJECT_LIMIT)
+    offset = _int_param(request, "offset", 0)
+    query = request.query_params.get("q") or ""
+    projects, total = request.app.state.db.list_projects(limit=limit, offset=offset, query=query)
+    return JSONResponse(
+        {
+            "projects": projects,
+            "total": total,
+            "limit": max(1, min(limit, MAX_PROJECT_LIMIT)),
+            "offset": max(0, offset),
+        }
+    )
 
 
 async def summaries(request: Request) -> Response:

@@ -848,6 +848,8 @@ export const en: Record<keyof typeof ko, string> = {
   'projects.loading': 'Loading…',
   'projects.empty': 'No saved cases yet. Run the flow in Langflow and the result is saved here.',
   'projects.noMatch': 'No matching cases.',
+  'projects.shownOfTotal': 'Showing {shown} of {total}',
+  'projects.loadMore': 'Show {count} more',
   'projects.col.title': 'Title',
   'projects.col.caseId': 'Case number',
   'projects.col.source': 'Source',

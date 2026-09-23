@@ -136,8 +136,29 @@ CREATE TABLE IF NOT EXISTS custom_schemes (
 CREATE INDEX IF NOT EXISTS idx_custom_schemes_updated ON custom_schemes(updated_at);
 """,
     ),
+    (
+        7,
+        "사건 목록용 열 (목록을 뽑을 때 문서 전체를 읽지 않게 한다)",
+        """
+ALTER TABLE projects ADD COLUMN document_id TEXT;
+ALTER TABLE projects ADD COLUMN title TEXT;
+ALTER TABLE projects ADD COLUMN case_id TEXT;
+ALTER TABLE projects ADD COLUMN source_kind TEXT;
+ALTER TABLE projects ADD COLUMN analyzed_at TEXT;
+UPDATE projects SET
+    document_id = json_extract(document, '$.document.id'),
+    title = json_extract(document, '$.title'),
+    case_id = json_extract(document, '$.document.caseId'),
+    source_kind = json_extract(document, '$.analysisRuns[0].source.kind'),
+    analyzed_at = json_extract(document, '$.analysisRuns[0].createdAt');
+CREATE INDEX IF NOT EXISTS idx_projects_updated ON projects(updated_at DESC);
+""",
+    ),
 ]
 LATEST_SCHEMA = MIGRATIONS[-1][0]
+# 목록 한 번에 돌려줄 기본·최대 건수. 사건이 늘어도 목록 응답과 처리 시간이 일정하게 유지되도록 상한을 둔다.
+DEFAULT_PROJECT_LIMIT = 50
+MAX_PROJECT_LIMIT = 200
 
 
 class PublicationConflict(Exception):
@@ -278,40 +299,74 @@ class Database:
             row = self._conn.execute("SELECT revision FROM projects WHERE project_id = ?", (project_id,)).fetchone()
         return int(row["revision"]) if row else None
 
+    @staticmethod
+    def project_summary(document: dict) -> tuple[str | None, str | None, str | None, str | None, str | None]:
+        """목록 열에 넣을 값. 마이그레이션 v7 의 json_extract 경로와 같은 자리를 읽는다."""
+        inner = document.get("document") if isinstance(document.get("document"), dict) else {}
+        runs = document.get("analysisRuns") if isinstance(document.get("analysisRuns"), list) else []
+        first = runs[0] if runs and isinstance(runs[0], dict) else {}
+        source = first.get("source") if isinstance(first.get("source"), dict) else {}
+        return (
+            inner.get("id"),
+            document.get("title"),
+            inner.get("caseId"),
+            source.get("kind"),
+            first.get("createdAt"),
+        )
+
     def save_project(self, project_id: str, revision: int, updated_at: str, document: dict) -> None:
         with self._lock:
             self._conn.execute(
                 """
-                INSERT INTO projects(project_id, revision, updated_at, document) VALUES (?, ?, ?, ?)
+                INSERT INTO projects(project_id, revision, updated_at, document,
+                                     document_id, title, case_id, source_kind, analyzed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(project_id) DO UPDATE SET
-                    revision = excluded.revision, updated_at = excluded.updated_at, document = excluded.document
+                    revision = excluded.revision, updated_at = excluded.updated_at, document = excluded.document,
+                    document_id = excluded.document_id, title = excluded.title, case_id = excluded.case_id,
+                    source_kind = excluded.source_kind, analyzed_at = excluded.analyzed_at
                 """,
-                (project_id, revision, updated_at, json.dumps(document, ensure_ascii=False)),
+                (project_id, revision, updated_at, json.dumps(document, ensure_ascii=False), *self.project_summary(document)),
             )
             self._conn.commit()
 
-    def list_projects(self) -> list[dict]:
+    def list_projects(self, *, limit: int = DEFAULT_PROJECT_LIMIT, offset: int = 0, query: str = "") -> tuple[list[dict], int]:
+        """사건 목록 한 쪽과 전체 건수. 문서 본문은 읽지 않고 목록 열만 읽는다.
+
+        사건이 늘어도 응답 크기와 처리 시간이 일정해야 한다. 문서 전체(사건당 100KB 이상)를 파싱하면
+        목록 요청 하나가 이벤트 루프를 오래 붙잡아 다른 요청까지 같이 느려진다.
+        """
+        limit = max(1, min(int(limit), MAX_PROJECT_LIMIT))
+        offset = max(0, int(offset))
+        where, params = "", []
+        if query.strip():
+            # 사건명·사건번호·ID 로 찾는다. 목록 열만 보므로 문서를 열지 않는다.
+            needle = f"%{query.strip()}%"
+            where = "WHERE title LIKE ? OR case_id LIKE ? OR project_id LIKE ?"
+            params = [needle, needle, needle]
         with self._lock:
+            total = int(self._conn.execute(f"SELECT count(*) FROM projects {where}", params).fetchone()[0])
             rows = self._conn.execute(
-                "SELECT project_id, revision, updated_at, json_extract(document, '$.document.id') AS document_id, "
-                "json_extract(document, '$.title') AS title, json_extract(document, '$.document.caseId') AS case_id, "
-                "json_extract(document, '$.analysisRuns[0].source.kind') AS source_kind, "
-                "json_extract(document, '$.analysisRuns[0].createdAt') AS analyzed_at "
-                "FROM projects ORDER BY updated_at DESC"
+                "SELECT project_id, revision, updated_at, document_id, title, case_id, source_kind, analyzed_at "
+                f"FROM projects {where} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                [*params, limit, offset],
             ).fetchall()
-        return [
-            {
-                "projectId": row["project_id"],
-                "revision": row["revision"],
-                "updatedAt": row["updated_at"],
-                "documentId": row["document_id"],
-                "title": row["title"],
-                "caseId": row["case_id"],
-                "source": row["source_kind"],
-                "analyzedAt": row["analyzed_at"],
-            }
-            for row in rows
-        ]
+        return (
+            [
+                {
+                    "projectId": row["project_id"],
+                    "revision": row["revision"],
+                    "updatedAt": row["updated_at"],
+                    "documentId": row["document_id"],
+                    "title": row["title"],
+                    "caseId": row["case_id"],
+                    "source": row["source_kind"],
+                    "analyzedAt": row["analyzed_at"],
+                }
+                for row in rows
+            ],
+            total,
+        )
 
     # ---- 사용자가 만든 scheme ----
     @staticmethod
@@ -463,8 +518,15 @@ class Database:
                     ),
                 )
                 conn.execute(
-                    "INSERT INTO projects(project_id, revision, updated_at, document) VALUES (?, ?, ?, ?)",
-                    (project_id, project_revision, created_at, json.dumps(project_document, ensure_ascii=False)),
+                    "INSERT INTO projects(project_id, revision, updated_at, document, "
+                    "document_id, title, case_id, source_kind, analyzed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        project_id,
+                        project_revision,
+                        created_at,
+                        json.dumps(project_document, ensure_ascii=False),
+                        *self.project_summary(project_document),
+                    ),
                 )
                 conn.execute(
                     "INSERT INTO external_publications(principal, external_run_id, request_hash, run_id, project_id, created_at) "

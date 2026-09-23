@@ -158,8 +158,17 @@ export const api = {
 
   loadProject: (projectId: string) => request<ProjectFile>(`/api/projects/${encodeURIComponent(projectId)}`),
 
-  listProjects: () =>
-    request<{
+  /**
+   * 사건 목록 한 쪽. 사건이 늘어도 응답이 커지지 않도록 서버가 끊어서 준다.
+   * 검색(`q`)도 서버가 하므로, 받아 온 쪽 안에서만 거르지 않는다.
+   */
+  listProjects: (params: { limit?: number; offset?: number; q?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    if (params.offset) search.set('offset', String(params.offset));
+    if (params.q?.trim()) search.set('q', params.q.trim());
+    const query = search.toString();
+    return request<{
       projects: Array<{
         projectId: string;
         revision: number;
@@ -170,7 +179,12 @@ export const api = {
         source?: string | null;
         analyzedAt?: string | null;
       }>;
-    }>('/api/projects'),
+      /** 검색 조건에 맞는 전체 건수 (받아 온 쪽의 길이가 아니다) */
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/api/projects${query ? `?${query}` : ''}`);
+  },
 };
 
 const flowPath = (flowId: string) => `/api/pipelines/${encodeURIComponent(flowId)}`;
