@@ -26,10 +26,20 @@ $head = (& git -C $fork rev-parse HEAD).Trim()
 if ($head -ne $Commit) { throw "포크 HEAD 가 $Commit 이 아닙니다: $head" }
 
 # 이미 적용된 패치는 건너뛰고, 원본과 어긋나면 멈춘다(작업 중 변경을 덮어쓰지 않음).
+# --ignore-whitespace: core.autocrlf=true 면 패치 파일과 작업 트리의 줄 끝(CRLF/LF)이 달라
+#   이미 적용된 패치도 "적용 안 됨" 으로 보여 다시 적용하려다 실패한다.
+# try/catch: PowerShell 5.1 은 $ErrorActionPreference='Stop' 일 때 네이티브 명령의 stderr 를
+#   치명적 오류로 만든다. 여기서 git 이 내는 "patch does not apply" 는 판정 결과이지 오류가 아니다.
 foreach ($p in $patches) {
-  & git -C $fork apply --check -R $p.FullName 2>$null
-  if ($LASTEXITCODE -eq 0) { Write-Host "적용됨: $($p.Name)"; continue }
-  Invoke-Native git @('-C', $fork, 'apply', $p.FullName)
+  $applied = $false
+  try {
+    & git -C $fork apply --check -R --ignore-whitespace $p.FullName 2>$null
+    $applied = ($LASTEXITCODE -eq 0)
+  } catch {
+    $applied = $false
+  }
+  if ($applied) { Write-Host "적용됨: $($p.Name)"; continue }
+  Invoke-Native git @('-C', $fork, 'apply', '--ignore-whitespace', $p.FullName)
   Write-Host "적용: $($p.Name)"
 }
 

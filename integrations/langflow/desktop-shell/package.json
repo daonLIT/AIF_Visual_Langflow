@@ -1,7 +1,7 @@
 {
   "name": "aif-langflow-desktop",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "AIF 전용 Langflow Desktop. 공식 Langflow Desktop 과 별도 앱 ID·데이터 경로를 쓰고, Langflow 1.11.0 포크 화면에 AIF 검토 화면이 들어 있다.",
   "main": "main.js",
   "scripts": {

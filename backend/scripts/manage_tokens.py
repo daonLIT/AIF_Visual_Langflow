@@ -32,9 +32,11 @@ from app.auth import SCOPES, hash_token  # noqa: E402
 from app.config import BACKEND_ROOT  # noqa: E402
 
 PRESETS = {
+    # 게시는 Flow 가 결과를 보낼 때만 쓴다. scheme 을 만들지 않으므로 catalog:write 를 주지 않는다.
     "publish": ["catalog:read", "results:publish"],
-    "review": ["catalog:read", "projects:read", "projects:write"],
-    "site": ["catalog:read", "projects:read", "projects:write", "analysis:run"],
+    # 검토자는 그래프 화면에서 목록에 없는 도식을 직접 만들 수 있어야 하므로 catalog:write 를 함께 준다.
+    "review": ["catalog:read", "catalog:write", "projects:read", "projects:write"],
+    "site": ["catalog:read", "catalog:write", "projects:read", "projects:write", "analysis:run"],
     "admin": ["admin"],
 }
 
