@@ -8,9 +8,13 @@ API 토큰 관리. 토큰 파일에는 sha256 만 저장하고, 원문은 만들
 
 프리셋
     publish : catalog:read, results:publish         (Langflow Flow 의 게시 컴포넌트용)
-    review  : catalog:read, projects:read, projects:write   (Desktop 검토 화면용)
+    review  : catalog:read, catalog:write, projects:read, projects:write   (Desktop 검토 화면용)
     site    : review + analysis:run                  (사이트에서 분석까지)
     admin   : 모든 권한
+
+principal 은 사람(또는 연동) 하나를 가리킨다. **한 사람의 게시 토큰·검토 토큰·웹 계정은 같은 principal 로
+만든다.** 직접 만든 scheme 은 이 값으로 소유자를 가르므로, 검토 화면(검토 토큰)에서 만든 scheme 을
+그 사람의 Flow 실행(게시 토큰으로 카탈로그를 읽는다)에서도 쓰려면 둘이 같아야 한다.
 
 키 교체: 같은 principal 로 새 토큰을 만들고 셸 설정을 바꾼 뒤 옛 토큰을 disable 한다.
 principal 이 같으면 교체 전후의 게시 재전송도 같은 결과로 묶인다.
@@ -32,9 +36,11 @@ from app.auth import SCOPES, hash_token  # noqa: E402
 from app.config import BACKEND_ROOT  # noqa: E402
 
 PRESETS = {
+    # 게시는 Flow 가 결과를 보낼 때만 쓴다. scheme 을 만들지 않으므로 catalog:write 를 주지 않는다.
     "publish": ["catalog:read", "results:publish"],
-    "review": ["catalog:read", "projects:read", "projects:write"],
-    "site": ["catalog:read", "projects:read", "projects:write", "analysis:run"],
+    # 검토자는 그래프 화면에서 목록에 없는 도식을 직접 만들 수 있어야 하므로 catalog:write 를 함께 준다.
+    "review": ["catalog:read", "catalog:write", "projects:read", "projects:write"],
+    "site": ["catalog:read", "catalog:write", "projects:read", "projects:write", "analysis:run"],
     "admin": ["admin"],
 }
 

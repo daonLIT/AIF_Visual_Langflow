@@ -32,11 +32,16 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps     # aif (healthy), caddy (Up)
 
 # 계정·토큰 (컨테이너 안 /data 에 해시로 저장된다)
+# 쓰는 사람마다 한 벌씩 만든다. 아래는 userA 의 예.
 DC="docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
-$DC exec aif python scripts/manage_users.py create --username owner --principal owner --preset review   # 비밀번호 입력창
-$DC exec aif python scripts/manage_tokens.py create --id desktop-publish --principal langflow-desktop --preset publish
-$DC exec aif python scripts/manage_tokens.py create --id desktop-review  --principal owner            --preset review
+$DC exec aif python scripts/manage_users.py create --username userA --principal userA --preset review   # 비밀번호 입력창
+$DC exec aif python scripts/manage_tokens.py create --id userA-publish --principal userA --preset publish
+$DC exec aif python scripts/manage_tokens.py create --id userA-review  --principal userA --preset review
 ```
+
+**한 사람의 세 가지(웹 계정·게시 토큰·검토 토큰)는 `--principal` 을 같게 만든다.** 직접 만든 scheme 은
+이 값으로 소유자를 가른다. 검토 화면(검토 토큰)에서 만든 scheme 을 그 사람의 Flow 실행(게시 토큰으로
+카탈로그를 읽는다)에서도 쓰려면 둘이 같아야 한다. 게시 중복 판정도 같은 기준이다.
 
 토큰 원문은 만들 때 한 번만 출력된다. 두 토큰을 사용자에게 안전한 경로로 전달하면, 사용자가 Desktop 의 **AIF → AIF 연결 설정** 에 넣는다.
 

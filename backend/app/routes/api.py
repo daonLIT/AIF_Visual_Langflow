@@ -83,8 +83,18 @@ async def issue_catalog(request: Request) -> Response:
     return JSONResponse(catalog.data)
 
 
+def _owner(request: Request) -> str:
+    """이 요청의 주체. 직접 만든 scheme 은 이 값으로 소유자를 가른다.
+
+    한 사람의 검토 토큰·게시 토큰·웹 계정은 같은 principal 로 발급해야 한다. 그래야 검토 화면에서 만든
+    scheme 을 그 사람의 Flow 실행(게시 토큰으로 카탈로그를 읽는다)에서도 쓸 수 있다.
+    """
+    principal = getattr(request.state, "principal", None)
+    return principal.principal if principal else "unknown"
+
+
 async def scheme_catalog(request: Request) -> Response:
-    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, request.app.state.db)
+    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, request.app.state.db, _owner(request))
     if catalog is None:
         return _error(503, "NO_CATALOG", t("api.no_scheme_catalog"), catalog_errors(request))
     return JSONResponse(catalog.public_data())
@@ -94,9 +104,9 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _name_taken(db, name: str, *, except_key: str | None = None) -> bool:
-    """같은 이름의 scheme 이 이미 있는지. 이름이 같으면 목록에서 고를 때 구분할 수 없다."""
-    for record in db.list_custom_schemes():
+def _name_taken(db, owner: str, name: str, *, except_key: str | None = None) -> bool:
+    """그 사람의 scheme 중 같은 이름이 있는지. 다른 사람 것과는 이름이 겹쳐도 된다(서로 보이지 않는다)."""
+    for record in db.list_custom_schemes(owner):
         if record["retired"] or record["schemeKey"] == except_key:
             continue
         if record["definition"].get("nameKo", "").strip() == name:
@@ -114,7 +124,8 @@ async def create_custom_scheme(request: Request) -> Response:
     except ValidationError as error:
         return _validation_error(error)
     db = request.app.state.db
-    if _name_taken(db, payload.nameKo):
+    owner = _owner(request)
+    if _name_taken(db, owner, payload.nameKo):
         return _error(409, "NAME_TAKEN", t("api.custom_scheme_name_taken", name=payload.nameKo))
     definition = build_custom_definition(
         new_custom_scheme_key(),
@@ -127,10 +138,10 @@ async def create_custom_scheme(request: Request) -> Response:
         definition["schemeKey"],
         definition,
         enabled_for_ai=payload.enabledForAi,
-        by=request.state.principal.principal if getattr(request.state, "principal", None) else "unknown",
+        by=owner,
         at=_now(),
     )
-    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, db)
+    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, db, owner)
     return JSONResponse({"schemeKey": record["schemeKey"], "catalog": catalog.public_data() if catalog else None}, status_code=201)
 
 
@@ -147,14 +158,16 @@ async def update_custom_scheme(request: Request) -> Response:
     except ValueError as error:
         return _error(422, "VALIDATION", str(error))
     db = request.app.state.db
+    owner = _owner(request)
     scheme_key = request.path_params["scheme_key"]
     existing = db.get_custom_scheme(scheme_key)
-    if existing is None:
+    # 다른 사람이 만든 scheme 은 없는 것으로 본다(있다는 사실도 알리지 않는다).
+    if existing is None or existing["createdBy"] != owner:
         return _error(404, "NOT_FOUND", t("api.custom_scheme_not_found"))
     definition = None
     if fields is not None:
         name_ko, name_en, description, roles = fields
-        if _name_taken(db, name_ko, except_key=scheme_key):
+        if _name_taken(db, owner, name_ko, except_key=scheme_key):
             return _error(409, "NAME_TAKEN", t("api.custom_scheme_name_taken", name=name_ko))
         definition = build_custom_definition(
             scheme_key,
@@ -169,10 +182,10 @@ async def update_custom_scheme(request: Request) -> Response:
         definition=definition,
         enabled_for_ai=payload.enabledForAi,
         retired=payload.retired,
-        by=request.state.principal.principal if getattr(request.state, "principal", None) else "unknown",
+        by=owner,
         at=_now(),
     )
-    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, db)
+    catalog = merged_scheme_catalog(request.app.state.scheme_catalog, db, owner)
     return JSONResponse({"schemeKey": scheme_key, "catalog": catalog.public_data() if catalog else None})
 
 
@@ -197,6 +210,7 @@ async def create_run(request: Request) -> Response:
         idempotency_key=payload.idempotencyKey,
         flow_id=flow_id,
         purpose=payload.purpose,
+        owner=_owner(request),
     )
     return JSONResponse(record, status_code=202 if created else 200)
 
