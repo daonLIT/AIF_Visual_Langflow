@@ -14,7 +14,9 @@ from .api import _error, _validation_error, catalog_errors
 
 
 async def langflow_context(request: Request) -> Response:
-    context = request.app.state.publication.context()
+    # 카탈로그를 읽는 토큰의 principal 이 곧 소유자다. 그 사람이 만든 scheme 만 실려 나간다.
+    principal = getattr(request.state, "principal", None)
+    context = request.app.state.publication.context(principal.principal if principal else None)
     if context is None:
         return _error(503, "NO_CATALOG", t("api.no_catalogs_for_run"), catalog_errors(request))
     return JSONResponse(context)

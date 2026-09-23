@@ -51,8 +51,12 @@ tests/                         unittest (pytest 호환)
 
 ### 사용자가 만든 scheme
 
+- **만든 사람만 쓴다.** `created_by`(요청 주체 principal)로 소유자를 가르고, 카탈로그·모델 목록·수정 모두 그 사람 것만 다룬다.
+  남의 scheme 은 목록에 없고, 고치려 하면 404 다(있다는 사실도 알리지 않는다). 이름은 사람끼리 겹쳐도 된다.
+- 그래서 **한 사람의 웹 계정·게시 토큰·검토 토큰은 같은 principal 로 만들어야 한다**(`docs/deploy.md`).
+  검토 화면은 검토 토큰, Flow 실행은 게시 토큰으로 카탈로그를 읽기 때문이다.
 - 정본 카탈로그 파일(`catalog/walton_schemes.json`)은 바꾸지 않는다. 사용자가 만든 scheme 은 DB `custom_schemes`(마이그레이션 v6)에 따로 두고,
-  카탈로그를 읽는 모든 곳이 `merged_scheme_catalog()` 로 둘을 합쳐 본다.
+  카탈로그를 읽는 모든 곳이 `merged_scheme_catalog(catalog, db, owner)` 로 둘을 합쳐 본다(owner 를 주지 않으면 정본만).
 - key 는 서버가 `custom-<hex8>` 로 발급한다. 정본 key 와 겹치지 않고, 카탈로그 버전 이행(`migrations`)도 이 key 를 건드리지 않는다.
 - `schemeCatalogVersion` 과 `sha256` 은 정본 파일 값 그대로다. scheme 을 하나 만들었다고 버전이 오르면 기존 그래프가 모두 이행 대상이 되고 게시 대조도 깨진다.
 - `enabledForAi` 가 꺼졌거나 `retired` 인 scheme 은 Flow 로 보내는 목록에서 빠지지만, 과거 그래프의 이름 표시를 위해 카탈로그에는 남는다. 지우는 기능은 없다(폐기만).

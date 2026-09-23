@@ -316,8 +316,14 @@ def custom_scheme_entry(record: dict) -> dict:
     }
 
 
-def merged_scheme_catalog(catalog: "SchemeCatalog | None", db) -> "SchemeCatalog | None":
-    """정본 카탈로그에 DB 의 사용자 scheme 을 얹는다. 카탈로그를 읽는 모든 곳이 이것을 쓴다."""
+def merged_scheme_catalog(catalog: "SchemeCatalog | None", db, owner: str | None = None) -> "SchemeCatalog | None":
+    """정본 카탈로그에 그 사람이 만든 scheme 을 얹는다. 카탈로그를 읽는 모든 곳이 이것을 쓴다.
+
+    owner 는 요청한 주체(principal)다. 직접 만든 scheme 은 만든 사람에게만 보이므로,
+    owner 를 주지 않으면 사용자 scheme 이 하나도 붙지 않는다(정본 카탈로그만).
+    """
     if catalog is None:
         return None
-    return catalog.with_custom(db.list_custom_schemes())
+    if owner is None:
+        return catalog
+    return catalog.with_custom(db.list_custom_schemes(owner))

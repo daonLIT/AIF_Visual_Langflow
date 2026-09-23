@@ -74,12 +74,13 @@ class PublicationService:
         self.issue_catalog = issue_catalog
         self.scheme_catalog = scheme_catalog
 
-    def schemes(self) -> SchemeCatalog | None:
-        """사용자가 만든 scheme 을 얹은 카탈로그. version·sha256 은 정본 파일 값 그대로다."""
-        return merged_scheme_catalog(self.scheme_catalog, self.db)
+    def schemes(self, owner: str | None = None) -> SchemeCatalog | None:
+        """그 사람이 만든 scheme 을 얹은 카탈로그. version·sha256 은 정본 파일 값 그대로다."""
+        return merged_scheme_catalog(self.scheme_catalog, self.db, owner)
 
     # ---- 실행 컨텍스트 (Desktop Flow 가 실행 시작 때 읽는다) ----
-    def context(self) -> dict | None:
+    def context(self, owner: str | None = None) -> dict | None:
+        """owner 는 카탈로그를 읽는 토큰의 principal. 그 사람이 만든 scheme 만 모델에게 간다."""
         if self.issue_catalog is None or self.scheme_catalog is None:
             return None
         return {
@@ -87,7 +88,7 @@ class PublicationService:
             "issueCatalog": self.issue_catalog.input_items(),
             "issueCatalogVersion": self.issue_catalog.version,
             "issueCatalogSha256": self.issue_catalog.sha256,
-            "schemeCatalog": self.schemes().input_items(),
+            "schemeCatalog": self.schemes(owner).input_items(),
             "schemeCatalogVersion": self.scheme_catalog.version,
             "schemeCatalogSha256": self.scheme_catalog.sha256,
             "maxSelectedIssues": MAX_SELECTED_ISSUES,
@@ -165,8 +166,8 @@ class PublicationService:
                 namespace=namespace,
                 created_at=created_at,
                 issue_catalog=self.issue_catalog,
-                # 사용자가 만든 scheme key 도 올바른 값으로 보게 합친 카탈로그를 넘긴다.
-                scheme_catalog=self.schemes(),
+                # 게시한 사람이 만든 scheme key 도 올바른 값으로 보게 합친 카탈로그를 넘긴다.
+                scheme_catalog=self.schemes(principal),
             )
         except InvalidResultError as error:
             return PublishOutcome(

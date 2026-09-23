@@ -15,6 +15,8 @@ from app.services.catalogs import CUSTOM_KEY_PREFIX, SchemeCatalog, is_custom_sc
 from app.storage import Database
 
 BACKEND = Path(__file__).resolve().parent.parent
+# AIF_AUTH_MODE=off 인 시험에서 모든 요청의 주체(principal)
+OWNER = "local-dev"
 FIXTURE = BACKEND / "fixtures" / "langflow_run_response.sample.json"
 CATALOG_PATH = BACKEND / "catalog" / "walton_schemes.json"
 
@@ -71,19 +73,19 @@ class CustomSchemeApiTest(unittest.TestCase):
         self.assertEqual(len(after["schemes"]), len(before["schemes"]) + 1)
 
         file_catalog = SchemeCatalog.load(CATALOG_PATH)
-        merged = merged_scheme_catalog(file_catalog, self.db)
+        merged = merged_scheme_catalog(file_catalog, self.db, OWNER)
         self.assertEqual(merged.sha256, file_catalog.sha256)
         self.assertEqual(merged.version, file_catalog.version)
 
     def test_enabled_scheme_reaches_the_model_list(self):
         key = self.create().json()["schemeKey"]
-        merged = merged_scheme_catalog(SchemeCatalog.load(CATALOG_PATH), self.db)
+        merged = merged_scheme_catalog(SchemeCatalog.load(CATALOG_PATH), self.db, OWNER)
         keys = [item["schemeKey"] for item in merged.input_items()]
         self.assertIn(key, keys)
 
         # AI 사용을 끄면 모델 목록에서 빠지지만 카탈로그에는 남는다(과거 그래프의 이름 표시).
         self.client.put(f"/api/catalogs/schemes/custom/{key}", json={"enabledForAi": False})
-        merged = merged_scheme_catalog(SchemeCatalog.load(CATALOG_PATH), self.db)
+        merged = merged_scheme_catalog(SchemeCatalog.load(CATALOG_PATH), self.db, OWNER)
         self.assertNotIn(key, [item["schemeKey"] for item in merged.input_items()])
         self.assertIn(key, merged.by_key)
 
@@ -93,7 +95,7 @@ class CustomSchemeApiTest(unittest.TestCase):
         catalog = self.client.get("/api/catalogs/schemes").json()
         scheme = next(s for s in catalog["schemes"] if s["schemeKey"] == key)
         self.assertTrue(scheme["retired"])
-        merged = merged_scheme_catalog(SchemeCatalog.load(CATALOG_PATH), self.db)
+        merged = merged_scheme_catalog(SchemeCatalog.load(CATALOG_PATH), self.db, OWNER)
         self.assertNotIn(key, [item["schemeKey"] for item in merged.input_items()])
 
     def test_role_ids_survive_an_edit(self):
@@ -175,3 +177,92 @@ class CustomSchemeStorageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CustomSchemeOwnershipTest(unittest.TestCase):
+    """직접 만든 scheme 은 만든 사람만 본다. 두 사람이 같은 서버를 써도 서로 보이지 않아야 한다."""
+
+    PASSWORD = "stress-pass-1234"
+
+    def setUp(self):
+        import json as _json
+        import os as _os
+        import tempfile
+
+        from app.auth import hash_password
+
+        self.tmp = tempfile.TemporaryDirectory()
+        users = Path(self.tmp.name) / "users.json"
+        scopes = ["catalog:read", "catalog:write", "projects:read", "projects:write"]
+        users.write_text(
+            _json.dumps(
+                {
+                    "users": [
+                        {"username": "userA", "principal": "userA", "scopes": scopes, "password": hash_password(self.PASSWORD)},
+                        {"username": "userB", "principal": "userB", "scopes": scopes, "password": hash_password(self.PASSWORD)},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        _os.utime(users, None)
+        self.db = Database(":memory:")
+        settings = Settings(
+            langflow_mode="mock",
+            mock_fixture_path=FIXTURE,
+            mock_delay_seconds=0,
+            auth_mode="token",
+            api_tokens_path=Path(self.tmp.name) / "tokens.json",
+            users_path=users,
+        )
+        self.app = create_app(settings, db=self.db)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def session(self, username: str) -> TestClient:
+        client = TestClient(self.app)
+        client.__enter__()
+        self.addCleanup(client.__exit__, None, None, None)
+        login = client.post("/api/auth/login", json={"username": username, "password": self.PASSWORD})
+        self.assertEqual(login.status_code, 200, login.text)
+        client.headers.update({"X-CSRF-Token": login.json()["csrfToken"]})
+        return client
+
+    def make(self, client: TestClient, name: str):
+        return client.post("/api/catalogs/schemes/custom", json={**NEW_SCHEME, "nameKo": name})
+
+    def keys(self, client: TestClient) -> set[str]:
+        return {s["schemeKey"] for s in client.get("/api/catalogs/schemes").json()["schemes"]}
+
+    def test_other_person_does_not_see_it(self):
+        a, b = self.session("userA"), self.session("userB")
+        key = self.make(a, "A 가 만든 도식").json()["schemeKey"]
+        self.assertIn(key, self.keys(a))
+        self.assertNotIn(key, self.keys(b))
+        # 정본 12개는 둘 다 그대로 본다.
+        self.assertEqual(len(self.keys(b)), 12)
+
+    def test_other_person_cannot_change_it(self):
+        a, b = self.session("userA"), self.session("userB")
+        key = self.make(a, "A 가 만든 도식").json()["schemeKey"]
+        # 남의 scheme 은 있는지조차 알리지 않는다.
+        self.assertEqual(b.put(f"/api/catalogs/schemes/custom/{key}", json={"retired": True}).status_code, 404)
+        self.assertEqual(a.put(f"/api/catalogs/schemes/custom/{key}", json={"retired": True}).status_code, 200)
+
+    def test_same_name_is_allowed_for_different_people(self):
+        a, b = self.session("userA"), self.session("userB")
+        self.assertEqual(self.make(a, "같은 이름").status_code, 201)
+        # 서로 보이지 않으므로 이름이 겹쳐도 된다.
+        self.assertEqual(self.make(b, "같은 이름").status_code, 201)
+        # 자기 것과는 여전히 겹칠 수 없다.
+        self.assertEqual(self.make(a, "같은 이름").status_code, 409)
+
+    def test_model_list_carries_only_the_owner_schemes(self):
+        a, b = self.session("userA"), self.session("userB")
+        key = self.make(a, "A 가 만든 도식").json()["schemeKey"]
+        catalog = SchemeCatalog.load(CATALOG_PATH)
+        self.assertIn(key, [item["schemeKey"] for item in merged_scheme_catalog(catalog, self.db, "userA").input_items()])
+        self.assertNotIn(key, [item["schemeKey"] for item in merged_scheme_catalog(catalog, self.db, "userB").input_items()])
+        # 주체를 모르면 사용자 scheme 을 하나도 싣지 않는다(남의 것이 새지 않게).
+        self.assertEqual(len(merged_scheme_catalog(catalog, self.db, None).input_items()), 12)

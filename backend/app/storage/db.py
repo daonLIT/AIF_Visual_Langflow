@@ -383,10 +383,18 @@ class Database:
             "definition": json.loads(row["definition"]),
         }
 
-    def list_custom_schemes(self) -> list[dict]:
-        """폐기한 것까지 모두. 과거 그래프가 쓰던 scheme 의 이름이 사라지지 않게 지우지 않는다."""
+    def list_custom_schemes(self, owner: str | None = None) -> list[dict]:
+        """폐기한 것까지 모두. 과거 그래프가 쓰던 scheme 의 이름이 사라지지 않게 지우지 않는다.
+
+        owner 를 주면 그 사람이 만든 scheme 만 돌려준다. 직접 만든 scheme 은 만든 사람만 쓴다.
+        """
         with self._lock:
-            rows = self._conn.execute("SELECT * FROM custom_schemes ORDER BY created_at").fetchall()
+            if owner is None:
+                rows = self._conn.execute("SELECT * FROM custom_schemes ORDER BY created_at").fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM custom_schemes WHERE created_by = ? ORDER BY created_at", (owner,)
+                ).fetchall()
         return [self._custom_scheme_row(row) for row in rows]
 
     def get_custom_scheme(self, scheme_key: str) -> dict | None:

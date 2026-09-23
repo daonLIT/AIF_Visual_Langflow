@@ -100,6 +100,7 @@ class RunManager:
         idempotency_key: str | None,
         flow_id: str | None = None,
         purpose: str = "analysis",
+        owner: str | None = None,
     ) -> tuple[dict, bool]:
         """(record, created) 를 돌려준다. created=False 면 중복 키로 기존 실행을 재사용한 것."""
         async with self._lock:
@@ -132,6 +133,8 @@ class RunManager:
                 "namespace": namespace,
                 "flowId": flow_id or self.settings.langflow_flow_id or None,
                 "purpose": purpose,
+                # 실행을 요청한 주체. 직접 만든 scheme 은 만든 사람 것만 모델에게 보낸다.
+                "owner": owner,
                 "catalogs": self.catalog_record(),
                 # 실행 시작 시점에 채운다: flow 해시·실행용 스냅샷·모델 설정·입출력 컴포넌트
                 "pipeline": None,
@@ -194,7 +197,7 @@ class RunManager:
                 self._save(record)
                 text = self.db.get_run_document(run_id) or ""
 
-                schemes = merged_scheme_catalog(self.scheme_catalog, self.db)
+                schemes = merged_scheme_catalog(self.scheme_catalog, self.db, record.get("owner"))
                 pinned = await self.pipeline.pin_run_flow(record.get("flowId")) if self.pipeline else None
                 record["pipeline"] = pinned
                 self._save(record)
