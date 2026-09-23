@@ -6,6 +6,7 @@ dist-ssr/
 __pycache__/
 *.pyc
 .venv/
+.venv-stress/
 .pytest_cache/
 
 # 비밀값·로컬 데이터

@@ -1,0 +1,2 @@
+# 부하 시험 전용. 운영 이미지(backend/requirements.lock.txt)에는 넣지 않는다.
+locust>=2.32,<3
