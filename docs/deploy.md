@@ -111,6 +111,20 @@ $DC start aif
 - 복구 전의 DB 는 먼저 한 번 더 백업해 둔다.
 - 서버를 켜면 DB 스키마가 더 낮은 경우 명시적 마이그레이션이 돌고, 그 전에 같은 폴더에 `*.backup-v<N>-<시각>` 사본을 만든다.
 
+### 서버를 켠 뒤
+
+서버를 껐다 켜면 `deploy/start.sh` 로 필요한 것이 다 떠 있는지 본다. 꺼져 있으면 올린다.
+컨테이너는 `restart: unless-stopped` 라 Docker 가 뜨면 대개 알아서 살아나지만, 바깥에서 닿는지와
+Ollama 까지 한 번에 확인한다(중앙 서버는 Ollama 를 부르지 않지만, 사용자 PC 가 SSH 터널로 쓴다).
+
+```bash
+cd ~/aif-central
+./deploy/start.sh                  # 확인하고 꺼져 있으면 올린다
+./deploy/start.sh --check-only     # 확인만
+```
+
+확인하는 것: Docker → 컨테이너(aif·caddy) → 공개 주소 응답 → Ollama.
+
 ### 업데이트·원복
 
 서버에서 `deploy/update.sh` 를 쓴다. 코드 받기 → 백업 → 이미지 태그 → 재배포(healthy 까지 대기) 순으로 돌고,

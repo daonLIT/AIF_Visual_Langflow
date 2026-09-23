@@ -41,6 +41,15 @@ fi
 previous_tag=$(grep '^AIF_IMAGE_TAG=' "$ENV_FILE" | cut -d= -f2- || true)
 previous_commit=$(git rev-parse --short HEAD 2>/dev/null || echo "(git 아님)")
 
+# 어디에 배포하는지 먼저 보여 준다. .env 를 새로 만들다 로컬 시험 값(localhost, 8080/8443)이
+# 들어가면 재배포한 순간 바깥에서 접속이 끊기고 인증서까지 내부 CA 로 바뀐다.
+step "0/5 배포 대상"
+printf '  도메인: %s\n  포트  : %s(http) %s(https)\n  이미지: %s\n' \
+  "$(grep '^AIF_DOMAIN=' "$ENV_FILE" | cut -d= -f2-)" \
+  "$(grep '^AIF_HTTP_PORT=' "$ENV_FILE" | cut -d= -f2-)" \
+  "$(grep '^AIF_HTTPS_PORT=' "$ENV_FILE" | cut -d= -f2-)" \
+  "$previous_tag"
+
 if [ "$pull" = 1 ]; then
   step "1/5 코드 받기"
   if [ ! -d .git ]; then
