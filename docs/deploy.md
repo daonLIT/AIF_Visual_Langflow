@@ -113,15 +113,25 @@ $DC start aif
 
 ### 업데이트·원복
 
+서버에서 `deploy/update.sh` 를 쓴다. 코드 받기 → 백업 → 이미지 태그 → 재배포(healthy 까지 대기) 순으로 돌고,
+끝에 되돌리는 방법(이전 태그·이전 커밋)을 출력한다.
+
 ```bash
-git pull                                            # 새 버전
-sed -i 's/^AIF_IMAGE_TAG=.*/AIF_IMAGE_TAG=2026-10-01/' deploy/.env
-$DC exec aif python scripts/backup_db.py --out-dir /backups
-$DC up -d --build                                   # 새 이미지로 교체. 볼륨 데이터는 그대로
-python deploy/smoke_check.py …
+cd ~/aif-central
+./deploy/update.sh                      # git pull 부터 전부
+./deploy/update.sh --check              # 끝나고 smoke_check 까지 (아래 두 변수가 필요)
+#   SMOKE_PASSWORD_FILE=<비밀번호 파일> SMOKE_PUBLISH_TOKEN_FILE=<게시 토큰 파일>
+./deploy/update.sh --no-pull            # 코드를 직접 올린 경우
 ```
 
-원복하려면 `AIF_IMAGE_TAG` 를 이전 태그로 되돌리고 `$DC up -d` 한다(이전 이미지가 로컬에 있어야 한다). 새 버전이 DB 를 마이그레이션한 뒤라면, 업데이트 직전 백업으로 복구한 다음 이전 이미지로 띄운다.
+이미지 태그는 `<날짜>-<커밋>` 으로 자동으로 붙는다(같은 날 두 번 배포해도 구분된다).
+백업은 바꾸기 전 컨테이너에서 받고, DB 스키마가 바뀌는 배포면 컨테이너가 시작하면서 `*.backup-v<N>-<시각>` 을 하나 더 만든다.
+
+원복하려면 스크립트가 출력한 이전 태그로 `AIF_IMAGE_TAG` 를 되돌리고 `$DC up -d --wait` 한다(이전 이미지가 서버에 있어야 한다).
+새 버전이 DB 를 마이그레이션한 뒤라면, 업데이트 직전 백업으로 DB 도 함께 되돌린다(새 스키마는 이전 코드가 모른다).
+
+서버 코드 폴더가 아직 `git archive` 사본이면 한 번만 clone 사본으로 바꾼다(스크립트가 방법을 알려 준다).
+데이터는 Docker 볼륨에 있어 그대로 남는다.
 
 ### 인증키 교체
 
