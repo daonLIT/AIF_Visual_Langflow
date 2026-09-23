@@ -70,16 +70,25 @@ if "${COMPOSE[@]}" ps --status running --services 2>/dev/null | grep -qx aif; th
   # 폴더 주인이 다르면 쓰지 못한다(/data 와 달리 이미지가 미리 chown 할 수 없는 자리다).
   backup_dir=$(grep '^AIF_BACKUP_DIR=' "$ENV_FILE" | cut -d= -f2- || true)
   backup_dir=${backup_dir:-./backups}
-  mkdir -p "$backup_dir"
+  # compose 는 상대 경로 볼륨을 compose 파일이 있는 곳(deploy/) 기준으로 푼다. 저장소 루트 기준이 아니다.
+  case "$backup_dir" in
+    /*) host_backup_dir="$backup_dir" ;;
+    *) host_backup_dir="deploy/${backup_dir#./}" ;;
+  esac
+  mkdir -p "$host_backup_dir"
   # MSYS_NO_PATHCONV: Windows Git Bash 에서 시험할 때 /backups 를 윈도 경로로 바꾸지 않게 한다(리눅스에서는 무시된다).
   if ! MSYS_NO_PATHCONV=1 "${COMPOSE[@]}" exec -T aif test -w /backups; then
+    mounted=$(docker inspect "$(MSYS_NO_PATHCONV=1 "${COMPOSE[@]}" ps -q aif)"       --format '{{range .Mounts}}{{if eq .Destination "/backups"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
     cat >&2 <<MSG
-백업 폴더에 쓸 수 없다: $backup_dir (컨테이너 안 /backups)
-컨테이너는 uid 10001 로 도니 폴더 주인을 맞춘다:
+백업 폴더에 쓸 수 없다. 컨테이너는 uid 10001 로 돈다.
+  설정(.env)      : $backup_dir  →  $host_backup_dir
+  컨테이너가 보는 곳: ${mounted:-(알 수 없음)}
 
-    sudo chown -R 10001:10001 $backup_dir
+이 둘이 다르면 폴더를 옮긴 뒤 컨테이너를 그대로 둔 것이다. 컨테이너는 만들 때의 경로를 계속 본다.
+아래 중 컨테이너가 보는 폴더의 주인을 맞춘 뒤 다시 실행한다(재배포하면 새 경로로 바뀐다):
 
-고친 뒤 이 스크립트를 다시 실행한다.
+    sudo chown -R 10001:10001 ${mounted:-$host_backup_dir}
+
 MSG
     exit 1
   fi
