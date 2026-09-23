@@ -66,7 +66,23 @@ commit=$(git rev-parse --short HEAD 2>/dev/null || date -u +%Y%m%d%H%M%S)
 step "2/5 백업"
 # 지금 돌고 있는(=바꾸기 전) 컨테이너에서 받는다. 컨테이너가 없으면 첫 배포이므로 건너뛴다.
 if "${COMPOSE[@]}" ps --status running --services 2>/dev/null | grep -qx aif; then
+  # 백업 폴더는 호스트 폴더를 그대로 마운트한다. 컨테이너는 비루트(uid 10001)로 돌기 때문에
+  # 폴더 주인이 다르면 쓰지 못한다(/data 와 달리 이미지가 미리 chown 할 수 없는 자리다).
+  backup_dir=$(grep '^AIF_BACKUP_DIR=' "$ENV_FILE" | cut -d= -f2- || true)
+  backup_dir=${backup_dir:-./backups}
+  mkdir -p "$backup_dir"
   # MSYS_NO_PATHCONV: Windows Git Bash 에서 시험할 때 /backups 를 윈도 경로로 바꾸지 않게 한다(리눅스에서는 무시된다).
+  if ! MSYS_NO_PATHCONV=1 "${COMPOSE[@]}" exec -T aif test -w /backups; then
+    cat >&2 <<MSG
+백업 폴더에 쓸 수 없다: $backup_dir (컨테이너 안 /backups)
+컨테이너는 uid 10001 로 도니 폴더 주인을 맞춘다:
+
+    sudo chown -R 10001:10001 $backup_dir
+
+고친 뒤 이 스크립트를 다시 실행한다.
+MSG
+    exit 1
+  fi
   MSYS_NO_PATHCONV=1 "${COMPOSE[@]}" exec -T aif python scripts/backup_db.py --out-dir /backups --keep 14
 else
   echo "aif 컨테이너가 돌고 있지 않다. 백업을 건너뛴다(첫 배포)."

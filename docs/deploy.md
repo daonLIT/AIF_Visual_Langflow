@@ -131,7 +131,15 @@ cd ~/aif-central
 새 버전이 DB 를 마이그레이션한 뒤라면, 업데이트 직전 백업으로 DB 도 함께 되돌린다(새 스키마는 이전 코드가 모른다).
 
 서버 코드 폴더가 아직 `git archive` 사본이면 한 번만 clone 사본으로 바꾼다(스크립트가 방법을 알려 준다).
-데이터는 Docker 볼륨에 있어 그대로 남는다.
+`deploy/docker-compose.yml` 에 `name: aif-central` 이 있어 폴더 이름이 바뀌어도 같은 볼륨을 쓴다. 데이터는 그대로 남는다.
+저장소에 없는 `deploy/.env` 와 `deploy/backups` 만 옮긴다.
+
+**백업 폴더 주인**: `/data` 와 달리 `/backups` 는 호스트 폴더를 그대로 마운트하므로 이미지가 미리 주인을 맞출 수 없다.
+컨테이너는 uid 10001 로 도니, 폴더를 새로 만들거나 복사한 뒤에는 한 번 맞춰 준다(안 맞으면 백업이 `Permission denied` 로 멈춘다).
+
+```bash
+sudo chown -R 10001:10001 deploy/backups
+```
 
 ### 인증키 교체
 
